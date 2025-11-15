@@ -141,7 +141,7 @@
 
     <!-- Left: Brand / About -->
     <div class="cch-brand">
-      <img class="cch-logo" src="tools/pics/jd.png" alt="Campus Clubs Hub logo" />
+      <img class="cch-logo" src="tools/pics/sponsorlogo.png" alt="Campus Clubs Hub logo" />
       <h2 class="cch-title">About Us</h2>
     </div>
 

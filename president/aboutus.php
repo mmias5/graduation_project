@@ -210,7 +210,7 @@
   <!-- Hero banner with title overlay -->
   <div class="strategy-hero">
     <img src="tools/pics/social_life.png" alt="Campus clubs growth illustration">
-    <h1 class="hero-title">Campus Clubs Hub</h1>
+    <h1 class="hero-title">About UniHive</h1>
   </div>
 
   <!-- Cards -->

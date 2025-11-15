@@ -135,7 +135,7 @@ body{
 
     <!-- Logo -->
     <div class="brand">
-      <img src="tools/pics/jd.png" alt="Campus Clubs Hub logo">
+      <img src="tools/pics/sponsorlogo.png" alt="Campus Clubs Hub logo">
     </div>
 
     <!-- NAV -->
