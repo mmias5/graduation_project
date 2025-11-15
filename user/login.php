@@ -145,7 +145,7 @@
 </head>
 <body>
     <div class="container">
-        <img src="tools/pics/wp.png" alt="Campus Clubs Hub" class="logo-image">
+        <img src="tools/pics/adminlogo.png" alt="unihive" class="logo-image">
 
         <div class="login-card">
             <form id="loginForm" method="post" action="login.php">
