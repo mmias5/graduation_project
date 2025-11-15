@@ -8,7 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;600;700;800&display=swap" rel="stylesheet">
 
 <style>
-/* ===== Colors ===== */
+/* ===== Brand Tokens ===== */
 :root{
   --navy:#242751;
   --gold:#e5b758;
@@ -18,7 +18,7 @@
   --shadow:0 10px 30px rgba(0,0,0,.16);
 }
 
-/* ===== Global ===== */
+/* ===== Global for sponsor layout (optional if you set elsewhere) ===== */
 body{
   margin:0;
   font-family:"Raleway",sans-serif;
@@ -50,9 +50,10 @@ body{
 .main-nav{
   display:flex;
   align-items:center;
-  gap:25px;        /* FIX: spacing horizontally */
+  gap:25px;
 }
 
+/* lock button height / alignment so page styles can't change it */
 .nav-btn{
   background:transparent;
   border:none;
@@ -61,7 +62,11 @@ body{
   font-size:16px;
   cursor:pointer;
   border-radius:999px;
-  padding:10px 16px;
+  padding:10px 18px;
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  line-height:1;          /* important */
 }
 
 .nav-btn:hover{
@@ -71,13 +76,32 @@ body{
 /* ===== Dropdown ===== */
 .dropdown{
   position:relative;
+  display:inline-flex;
+  align-items:center;
 }
 
+/* Bridge the gap between button and menu */
+.dropdown::after{
+  content:'';
+  position:absolute;
+  top:100%;
+  left:0;
+  right:0;
+  height:10px;
+  display:none;
+}
+
+.dropdown:hover::after{
+  display:block;
+}
+
+/* anchored to the pill, not magic 45px */
 .dropdown .menu{
   position:absolute;
-  top:45px;
-  left:0;
-  min-width:180px;
+  top:calc(100% + 10px);   /* 10px under the pill */
+  left:50%;
+  transform:translateX(-50%);
+  min-width:200px;
   background:white;
   border-radius:14px;
   border:2px solid #e7e9f2;
@@ -91,7 +115,8 @@ body{
   display:block;
 }
 
-.menu a{
+/* scope menu links so other "a { }" rules don't break it */
+.topbar .menu a{
   display:flex;
   align-items:center;
   gap:12px;
@@ -99,14 +124,15 @@ body{
   border-radius:12px;
   font-weight:700;
   text-decoration:none;
-  color:var(--navy);    /* FIX: text = NAVY */
+  color:var(--navy);
+  white-space:nowrap;
 }
 
-.menu a:hover{
+.topbar .menu a:hover{
   background:#fff4c8;
 }
 
-.menu a svg{
+.topbar .menu a svg{
   stroke:var(--gold);
 }
 
@@ -135,7 +161,7 @@ body{
 
     <!-- Logo -->
     <div class="brand">
-      <img src="tools/pics/sponsorlogo.png" alt="Campus Clubs Hub logo">
+      <img src="tools/pics/sponsorlogo.png" alt="UniHive sponsor portal logo">
     </div>
 
     <!-- NAV -->
@@ -171,7 +197,7 @@ body{
         </div>
       </div>
 
-      <button class="nav-btn" onclick="location.href='allevents.php'">Events</button>
+      <button class="nav-btn" onclick="location.href='events.php'">Events</button>
       <button class="nav-btn" onclick="location.href='aboutus.php'">About Us</button>
 
     </nav>
