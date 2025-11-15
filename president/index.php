@@ -37,11 +37,7 @@ body{
 
 /* keep distance from topbar */
 .safe-space{
-  margin-top:50px;
-}
-/* keep distance from topbar */
-.safe-space{
-  margin-top:50px;
+  margin-top:1px;
 }
 
 /* hero container */
@@ -76,18 +72,23 @@ body{
 }
 
 /* ✅ SMALLER video card */
+/* ✅ video card in ROYAL color + glow */
 .video-card{
   position:relative;
   z-index:2;
-  width:100%;
-  max-width:720px;                 /* ✅ reduced from 920px */
-  aspect-ratio:16/10;
+  width:94%;                /* wider */
+  max-width:1150px;         /* wider on desktop */
+  aspect-ratio: 16 / 6;     /* thinner height */
   border-radius:20px;
   overflow:hidden;
-  box-shadow:0 12px 28px rgba(10,23,60,0.18);
-  background:#000;
+  margin:auto;
+  background: var(--royal); /* 🔹 royal background behind video */
+  box-shadow:
+    0 0 0 2px rgba(72,113,219,.85),    /* royal outline */
+    0 18px 40px rgba(10,23,60,.45);    /* soft dark shadow under it */
 }
 
+.video-card img,
 .video-card video{
   position:absolute;
   inset:0;
@@ -294,11 +295,10 @@ body{
 
   <!-- video card -->
   <div class="video-card">
-    <video autoplay muted loop playsinline preload="metadata"
-           poster="tools/pics/indexvideo.jpg">
-      <source src="tools/video/indexvideo.mp4" type="video/mp4">
-    </video>
-  </div>
+  <video autoplay muted loop playsinline preload="auto">
+    <source src="tools/video/indexvideo.mp4" type="video/mp4">
+  </video>
+</div>
 </section>
 
 
