@@ -286,7 +286,8 @@ body{
 <body>
 
 <?php include_once("header.php"); ?>
-hiiiiiiiiiiii
+ana ba7ebe maser w maser hebenee
+
 <!-- ===== Hero Card with side stars ===== -->
 <section class="hero-card safe-space">
   <!-- decorative stars (behind the card) -->
