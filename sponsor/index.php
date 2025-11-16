@@ -12,8 +12,8 @@
 
   <style>
     :root{
-      --navy:#242751;
-      --royal:#4871db;
+      --navy: #242751;
+      --royal: #4871db;
       --gold:#e5b758;
       --paper:#eef2f7;
       --ink:#0e1228;
@@ -241,6 +241,31 @@
       background:#1c2045;
       box-shadow:0 18px 36px rgba(36,39,81,.45);
     }
+/* ===== Video Card Style (for future use) ===== */
+    .video-card{
+  position:relative;
+  z-index:2;
+  width:100%;                /* wider */
+  max-width:1180px;         /* wider on desktop */
+  aspect-ratio: 16 / 6;     /* thinner height */
+  border-radius:20px;
+  overflow:hidden;
+  margin:auto;
+  background: var(--royal); /* 🔹 royal background behind video */
+  box-shadow:
+    0 0 0 2px rgba(10,23,60,.45),    /* royal outline */
+    0 18px 40px var(navy);    /* soft dark shadow under it */
+}
+
+.video-card img,
+.video-card video{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:block;
+}
 
     @media (max-width:900px){
       .bi-wrap,
@@ -294,16 +319,19 @@
 <main class="sponsor-home">
 
   <!-- ===== Hero Video ===== -->
-  <section class="sponsor-hero-video">
-    <video
-      src="tools/videos/sponsor-intro.mp4"
-      autoplay
-      muted
-      loop
-      playsinline>
-      Your browser does not support the video tag.
-    </video>
-  </section>
+  <section class="hero-card safe-space">
+  <!-- decorative stars (behind the card) -->
+  <img class="star star-left"  src="tools/pics/bg.png" alt="" aria-hidden="true">
+  <img class="star star-right" src="tools/pics/bg.png" alt="" aria-hidden="true">
+
+  <!-- video card -->
+  <div class="video-card">
+  <video autoplay muted loop playsinline preload="auto">
+    <source src="tools/video/indexvideo.mp4" type="video/mp4">
+  </video>
+</div>
+
+</section>
 
   <!-- ===== BI Dashboard Section ===== -->
   <section class="bi-section">
