@@ -88,7 +88,7 @@
   }
   .input:focus{
     outline:none;
-    border-color:var(--royal);
+    border-color:var(--navy);
     box-shadow:0 0 0 3px rgba(72,113,219,.20);
   }
 
@@ -225,7 +225,7 @@
   }
 
   .sponsor{
-    color:var(--royal);
+    color:var(--navy);
     font-weight:800;
   }
 
@@ -299,7 +299,7 @@
     <!-- Clubs Grid -->
     <div class="club-grid" id="clubGrid">
 
-      <a class="club-card-link" href="#" data-category="Technology">
+      <a class="club-card-link" href="clubpage.php" data-category="Technology">
         <article class="club-card">
           <div class="club-head">
             <div class="club-id">
