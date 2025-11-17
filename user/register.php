@@ -324,9 +324,9 @@
           <div class="form-group">
             <label for="Password">Password you'd like to use</label>
             <input
-              type="email"
-              id="email"
-              name="email"
+              type="password"
+              id="password"
+              name="password"
               placeholder="Password"
               required
             >
