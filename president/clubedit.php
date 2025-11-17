@@ -155,7 +155,7 @@ body{
       <div class="hero-card" style="--hero-bg: url('<?php echo htmlspecialchars($cover_url); ?>');">
         <div class="hero-top">
           <h1>EDIT CLUB</h1>
-          <div class="tag">Leader Console</div>
+          <div class="tag">President Console</div>
         </div>
 
         <div class="hero-pillrow">
@@ -229,12 +229,12 @@ body{
             <span class="hint">For student & sponsor inquiries.</span>
           </div>
 
-          <!-- Sponsor name (NEW) -->
+          <!-- Sponsor name (FIXED - Super Admin only) -->
           <div class="field">
-            <label class="label" for="sponsor_name">Sponsor name</label>
-            <input class="input" id="sponsor_name" name="sponsor_name" maxlength="255"
-                   value="<?php echo htmlspecialchars($sponsor_name); ?>" />
-            <span class="hint">Displayed on the club page and hero card.</span>
+            <label class="label" for="sponsor_name_display">Sponsor name</label>
+            <input class="input" id="sponsor_name_display" value="<?php echo htmlspecialchars($sponsor_name); ?>" disabled>
+            <input type="hidden" name="sponsor_name" value="<?php echo htmlspecialchars($sponsor_name); ?>">
+            <span class="hint">Assigned by the Super Admin. You can’t change the sponsor from this page.</span>
           </div>
 
           <!-- About -->
@@ -273,17 +273,18 @@ body{
             </div>
           </div>
 
-          <!-- Sponsor logo (NEW) -->
+          <!-- Sponsor logo (FIXED - Super Admin only) -->
           <div class="field">
             <span class="label">Sponsor logo</span>
             <div class="uploader">
-              <div class="thumb"><img id="sponsorLogoPreview" src="<?php echo htmlspecialchars($sponsor_logo); ?>" alt="Sponsor logo preview"></div>
-              <div>
-                <label class="pick" for="sponsor_logo">Choose file</label>
-                <input id="sponsor_logo" name="sponsor_logo" type="file" accept="image/*">
-                <div class="hint">PNG/JPG. Square ~512×512 recommended.</div>
+              <div class="thumb">
+                <img id="sponsorLogoPreview" src="<?php echo htmlspecialchars($sponsor_logo); ?>" alt="Sponsor logo preview">
+              </div>
+              <div class="hint">
+                Sponsor branding is managed by the Super Admin and can’t be changed from here.
               </div>
             </div>
+            <input type="hidden" name="sponsor_logo" value="<?php echo htmlspecialchars($sponsor_logo); ?>">
           </div>
         </div>
 
@@ -346,7 +347,7 @@ body{
     document.addEventListener('click', e=>{ if(!sel.contains(e.target)) close(); });
   })();
 
-  // ===== Image previews =====
+  // ===== Image previews (club logo + cover only) =====
   function previewImage(inputEl, imgEl){
     const f = inputEl.files && inputEl.files[0];
     if(!f) return;
@@ -361,20 +362,12 @@ body{
     previewImage(this, document.getElementById('coverPreview'));
     document.querySelector('.hero-card').style.setProperty('--hero-bg', `url('${URL.createObjectURL(this.files[0])}')`);
   });
-  document.getElementById('sponsor_logo')?.addEventListener('change', function(){
-    previewImage(this, document.getElementById('sponsorLogoPreview'));
-  });
 
-  // ===== Live preview bits =====
+  // ===== Live preview for description (optional if you have aboutText somewhere) =====
   const descEl = document.getElementById('description');
-  const aboutText = document.getElementById('aboutText'); // optional if you have preview section elsewhere
+  const aboutText = document.getElementById('aboutText');
   if(aboutText && descEl){
     ['input','change'].forEach(ev=>descEl.addEventListener(ev, ()=> aboutText.textContent = descEl.value));
-  }
-  const spName = document.getElementById('sponsor_name');
-  const spHero = document.getElementById('sponsorNameHero');
-  if(spName && spHero){
-    spName.addEventListener('input', ()=> spHero.textContent = spName.value || '—');
   }
 </script>
 </body>

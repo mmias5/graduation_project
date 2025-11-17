@@ -1,4 +1,4 @@
-<!doctype html>
+<!doctype html> 
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -13,7 +13,7 @@
       --royal:#4871db;
       --gold:#e5b758;
       --sun:#f4df6d;
-      --coral:#ff5c5c;
+      --coral:#ff5e5e;
       --paper:#e9ecef;
       --card:#ffffff;
       --ink:#0e1228;
@@ -29,8 +29,8 @@
       margin:0;
       font-family:"Raleway",system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
       background:
-        radial-gradient(900px 700px at -10% 0%, rgba(229,183,88,.35), transparent 60%),
-        radial-gradient(900px 800px at 110% 100%, rgba(72,113,219,.55), transparent 60%),
+        radial-gradient(900px 700px at -5% 0%, rgba(229,183,88,.32), transparent 60%),
+        radial-gradient(900px 800px at 105% 100%,  rgba(229,183,88,.32), transparent 60%),
         linear-gradient(135deg,#141938,#242751);
       display:flex;
       align-items:center;
@@ -79,7 +79,7 @@
       border-radius:26px;
       background:
         radial-gradient(circle at 0% 0%, rgba(229,183,88,.38), transparent 60%),
-        radial-gradient(circle at 100% 100%, rgba(255,92,92,.55), transparent 60%),
+        radial-gradient(circle at 100% 100%, transparent 60%),
         rgba(15,23,42,.96);
       display:flex;
       align-items:center;
@@ -113,8 +113,20 @@
     .auth-headline h1{
       font-size:2.1rem;
       line-height:1.22;
-      margin-bottom:6px;
+      margin-bottom:10px;
+      position:relative;
     }
+    .auth-headline h1::after{
+      content:"";
+      display:block;
+      width:82px;
+      height:3px;
+      border-radius:999px;
+      margin-top:10px;
+      background:linear-gradient(90deg,var(--gold),var(--royal));
+      opacity:.95;
+    }
+
     .auth-subtitle{
       font-size:.98rem;
       color:rgba(226,232,240,.86);
@@ -142,21 +154,6 @@
       border:1px solid rgba(248,250,252,.26);
       background:rgba(15,23,42,.7);
       color:rgba(248,250,252,.92);
-    }
-    .auth-pill.student{
-      background:var(--royal);
-      border-color:rgba(248,250,252,.95);
-      color:#ffffff;
-    }
-    .auth-pill.sponsor{
-      background:var(--gold);
-      border-color:rgba(248,250,252,.95);
-      color:var(--navy);
-    }
-    .auth-pill.coral{
-      background:var(--coral);
-      border-color:rgba(248,250,252,.95);
-      color:#ffffff;
     }
 
     .auth-footer-note{
@@ -188,7 +185,7 @@
       border-radius:var(--radius);
       padding:30px 26px 28px;
       box-shadow:0 20px 42px rgba(15,23,42,.22);
-      border:1px solid rgba(15,23,42,.05);
+      border:1px solid rgba(229,183,88,.18);
     }
 
     /* mobile logo */
@@ -210,7 +207,7 @@
       font-size:.78rem;
       text-transform:uppercase;
       letter-spacing:.15em;
-      color:var(--royal);
+      color:var(--gold);
       font-weight:700;
       margin-bottom:6px;
     }
@@ -246,7 +243,7 @@
       outline:none;
       background:#f9fafb;
       color:var(--ink);
-      transition:border .16s ease, box-shadow .16s ease, background .16s ease;
+      transition:border .16s ease, box-shadow .16s ease, background .16s ease, transform .12s ease;
     }
     .input-wrapper input::placeholder{
       color:rgba(148,163,184,.9);
@@ -255,7 +252,8 @@
     .input-wrapper input:focus{
       background:#ffffff;
       border-color:var(--royal);
-      box-shadow:0 0 0 1px rgba(72,113,219,.35);
+      box-shadow:0 0 0 1px rgba(72,113,219,.35), 0 0 0 4px rgba(229,183,88,.25);
+      transform:translateY(-1px);
     }
 
     .role-hint{
@@ -278,9 +276,11 @@
       font-size:.86rem;
       color:var(--royal);
       text-decoration:none;
+      font-weight:500;
     }
     .forgot-link:hover{
       text-decoration:underline;
+      color:var(--coral);
     }
 
     .submit-btn{
@@ -295,17 +295,62 @@
       background:linear-gradient(135deg,var(--royal),var(--navy));
       color:#f9fafb;
       cursor:pointer;
-      box-shadow:0 16px 34px rgba(36,39,81,.55);
+      box-shadow:0 16px 34px rgba(36,39,81,.6);
       transition:transform .12s ease, box-shadow .12s ease, filter .12s ease;
+      position:relative;
+      overflow:hidden;
+    }
+    .submit-btn::before{
+      content:"";
+      position:absolute;
+      inset:0;
+      background:linear-gradient(135deg,rgba(229,183,88,.45),transparent);
+      opacity:0;
+      pointer-events:none;
+      transition:opacity .12s ease;
     }
     .submit-btn:hover{
-      filter:brightness(1.03);
-      box-shadow:0 18px 40px rgba(36,39,81,.62);
+      filter:brightness(1.04);
+      box-shadow:0 18px 40px rgba(36,39,81,.7);
       transform:translateY(-1px);
+    }
+    .submit-btn:hover::before{
+      opacity:.55;
     }
     .submit-btn:active{
       transform:translateY(0);
-      box-shadow:0 10px 26px rgba(36,39,81,.45);
+      box-shadow:0 10px 26px rgba(36,39,81,.5);
+    }
+
+    /* NEW: sponsor register button */
+    .secondary-btn{
+      width:100%;
+      margin-top:10px;
+      border-radius:999px;
+      padding:11px 16px;
+      font-size:.9rem;
+      font-weight:700;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      text-align:center;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      border:1px solid var(--gold);
+      background:#fff7e0;
+      color:var(--navy);
+      text-decoration:none;
+      box-shadow:0 8px 18px rgba(36,39,81,.16);
+      transition:background .12s ease, transform .12s ease, box-shadow .12s ease;
+    }
+    .secondary-btn:hover{
+      background:var(--gold);
+      box-shadow:0 12px 24px rgba(36,39,81,.28);
+      transform:translateY(-1px);
+    }
+    .secondary-btn:active{
+      transform:translateY(0);
+      box-shadow:0 8px 18px rgba(36,39,81,.18);
     }
 
     .below-text{
@@ -316,7 +361,7 @@
       line-height:1.5;
     }
     .below-text span{
-      color:var(--navy);
+      color:var(--royal);
       font-weight:600;
     }
 
@@ -367,7 +412,7 @@
       <div>
         <div class="auth-logo-hero">
           <div class="auth-logo">
-            <img src="tools/pics/adminlogo.png" alt="UniHive Logo">
+            <img src="tools/pics/mainlogo.png" alt="UniHive Logo">
           </div>
           <div class="auth-brand-text">
             <span>UniHive</span>
@@ -375,6 +420,7 @@
         </div>
 
         <div class="auth-headline">
+          <br>
           <h1>Welcome to UniHive</h1>
           <div class="auth-subtitle">
             A unified digital platform for campus engagement and collaboration.
@@ -385,18 +431,7 @@
             activity, support collaboration, and empower meaningful opportunities throughout
             campus life.
           </p>
-
-          <div class="auth-pills">
-            <span class="auth-pill student">Students</span>
-            <span class="auth-pill sponsor">Sponsors</span>
-            <span class="auth-pill coral">Admins</span>
-          </div>
         </div>
-      </div>
-
-      <div class="auth-footer-note">
-        <span class="highlight">Tip:</span>
-        Sign in with your official university or sponsor email to access your UniHive space.
       </div>
     </section>
 
@@ -405,7 +440,7 @@
       <div class="auth-card-inner">
         <!-- Mobile logo -->
         <div class="mobile-logo-wrap">
-          <img src="tools/pics/adminlogo.png" alt="UniHive Logo">
+          <img src="tools/pics/mainlogo.png" alt="UniHive Logo">
         </div>
 
         <div class="auth-card-header">
@@ -453,6 +488,11 @@
           <button type="submit" class="submit-btn">
             Sign In
           </button>
+
+          <!-- NEW: Sponsor register button -->
+          <a href="register.php" class="secondary-btn">
+            Become a Sponsor
+          </a>
 
           <p class="below-text">
             After you sign in, <span>UniHive</span> uses your email to open the correct

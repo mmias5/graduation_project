@@ -300,6 +300,37 @@ body{
 }
 body{ color:var(--ink); background:var(--paper); }
 .display{ font-family:"Extenda 90 Exa","Raleway",system-ui,sans-serif; letter-spacing:.3px; }
+.leave{
+  appearance:none;
+  -webkit-appearance:none;
+
+  width:100%;
+  display:block;
+
+  padding:14px 28px;
+  line-height:1;
+  font-size:18px;
+  font-weight:900;
+
+  border:none;
+  border-radius:999px;
+
+  background:#ff5e5e;  /* red brand */
+  color:#ffffff;
+
+  box-shadow:0 12px 26px rgba(255,94,94,.35);
+  cursor:pointer;
+
+  margin:14px 0 0;   /* space below join */
+  text-align:center;
+}
+
+.leave:hover{
+  background:#fff;
+  color:#ff5e5e;
+  box-shadow:0 12px 26px rgba(141,141,141,.35);
+}
+
 </style>
 </head>
 
@@ -446,6 +477,7 @@ body{ color:var(--ink); background:var(--paper); }
 
       <!-- Join CTA -->
       <button id="joinBtn" class="join" type="button">Join us!</button>
+      <button id="leaveBtn" class="leave" type="button">Leave</button>
     </div>
   </section>
 
