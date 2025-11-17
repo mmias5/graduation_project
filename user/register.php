@@ -117,13 +117,7 @@
       gap:6px;
       white-space:nowrap;
     }
-    .back-link span.icon{
-      font-size:1.1rem;
-      line-height:1;
-    }
-    .back-link:hover{
-      background:#e5ebff;
-    }
+    .back-link:hover{background:#e5ebff;}
 
     .form-grid{
       display:grid;
@@ -132,26 +126,13 @@
       margin-bottom:12px;
     }
 
-    .form-group{
-      margin-bottom:14px;
-      display:flex;
-      flex-direction:column;
-    }
-    label{
-      font-size:.9rem;
-      font-weight:600;
-      color:var(--ink);
-      margin-bottom:6px;
-    }
-    .helper{
-      font-size:.78rem;
-      color:var(--muted);
-      margin-top:4px;
-    }
+    .form-group{margin-bottom:14px;display:flex;flex-direction:column;}
+    label{font-size:.9rem;font-weight:600;color:var(--ink);margin-bottom:6px;}
 
     input[type="text"],
     input[type="tel"],
     input[type="email"],
+    input[type="password"],
     textarea{
       width:100%;
       padding:11px 13px;
@@ -161,21 +142,15 @@
       background:#f9fafb;
       color:var(--ink);
       outline:none;
-      transition:border .16s ease, box-shadow .16s ease, background .16s ease, transform .12s ease;
+      transition:.16s ease;
       resize:vertical;
     }
 
-    textarea{
-      min-height:120px;
-    }
+    textarea{min-height:120px;}
 
-    input::placeholder,
-    textarea::placeholder{
-      color:rgba(148,163,184,.9);
-    }
+    input::placeholder, textarea::placeholder{color:rgba(148,163,184,.9);}
 
-    input:focus,
-    textarea:focus{
+    input:focus, textarea:focus{
       background:#ffffff;
       border-color:var(--royal);
       box-shadow:0 0 0 1px rgba(72,113,219,.35), 0 0 0 4px rgba(229,183,88,.18);
@@ -185,14 +160,11 @@
     .button-row{
       margin-top:12px;
       display:flex;
-      flex-wrap:wrap;
-      gap:10px;
       justify-content:flex-end;
     }
 
     .btn{
       border:none;
-      outline:none;
       border-radius:999px;
       padding:10px 20px;
       font-size:.9rem;
@@ -203,64 +175,19 @@
       display:inline-flex;
       align-items:center;
       justify-content:center;
-      gap:6px;
     }
 
     .btn-primary{
       background:linear-gradient(135deg,var(--gold),var(--royal));
-      color:#f9fafb;
+      color:#fff;
       box-shadow:0 14px 30px rgba(36,39,81,.4);
     }
     .btn-primary:hover{
       filter:brightness(1.03);
-      box-shadow:0 16px 34px rgba(36,39,81,.48);
       transform:translateY(-1px);
     }
-    .btn-primary:active{
-      transform:translateY(0);
-      box-shadow:0 10px 24px rgba(36,39,81,.38);
-    }
 
-    .btn-ghost{
-      background:transparent;
-      border:1px solid rgba(15,23,42,.14);
-      color:var(--navy);
-      padding-inline:16px;
-    }
-    .btn-ghost:hover{
-      background:#f3f4ff;
-      border-color:rgba(72,113,219,.4);
-    }
-
-    .footer-note{
-      margin-top:10px;
-      font-size:.8rem;
-      color:var(--muted);
-      text-align:left;
-    }
-    .footer-note span{
-      font-weight:600;
-      color:var(--navy);
-    }
-
-    @media (max-width:700px){
-      .page-shell{
-        padding:18px;
-      }
-      .page-inner{
-        padding:20px 18px 18px;
-      }
-      .form-grid{
-        grid-template-columns:1fr;
-      }
-      .header-row{
-        flex-direction:column;
-        align-items:flex-start;
-      }
-      .back-link{
-        align-self:flex-start;
-      }
-    }
+    .footer-note{margin-top:10px;font-size:.8rem;color:var(--muted);}
   </style>
 </head>
 <body>
@@ -274,73 +201,42 @@
           </div>
           <div class="title-block">
             <h1>Sponsor Registration</h1>
-            <p>
-              Submit your details so our university partnerships team can review your request and contact you to complete your sponsor account setup on UniHive.
-            </p>
+            <p>Submit your details so our university partnerships team can review your request and contact you to complete your sponsor account setup on UniHive.</p>
           </div>
         </div>
 
         <a href="login.php" class="back-link">
-          <span class="icon">←</span>
-          Back to login
+          <span>←</span> Back to login
         </a>
       </div>
 
-      <!-- You can change action to your backend handler later -->
-      <form method="post" action="sponsor_register.php">
+      <!-- Redirect to thankyou.php -->
+      <form method="post" action="thankyou.php">
         <div class="form-grid">
           <div class="form-group">
-            <label for="name">Full Name</label>
-            <input
-              type="text"
-              id="name"
-              name="name"
-              placeholder="Your full name"
-              required
-            >
+            <label>Full Name</label>
+            <input type="text" name="name" placeholder="Your full name" required>
           </div>
 
           <div class="form-group">
-            <label for="phone">Phone Number</label>
-            <input
-              type="tel"
-              id="phone"
-              name="phone"
-              placeholder="+962 7X XXX XXXX"
-              required
-            >
+            <label>Phone Number</label>
+            <input type="tel" name="phone" placeholder="+962 7X XXX XXXX" required>
           </div>
 
           <div class="form-group">
-            <label for="email">Work Email</label>
-            <input
-              type="email"
-              id="email"
-              name="email"
-              placeholder="you@company.com"
-              required
-            >
-          </div>
-          <div class="form-group">
-            <label for="Password">Password you'd like to use</label>
-            <input
-              type="password"
-              id="password"
-              name="password"
-              placeholder="Password"
-              required
-            >
+            <label>Work Email</label>
+            <input type="email" name="email" placeholder="you@company.com" required>
           </div>
 
           <div class="form-group">
-            <!-- empty to keep grid even or you can add a field later -->
+            <label>Password you'd like to use</label>
+            <input type="password" name="password" placeholder="Password" required>
           </div>
         </div>
 
         <div class="form-group">
-          <label for="description">Introduce yourself & your brand</label>
+          <label>Introduce yourself & your brand</label>
           <textarea
-            id="description"
             name="description"
             placeholder="Briefly describe your brand, the type of clubs or events you’re interested in, and how you’d like to support students."
             required
@@ -348,15 +244,11 @@
         </div>
 
         <div class="button-row">
-
-          <!-- Submit -->
-          <button type="submit" class="btn btn-primary">
-            Submit for Review
-          </button>
+          <button type="submit" class="btn btn-primary">Submit for Review</button>
         </div>
 
         <p class="footer-note">
-       By submitting, you acknowledge that this is a request form. Our team will review your details and contact you via email or phone with next steps and login information once approved.
+          By submitting, you acknowledge that this is a request form. Our team will review your details and contact you via email or phone with next steps and login information once approved.
         </p>
       </form>
     </div>
