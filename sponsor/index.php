@@ -354,7 +354,7 @@
       </div>
     </div>
   </section>
-
+  
   <!-- ===== Best Of Ranking Section ===== -->
   <section class="ranking-section">
     <div class="ranking-card">
