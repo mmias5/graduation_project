@@ -10,78 +10,76 @@
   <style>
     :root{
       --navy: #242751;
-      --navySoft: #32365b;
-      --pink: #ff5c5c;
-      --pinkDeep: #ff5c5c;
+      --coral: #ff5c5c;
 
-      --paper: #f5f6fb;
-      --card: #f2f4ff;
-      --biCard: #eaedf4;
+      /* page + main backgrounds */
+      --pageBg: #e9ecf1;    /* slightly darker grey */
+      --mainBg: #f5f6fb;    /* lighter grey (content area) */
+
+      --card: #ffffff;      /* pure white cards */
+      --biCard: #ffffff;
+
       --ink: #111827;
       --muted: #6b7280;
 
-      --radiusLg:26px;
-      --radiusXl:34px;
-      --shadowSoft:0 22px 50px rgba(15,23,42,.18);
-      --shadowLight:0 14px 32px rgba(148,163,184,.35);
-      --sidebarWidth:230px;
+      --radiusLg: 26px;
+      --radiusXl: 32px;
+
+      --shadowSoft: 0 20px 38px rgba(15,23,42,.10);
+      --shadowLight: 0 10px 24px rgba(15,23,42,.08);
+
+      --sidebarWidth: 230px;
     }
 
-    *{box-sizing:border-box;margin:0;padding:0}
+    *{
+      box-sizing:border-box;
+      margin:0;
+      padding:0;
+    }
 
     body{
       min-height:100vh;
       font-family:"Raleway",system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
       color:var(--ink);
-      display:flex;
-      background:
-        radial-gradient(1100px 650px at 0% 0%, rgba(255,92,92,.12), transparent 60%),
-        #ffffff;
+      background:var(--pageBg);   /* soft grey behind everything */
     }
 
     /* ========= MAIN CONTENT ========= */
     .main{
-      flex:1;
+      margin-left:var(--sidebarWidth);      /* space for fixed sidebar */
       padding:28px 40px 40px;
-      overflow-x:hidden;
-      background:
-        radial-gradient(1300px 700px at 80% 0%, rgba(255,92,92,.10), transparent 65%),
-        linear-gradient(180deg,#f9fafb 0%,#ffffff 100%);
+      background:var(--mainBg);            /* light grey panel */
+      min-height:100vh;
+      box-shadow:-18px 0 40px rgba(15,23,42,.06);
     }
 
     .kpi-header{
-      font-weight:700;
-      font-size:1.18rem;
-      margin-bottom:18px;
+      font-weight:800;
+      font-size:1.24rem;
+      margin-bottom:20px;
       color:var(--navy);
     }
 
-    /* 4 big KPI cards side by side */
+    /* KPI row: 4 cards in one row on desktop */
     .kpi-row{
-      display:flex;
+      display:grid;
+      grid-template-columns:repeat(4,minmax(0,1fr));
       gap:20px;
-      margin-bottom:42px;
-      flex-wrap:wrap;
+      margin-bottom:40px;
     }
 
     .kpi-card{
-      flex:1;
-      min-width:220px;
       min-height:70px;
-      padding:24px 26px;
+      padding:22px 24px;
       border-radius:var(--radiusXl);
-      background:
-        radial-gradient(circle at 0% 0%, rgba(255,92,92,.18), transparent 55%),
-        #f3f4ff;
+      background:var(--card);      /* pure white */
       box-shadow:var(--shadowLight);
       display:flex;
       flex-direction:column;
       align-items:center;
       justify-content:center;
       text-align:center;
-      border:1px solid rgba(148,163,184,.35);
-      position:relative;
-      overflow:hidden;
+      border:1px solid rgba(148,163,184,.18);
     }
 
     .kpi-pill{
@@ -89,9 +87,9 @@
       font-weight:600;
       padding:4px 10px;
       border-radius:999px;
-      background:rgba(255,92,92,.12);
-      color:var(--pinkDeep);
-      margin-bottom:12px;
+      background:#ffe1e1;         /* soft coral */
+      color:var(--coral);
+      margin-bottom:10px;
     }
 
     .kpi-label{
@@ -103,21 +101,9 @@
 
     .kpi-value{
       font-size:2.1rem;
-      font-weight:700;
+      font-weight:800;
       color:var(--navy);
       letter-spacing:.02em;
-    }
-
-    .kpi-card::after{
-      content:"";
-      position:absolute;
-      width:120px;
-      height:120px;
-      border-radius:50%;
-      background:radial-gradient(circle,rgba(255,92,92,.28),transparent 65%);
-      right:-30px;
-      top:-30px;
-      opacity:.8;
     }
 
     /* ========= BI DASHBOARD PLACEHOLDER ========= */
@@ -125,51 +111,64 @@
       margin-top:8px;
     }
 
+    .bi-title-main{
+      font-size:1.3rem;
+      font-weight:800;
+      color:var(--navy);
+      margin-bottom:4px;
+    }
+
+    .bi-sub{
+      font-size:.95rem;
+      color:var(--muted);
+      margin-bottom:18px;
+    }
+
     .bi-card{
       width:100%;
       aspect-ratio:16 / 9;
       border-radius:var(--radiusXl);
-      background:
-        radial-gradient(circle at 0% 0%, rgba(255,92,92,.25), transparent 55%),
-        var(--biCard);
+      background:var(--biCard);         /* white card on grey bg */
       display:flex;
+      flex-direction:column;
       align-items:center;
       justify-content:center;
-      font-size:clamp(2.2rem, 4vw, 3.4rem);
-      font-weight:600;
+      font-size:1.8rem;
+      font-weight:700;
       color:var(--navy);
       box-shadow:var(--shadowSoft);
-      border:1px solid rgba(148,163,184,.35);
+      border:1px solid rgba(148,163,184,.26);
+      text-align:center;
+    }
+
+    .bi-note{
+      margin-top:8px;
+      font-size:.95rem;
+      color:var(--muted);
+      font-weight:500;
     }
 
     /* ========= RESPONSIVE ========= */
     @media (max-width:1100px){
       .kpi-row{
-        flex-wrap:wrap;
-      }
-      .kpi-card{
-        flex:1 1 calc(50% - 20px);
+        grid-template-columns:repeat(2,minmax(0,1fr));
       }
     }
 
     @media (max-width:700px){
-      body{flex-direction:column;}
       .main{
+        margin-left:0;
         padding:22px 18px 28px;
+        box-shadow:none;
       }
-      .kpi-card{
-        flex:1 1 100%;
-        min-height:260px;
-      }
-      .bi-card{
-        min-height:260px;
+      .kpi-row{
+        grid-template-columns:1fr;
       }
     }
   </style>
 </head>
 <body>
 
-  <!-- sidebar from shared file -->
   <?php include 'sidebar.php'; ?>
 
   <!-- MAIN CONTENT -->
@@ -191,20 +190,24 @@
 
       <div class="kpi-card">
         <div class="kpi-pill">Events</div>
-        <div class="kpi-label">Total done events</div>
+        <div class="kpi-label">Events completed</div>
         <div class="kpi-value">118</div>
       </div>
 
       <div class="kpi-card">
         <div class="kpi-pill">Engagement</div>
-        <div class="kpi-label">Engagement rate %</div>
+        <div class="kpi-label">Engagement rate</div>
         <div class="kpi-value">74%</div>
       </div>
     </div>
 
     <section class="bi-wrapper">
+      <div class="bi-title-main">Admin BI Dashboard</div>
+      <div class="bi-sub">Live analytics on clubs, events, and student engagement.</div>
+
       <div class="bi-card">
-        BI Dashboard
+        BI Dashboard placeholder
+        <div class="bi-note">Add your Power BI embed URL here.</div>
       </div>
     </section>
   </main>
