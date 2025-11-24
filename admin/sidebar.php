@@ -139,7 +139,7 @@
         <div class="dropdown-menu">
           <a href="clubcreation.php" class="nav-sub">Creation requests</a>
           <a href="clubedit.php" class="nav-sub">Edit requests</a>
-          <a href="view_clubs.php" class="nav-sub">View clubs</a>
+          <a href="viewclubs.php" class="nav-sub">View clubs</a>
         </div>
       </div>
 
@@ -152,6 +152,7 @@
         <div class="dropdown-menu">
           <a href="event_creation_requests.php" class="nav-sub">Creation requests</a>
           <a href="event_edit_requests.php" class="nav-sub">Edit requests</a>
+          <a href="upcomingevents.php" class="nav-sub">Upcoming events</a>
         </div>
       </div>
 
