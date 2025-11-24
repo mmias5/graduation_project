@@ -1,3 +1,8 @@
+<?php
+  // Detect current page (e.g. "clubcreation.php")
+  $currentPage = basename($_SERVER['PHP_SELF']);
+?>
+
 <style>
 /* ========== Sidebar ========== */
 .sidebar{
@@ -54,13 +59,12 @@
 }
 
 .nav-item.active{
-  background:#ff5c5c;       /* Solid coral, no gradient */
+  background:#ff5c5c;       /* Solid coral */
   color:#111827;
   font-weight:600;
-  box-shadow:none;          /* No glow */
+  box-shadow:none;
   transform:none;
 }
-
 
 .nav-arrow{
   font-size:.78rem;
@@ -101,6 +105,13 @@
   transform:translateX(2px);
 }
 
+/* active sub-link */
+.nav-sub.active{
+  background:#ff5c5c;
+  color:#111827;
+  font-weight:600;
+}
+
 /* logout */
 .logout-btn{
   margin-top:auto;
@@ -116,9 +127,8 @@
 }
 
 .logout-btn:hover{
-  background:#ff4949;   /* darker coral, no glow */
+  background:#ff4949;
 }
-
 </style>
 
 <aside class="sidebar">
@@ -126,46 +136,79 @@
     <div class="sidebar-title">Admin Panel</div>
 
     <nav class="sidebar-nav">
-      <a href="index.php" class="nav-item active">
+      <!-- Home -->
+      <a href="index.php"
+         class="nav-item <?php echo $currentPage === 'index.php' ? 'active' : ''; ?>">
         <span>Home</span>
       </a>
 
       <!-- Club management dropdown -->
+      <?php
+        $clubPages = ['clubcreation.php','clubedit.php','viewclubs.php','viewmembers.php'];
+        $clubActive = in_array($currentPage, $clubPages);
+      ?>
       <div class="nav-group">
-        <div class="nav-item">
+        <div class="nav-item <?php echo $clubActive ? 'active' : ''; ?>">
           <span>Club Management</span>
           <span class="nav-arrow">▾</span>
         </div>
         <div class="dropdown-menu">
-          <a href="clubcreation.php" class="nav-sub">Creation requests</a>
-          <a href="clubedit.php" class="nav-sub">Edit requests</a>
-          <a href="viewclubs.php" class="nav-sub">View clubs</a>
+          <a href="clubcreation.php"
+             class="nav-sub <?php echo $currentPage === 'clubcreation.php' ? 'active' : ''; ?>">
+            Creation requests
+          </a>
+          <a href="clubedit.php"
+             class="nav-sub <?php echo $currentPage === 'clubedit.php' ? 'active' : ''; ?>">
+            Edit requests
+          </a>
+          <a href="viewclubs.php"
+             class="nav-sub <?php echo $currentPage === 'viewclubs.php' ? 'active' : ''; ?>">
+            View clubs
+          </a>
         </div>
       </div>
 
       <!-- Events dropdown -->
+      <?php
+        $eventPages = ['event_creation_requests.php','event_edit_requests.php','upcomingevents.php'];
+        $eventActive = in_array($currentPage, $eventPages);
+      ?>
       <div class="nav-group">
-        <div class="nav-item">
+        <div class="nav-item <?php echo $eventActive ? 'active' : ''; ?>">
           <span>Events</span>
           <span class="nav-arrow">▾</span>
         </div>
         <div class="dropdown-menu">
-          <a href="event_creation_requests.php" class="nav-sub">Creation requests</a>
-          <a href="event_edit_requests.php" class="nav-sub">Edit requests</a>
-          <a href="upcomingevents.php" class="nav-sub">Upcoming events</a>
+          <a href="event_creation_requests.php"
+             class="nav-sub <?php echo $currentPage === 'event_creation_requests.php' ? 'active' : ''; ?>">
+            Creation requests
+          </a>
+          <a href="event_edit_requests.php"
+             class="nav-sub <?php echo $currentPage === 'event_edit_requests.php' ? 'active' : ''; ?>">
+            Edit requests
+          </a>
+          <a href="upcomingevents.php"
+             class="nav-sub <?php echo $currentPage === 'upcomingevents.php' ? 'active' : ''; ?>">
+            Upcoming events
+          </a>
         </div>
       </div>
 
-      <!-- Sponsors button -->
-      <a href="sponsors.php" class="nav-item">
+      <!-- Sponsors -->
+      <a href="sponsors.php"
+         class="nav-item <?php echo $currentPage === 'sponsors.php' ? 'active' : ''; ?>">
         <span>Sponsors</span>
       </a>
 
-      <a href="students.php" class="nav-item">
+      <!-- Students -->
+      <a href="students.php"
+         class="nav-item <?php echo $currentPage === 'students.php' ? 'active' : ''; ?>">
         <span>Students</span>
       </a>
 
-      <a href="news.php" class="nav-item">
+      <!-- News -->
+      <a href="news.php"
+         class="nav-item <?php echo $currentPage === 'news.php' ? 'active' : ''; ?>">
         <span>News management</span>
       </a>
     </nav>
