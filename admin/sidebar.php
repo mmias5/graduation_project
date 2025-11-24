@@ -4,6 +4,9 @@
 ?>
 
 <style>
+  :root{
+  --sidebarWidth: 240px;
+}
 /* ========== Sidebar ========== */
 .sidebar-logo{
   display:flex;
@@ -202,9 +205,9 @@
              class="nav-sub <?php echo $currentPage === 'event_edit_requests.php' ? 'active' : ''; ?>">
             Edit requests
           </a>
-          <a href="upcomingevents.php"
+          <a href="allevents.php"
              class="nav-sub <?php echo $currentPage === 'upcomingevents.php' ? 'active' : ''; ?>">
-            Upcoming events
+            All events
           </a>
         </div>
       </div>
