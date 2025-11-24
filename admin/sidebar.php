@@ -137,8 +137,8 @@
           <span class="nav-arrow">▾</span>
         </div>
         <div class="dropdown-menu">
-          <a href="club_creation_requests.php" class="nav-sub">Creation requests</a>
-          <a href="club_edit_requests.php" class="nav-sub">Edit requests</a>
+          <a href="clubcreation.php" class="nav-sub">Creation requests</a>
+          <a href="clubedit.php" class="nav-sub">Edit requests</a>
           <a href="view_clubs.php" class="nav-sub">View clubs</a>
         </div>
       </div>
