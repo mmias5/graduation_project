@@ -52,7 +52,7 @@ body{
   padding:30px 32px 34px;
   border-radius:var(--radius);
   box-shadow:var(--shadow);
-  max-width:720px;
+  max-width:100%;
 }
 
 /* Two-column grid for top fields */

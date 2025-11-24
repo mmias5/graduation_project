@@ -5,6 +5,15 @@
 
 <style>
 /* ========== Sidebar ========== */
+.sidebar-logo{
+  display:flex;
+  margin-bottom:20px;
+}
+
+.sidebar-logo img{
+  width:100%;     /* adjust size if needed */
+  height:auto;
+}
 .sidebar{
   width:var(--sidebarWidth);
   background:linear-gradient(180deg,#242751 0%,#292d56 60%,#232547 100%);
@@ -133,7 +142,13 @@
 
 <aside class="sidebar">
   <div class="sidebar-section">
-    <div class="sidebar-title">Admin Panel</div>
+
+  <div class="sidebar-logo">
+    <img src="tools/pics/adminlogo.png" alt="UniHive Logo">
+  </div>
+
+  <div class="sidebar-title">Admin Panel</div>
+
 
     <nav class="sidebar-nav">
       <!-- Home -->
