@@ -217,6 +217,26 @@ body{
   box-shadow:0 18px 40px rgba(15,23,42,.14);
   padding:18px 20px 16px;
   border:2px solid rgba(36,39,81,0.07); /* subtle navy border */
+  position:relative;   /* for overlay link */
+  cursor:pointer;
+}
+
+/* Full-card clickable link */
+.card-link{
+  position:absolute;
+  top:0;
+  left:0;
+  width:100%;
+  height:100%;
+  z-index:1;
+  display:block;
+}
+
+/* Make buttons sit above the overlay */
+.actions-row,
+.actions-row *{
+  position:relative;
+  z-index:5;
 }
 
 /* Active state — stronger navy border */
@@ -406,11 +426,14 @@ body{
   <!-- Cards grid -->
   <div class="cards-grid" id="cardsGrid">
     <?php foreach($clubs as $club): ?>
-      <div
+      <div 
         class="club-card <?= $club['active'] ? 'active' : '' ?>"
         data-name="<?= strtolower($club['name']); ?>"
         data-category="<?= htmlspecialchars($club['category']); ?>"
       >
+        <!-- full card clickable overlay -->
+        <a href="clubpage.php?club_id=<?= $club['id']; ?>" class="card-link"></a>
+
         <div class="card-top">
           <div class="card-main">
             <img src="<?= $club['logo']; ?>" alt="Club logo" class="club-logo">
