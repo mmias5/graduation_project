@@ -1,12 +1,17 @@
 <?php
 // Dummy data – later you will fetch by $_GET['id']
 $request = [
-    "club_name"   => "Debate Club",
-    "applicant_name"   => "Sarah Ahmad",
-    "category"    => "Academic",
-    "description" => "A club focused on improving public speaking, debating, and logical thinking...",
-    "email"       => "debate@university.edu",
-    "logo"        => "assets/club1.png"
+    "club_name"      => "Debate Club",
+    "applicant_name" => "Sarah Ahmad",
+    "category"       => "Academic",
+    "description"    => "A club focused on improving public speaking, debating, and logical thinking...",
+    "email"          => "debate@university.edu",
+    "logo"           => "assets/club1.png",
+
+    // Social links (optional)
+    "linkedin"  => "https://www.linkedin.com/company/debate-club",
+    "facebook"  => "https://www.facebook.com/debateclub",
+    "instagram" => "https://www.instagram.com/debateclub"
 ];
 ?>
 <!doctype html>
@@ -37,8 +42,6 @@ body{
   background:var(--paper);
   font-family:"Raleway",system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
 }
-
-/* again: NO .sidebar styles here */
 
 .content{
   margin-left:var(--sidebarWidth);
@@ -83,6 +86,35 @@ body{
   color:var(--ink);
 }
 
+/* SOCIAL LINKS STYLING */
+.social-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:18px;
+  margin-top:15px;
+}
+
+.social-full{
+  grid-column:1 / 3;
+}
+
+.social-pill{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:14px 16px;
+  background:#f8f9fc;
+  border-radius:14px;
+  color:var(--ink);
+  border:1px solid #e5e7eb;
+}
+
+.social-pill img{
+  width:26px;
+  height:26px;
+}
+
+/* Buttons */
 .btn-row{
   margin-top:26px;
   display:flex;
@@ -133,6 +165,39 @@ body{
 
     <div class="field-label">Contact Email</div>
     <div class="field-value"><?= $request['email'] ?></div>
+
+    <!-- ▬▬▬ SOCIAL LINKS ADDED HERE ▬▬▬ -->
+    <div class="field-label" style="margin-top:20px;">Social Links</div>
+
+    <div class="social-grid">
+
+      <!-- LinkedIn -->
+      <div class="social-pill">
+        <img src="https://cdn-icons-png.flaticon.com/512/174/174857.png">
+        <a href="<?= $request['linkedin'] ?>" target="_blank" style="color:var(--ink); text-decoration:none;">
+          <?= $request['linkedin'] ?>
+        </a>
+      </div>
+
+      <!-- Facebook -->
+      <div class="social-pill">
+        <img src="https://cdn-icons-png.flaticon.com/512/733/733547.png">
+        <a href="<?= $request['facebook'] ?>" target="_blank" style="color:var(--ink); text-decoration:none;">
+          <?= $request['facebook'] ?>
+        </a>
+      </div>
+
+      <!-- Instagram (full width) -->
+      <div class="social-pill social-full">
+        <img src="https://cdn-icons-png.flaticon.com/512/2111/2111463.png">
+        <a href="<?= $request['instagram'] ?>" target="_blank" style="color:var(--ink); text-decoration:none;">
+          <?= $request['instagram'] ?>
+        </a>
+      </div>
+
+    </div>
+    <!-- ▬▬▬ END SOCIAL LINKS ▬▬▬ -->
+
   </div>
 
   <div class="btn-row">
