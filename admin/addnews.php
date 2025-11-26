@@ -80,10 +80,9 @@ body{
   color:var(--navy);
 }
 
-/* INPUTS */
+/* BASE FIELDS */
 .input-field,
-.textarea-field,
-.select-field{
+.textarea-field{
   width:100%;
   border:none;
   outline:none;
@@ -93,11 +92,119 @@ body{
   border-radius:16px;
   box-shadow:0 0 0 1px rgba(0,0,0,0.08);
   margin-bottom:20px;
+  font-family:"Raleway",system-ui,sans-serif;
 }
 
 .textarea-field{
   height:160px;
   resize:vertical;
+}
+
+.input-field:focus,
+.textarea-field:focus{
+  box-shadow:0 0 0 2px rgba(72,113,219,.25);
+}
+
+/* ========== CUSTOM CATEGORY DROPDOWN ========== */
+
+/* container */
+.custom-select{
+  position:relative;
+  width:100%;
+  margin-bottom:20px;
+  font-family:"Raleway",system-ui,sans-serif;
+}
+
+/* fake trigger (what you see) */
+.custom-select-trigger{
+  width:100%;
+  padding:12px 16px;
+  border-radius:16px;
+  background:#ffffff;
+  box-shadow:0 0 0 1px rgba(0,0,0,0.08);
+  font-size:.92rem;
+  color:var(--ink);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  cursor:pointer;
+  transition:.15s ease;
+}
+
+.custom-select-trigger span{
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+/* small arrow icon */
+.custom-select-arrow{
+  border-style:solid;
+  border-width:5px 4px 0 4px;
+  border-color:var(--muted) transparent transparent transparent;
+  margin-left:10px;
+  transition:transform .15s ease;
+}
+
+.custom-select.open .custom-select-arrow{
+  transform:rotate(180deg);
+}
+
+/* focus / hover effect */
+.custom-select-trigger:hover{
+  box-shadow:0 0 0 1px rgba(72,113,219,.40);
+}
+.custom-select.open .custom-select-trigger{
+  box-shadow:0 0 0 2px rgba(72,113,219,.25);
+}
+
+/* options panel */
+.custom-options{
+  position:absolute;
+  top:100%;
+  left:0;
+  right:0;
+  margin-top:6px;
+  background:#ffffff;
+  border-radius:16px;
+  box-shadow:0 18px 38px rgba(12,22,60,.16);
+  padding:6px 0;
+  z-index:10;
+  display:none;
+}
+
+.custom-select.open .custom-options{
+  display:block;
+}
+
+.custom-option{
+  padding:9px 16px;
+  font-size:.9rem;
+  color:var(--ink);
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+}
+
+.custom-option:hover{
+  background:rgba(72,113,219,.06);
+}
+
+.custom-option.selected{
+  font-weight:600;
+  color:var(--coral);
+}
+
+/* small pill on the right to hint type */
+.custom-option-pill{
+  font-size:.7rem;
+  text-transform:uppercase;
+  letter-spacing:.06em;
+  padding:3px 9px;
+  border-radius:999px;
+  border:1px solid rgba(148,163,184,.6);
+  color:var(--muted);
 }
 
 /* BUTTONS */
@@ -110,6 +217,7 @@ body{
   font-size:.92rem;
   font-weight:600;
   transition:.15s;
+  font-family:"Raleway",system-ui,sans-serif;
 }
 
 .btn-primary{
@@ -125,6 +233,10 @@ body{
   background:transparent;
   border:1px solid rgba(148,163,184,.55);
   color:var(--navy);
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  text-decoration:none;
 }
 .btn-ghost:hover{
   background:#e5e7eb;
@@ -153,12 +265,32 @@ body{
       <label class="form-label">Title</label>
       <input type="text" name="title" class="input-field" required>
 
+      <!-- CATEGORY (Custom Dropdown) -->
       <label class="form-label">Category</label>
-      <select name="category" class="select-field" required>
-        <option value="News">News</option>
-        <option value="Announcement">Announcement</option>
-        <option value="Update">Update</option>
-      </select>
+
+      <!-- Hidden input actually submitted to PHP -->
+      <input type="hidden" name="category" id="categoryValue" value="News">
+
+      <div class="custom-select" id="categorySelect">
+        <div class="custom-select-trigger">
+          <span id="categoryLabel">News</span>
+          <div class="custom-select-arrow"></div>
+        </div>
+        <div class="custom-options">
+          <div class="custom-option selected" data-value="News">
+            <span>News</span>
+            <span class="custom-option-pill">Default</span>
+          </div>
+          <div class="custom-option" data-value="Announcement">
+            <span>Announcement</span>
+            <span class="custom-option-pill">Announcement</span>
+          </div>
+          <div class="custom-option" data-value="Update">
+            <span>Update</span>
+            <span class="custom-option-pill">Update</span>
+          </div>
+        </div>
+      </div>
 
       <label class="form-label">Date</label>
       <input type="date" name="date" class="input-field" required>
@@ -171,13 +303,56 @@ body{
 
       <div class="actions">
         <button class="btn btn-primary" type="submit">Publish News</button>
-        <a href="viewnews.php" class="btn btn-ghost">Cancel</a>
+        <a href="news.php" class="btn btn-ghost">Cancel</a>
       </div>
 
     </form>
   </div>
 
 </main>
+
+<script>
+// ===== Custom Category Dropdown Logic =====
+(function(){
+  const selectEl   = document.getElementById('categorySelect');
+  const trigger    = selectEl.querySelector('.custom-select-trigger');
+  const labelSpan  = document.getElementById('categoryLabel');
+  const optionsBox = selectEl.querySelector('.custom-options');
+  const options    = selectEl.querySelectorAll('.custom-option');
+  const hiddenInput= document.getElementById('categoryValue');
+
+  // open/close dropdown
+  trigger.addEventListener('click', function(){
+    selectEl.classList.toggle('open');
+  });
+
+  // select an option
+  options.forEach(opt => {
+    opt.addEventListener('click', function(){
+      const value = this.getAttribute('data-value');
+      const text  = this.querySelector('span').innerText;
+
+      // update label and hidden value
+      labelSpan.textContent = text;
+      hiddenInput.value = value;
+
+      // mark selected
+      options.forEach(o => o.classList.remove('selected'));
+      this.classList.add('selected');
+
+      // close
+      selectEl.classList.remove('open');
+    });
+  });
+
+  // close when clicking outside
+  document.addEventListener('click', function(e){
+    if(!selectEl.contains(e.target)){
+      selectEl.classList.remove('open');
+    }
+  });
+})();
+</script>
 
 </body>
 </html>

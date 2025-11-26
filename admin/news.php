@@ -26,6 +26,17 @@
       'status'   => 'Published'
     ],
   ];
+
+  // ====== SEARCH FILTER BY TITLE ======
+  $search = isset($_GET['q']) ? trim($_GET['q']) : '';
+  $filteredNews = $newsItems;
+
+  if ($search !== '') {
+    $filteredNews = array_filter($newsItems, function($item) use ($search) {
+      // case-insensitive search in the title
+      return stripos($item['title'], $search) !== false;
+    });
+  }
 ?>
 <!doctype html>
 <html lang="en">
@@ -415,9 +426,10 @@
         <input
           type="text"
           name="q"
+          id="searchInput"
           class="search-input"
           placeholder="Search news by title..."
-          value="<?php echo isset($_GET['q']) ? htmlspecialchars($_GET['q']) : ''; ?>"
+          value="<?php echo htmlspecialchars($search); ?>"
         />
       </form>
 
@@ -433,7 +445,7 @@
       <div>
         <div class="content-card-title">All News Articles</div>
         <div class="content-card-subtitle">
-          <?php echo count($newsItems); ?> total items (sample data). Connect to your database later.
+          <?php echo count($filteredNews); ?> total items (sample data). Connect to your database later.
         </div>
       </div>
 
@@ -445,16 +457,23 @@
     </div>
 
     <div class="news-list">
-      <?php if(empty($newsItems)): ?>
+      <div id="emptyState" class="empty-state" style="display:none;">
+  No news found for your search.
+</div>
+      <?php if (empty($filteredNews)): ?>
         <div class="empty-state">
-          No news has been created yet. Click <strong>&ldquo;Add News&rdquo;</strong> to publish your first article.
+          <?php if ($search !== ''): ?>
+            No news found matching
+            "<strong><?php echo htmlspecialchars($search); ?></strong>".
+          <?php else: ?>
+            No news has been created yet. Click <strong>&ldquo;Add News&rdquo;</strong>
+            to publish your first article.
+          <?php endif; ?>
         </div>
       <?php else: ?>
-        <?php foreach($newsItems as $index => $news): ?>
-          <?php
-            $isDraft = strtolower($news['status']) === 'draft';
-          ?>
-          <article class="news-card">
+        <?php foreach ($filteredNews as $id => $news): ?>
+          <?php $isDraft = strtolower($news['status']) === 'draft'; ?>
+          <article class="news-card" data-title="<?php echo strtolower($news['title']); ?>">
             <div class="news-main">
               <div class="news-title-row">
                 <h2 class="news-title">
@@ -478,7 +497,7 @@
               </span>
               <div class="news-actions-buttons">
                 <a
-                  href="editnews.php?id=<?php echo $index+1; ?>"
+                  href="editnews.php?id=<?php echo $id + 1; ?>"
                   class="btn btn-small btn-ghost"
                 >
                   Edit
@@ -488,7 +507,7 @@
                   method="post"
                   onsubmit="return confirm('Are you sure you want to delete this news item?');"
                 >
-                  <input type="hidden" name="id" value="<?php echo $index+1; ?>">
+                  <input type="hidden" name="id" value="<?php echo $id + 1; ?>">
                   <button type="submit" class="btn btn-small btn-outline-coral">
                     Delete
                   </button>
@@ -502,6 +521,31 @@
   </section>
 
 </main>
+<script>
+document.getElementById("searchInput").addEventListener("input", function () {
+    const query = this.value.toLowerCase();
+    const cards = document.querySelectorAll(".news-card");
+    let anyVisible = false;
+
+    cards.forEach(card => {
+        const title = card.getAttribute("data-title");
+        if (title.includes(query)) {
+            card.style.display = "flex";
+            anyVisible = true;
+        } else {
+            card.style.display = "none";
+        }
+    });
+
+    // Handle empty state
+    const emptyState = document.getElementById("emptyState");
+    if (!anyVisible) {
+        emptyState.style.display = "block";
+    } else {
+        emptyState.style.display = "none";
+    }
+});
+</script>
 
 </body>
 </html>
