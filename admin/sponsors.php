@@ -224,6 +224,9 @@ body{
     <a href="addsponsor.php" class="add-btn">
       + Add sponsor
     </a>
+    <a href="registrationrequests.php" class="add-btn">
+      + Registration requests
+    </a>
   </div>
 
   <div class="sponsors-grid" id="sponsorsGrid">

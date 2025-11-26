@@ -132,7 +132,6 @@
     input[type="text"],
     input[type="tel"],
     input[type="email"],
-    input[type="password"],
     textarea{
       width:100%;
       padding:11px 13px;
@@ -228,10 +227,7 @@
             <input type="email" name="email" placeholder="you@company.com" required>
           </div>
 
-          <div class="form-group">
-            <label>Password you'd like to use</label>
-            <input type="password" name="password" placeholder="Password" required>
-          </div>
+
         </div>
 
         <div class="form-group">
