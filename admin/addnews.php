@@ -68,7 +68,7 @@ body{
   padding:26px 26px 30px;
   border-radius:var(--radius-card);
   box-shadow:var(--shadow-card);
-  max-width:900px;
+  max-width:100%;
 }
 
 /* INPUT LABEL */
