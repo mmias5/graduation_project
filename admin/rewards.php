@@ -349,7 +349,6 @@
         <h1 class="page-title">Rewards management</h1>
         <p class="page-subtitle">Create UniHive rewards and control how many points students need to redeem them.</p>
       </div>
-      <div class="page-badge">Frontend only · Demo</div>
     </div>
 
     <!-- Add Reward Card -->
