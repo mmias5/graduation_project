@@ -228,7 +228,7 @@
           </div>
 
                     <div class="form-group">
-            <label>Website(Optional)</label>
+            <label>Website (Optional)</label>
             <input type="text" name="name" placeholder="Your company's website" optional>
           </div>
 
