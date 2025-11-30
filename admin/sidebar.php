@@ -230,7 +230,7 @@
         <span>News management</span>
       </a>
             <a href="rewards.php"
-         class="nav-item <?php echo $currentPage === 'news.php' ? 'active' : ''; ?>">
+         class="nav-item <?php echo $currentPage === 'rewards.php' ? 'active' : ''; ?>">
         <span>Rewards management</span>
       </a>
     </nav>
