@@ -229,6 +229,10 @@
          class="nav-item <?php echo $currentPage === 'news.php' ? 'active' : ''; ?>">
         <span>News management</span>
       </a>
+            <a href="rewards.php"
+         class="nav-item <?php echo $currentPage === 'news.php' ? 'active' : ''; ?>">
+        <span>Rewards management</span>
+      </a>
     </nav>
   </div>
 
