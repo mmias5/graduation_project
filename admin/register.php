@@ -213,8 +213,8 @@
       <form method="post" action="thankyou.php">
         <div class="form-grid">
           <div class="form-group">
-            <label>Full Name</label>
-            <input type="text" name="name" placeholder="Your full name" required>
+            <label>Company Name</label>
+            <input type="text" name="name" placeholder="Your company name" required>
           </div>
 
           <div class="form-group">
@@ -225,6 +225,11 @@
           <div class="form-group">
             <label>Work Email</label>
             <input type="email" name="email" placeholder="you@company.com" required>
+          </div>
+
+                    <div class="form-group">
+            <label>Website(Optional)</label>
+            <input type="text" name="name" placeholder="Your company's website" optional>
           </div>
 
 

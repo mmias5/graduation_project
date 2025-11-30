@@ -5,6 +5,7 @@ $pendingSponsors = [
     "name"        => "Bright Future Foundation",
     "phone"       => "+962 7X 555 1234",
     "email"       => "partnerships@brightfuture.org",
+    "website"       => "company website",
     "brand_intro" => "Non-profit focused on student leadership programs and social impact events.",
     "submitted_at"=> "2025-11-20 10:32"
   ],
@@ -12,6 +13,7 @@ $pendingSponsors = [
     "name"        => "TechNova Solutions",
     "phone"       => "+962 7X 987 4455",
     "email"       => "hello@technova.com",
+    "website"       => "company website",
     "brand_intro" => "Technology company interested in sponsoring hackathons, coding clubs, and innovation challenges.",
     "submitted_at"=> "2025-11-21 15:10"
   ],
@@ -19,6 +21,7 @@ $pendingSponsors = [
     "name"        => "GreenLeaf Café",
     "phone"       => "+962 7X 222 7788",
     "email"       => "contact@greenleafcafe.com",
+    "website"       => "company website",
     "brand_intro" => "Local café that wants to support art, music, and book clubs with catering and vouchers.",
     "submitted_at"=> "2025-11-22 18:47"
   ],
@@ -273,6 +276,7 @@ $pendingSponsors = [
               <div class="sponsor-meta">
                 <span><strong>Phone:</strong> <?php echo htmlspecialchars($req["phone"]); ?></span>
                 <span><strong>Email:</strong> <?php echo htmlspecialchars($req["email"]); ?></span>
+                <span><strong>Website:</strong> <?php echo htmlspecialchars($req["website"]); ?></span>
               </div>
             </div>
             <div class="submitted-tag">
