@@ -519,11 +519,6 @@
       const actionsDiv = document.createElement("div");
       actionsDiv.className = "table-actions";
 
-      const editBtn = document.createElement("button");
-      editBtn.className = "btn btn-outline";
-      editBtn.type = "button";
-      editBtn.textContent = "Edit";
-      editBtn.onclick = () => alert("Frontend demo only. Later this will open edit_reward.php?id=" + reward.id);
 
       const deleteBtn = document.createElement("button");
       deleteBtn.className = "btn btn-danger";
@@ -539,7 +534,6 @@
         }
       };
 
-      actionsDiv.appendChild(editBtn);
       actionsDiv.appendChild(deleteBtn);
       tdActions.appendChild(actionsDiv);
       tr.appendChild(tdActions);
