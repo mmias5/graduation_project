@@ -490,7 +490,7 @@ body{
         </span>
       </div>
       <div class="actions-row">
-        <a href="clubedit.php?club_id=<?= $club['id']; ?>" class="btn btn-outline">Edit club</a>
+        <a href="editclub.php?club_id=<?= $club['id']; ?>" class="btn btn-outline">Edit club</a>
         <a href="viewmembers.php?club_id=<?= $club['id']; ?>" class="btn btn-primary">View members</a>
         <button class="btn btn-danger" type="button">Delete</button>
       </div>
