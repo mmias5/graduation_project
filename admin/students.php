@@ -1,4 +1,9 @@
 <?php
+session_start();
+if (!isset($_SESSION['admin_id'])) {
+    header('Location: login.php');
+    exit;
+}
   // ========== Example data (استبدليه بجلب حقيقي من الـ DB) ==========
   // include '../includes/db_connect.php';
   //

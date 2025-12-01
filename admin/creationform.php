@@ -1,4 +1,10 @@
 <?php
+session_start();
+if (!isset($_SESSION['admin_id'])) {
+    header('Location: login.php');
+    exit;
+}
+
 // Dummy data – later you will fetch by $_GET['id']
 $request = [
     "club_name"      => "Debate Club",

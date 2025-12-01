@@ -1,4 +1,9 @@
 <?php
+session_start();
+if (!isset($_SESSION['admin_id'])) {
+    header('Location: login.php');
+    exit;
+}
 // ================= Dummy data (replace later with SELECT from database) ================
 $pendingSponsors = [
   [

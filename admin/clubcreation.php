@@ -1,4 +1,10 @@
 <?php
+session_start();
+if (!isset($_SESSION['admin_id'])) {
+    header('Location: login.php');
+    exit;
+}
+
 // Temporary dummy data – replace with DB later
 $requests = [
     [

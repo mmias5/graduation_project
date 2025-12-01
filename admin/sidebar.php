@@ -1,7 +1,10 @@
 <?php
-  // Detect current page (e.g. "clubcreation.php")
-  $currentPage = basename($_SERVER['PHP_SELF']);
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+$currentPage = basename($_SERVER['PHP_SELF']);
 ?>
+
 
 <style>
   :root{
@@ -236,5 +239,6 @@
     </nav>
   </div>
 
-  <a href="login.php" class="logout-btn">Logout</a>
+  <a href="../base/logout.php" class="logout-btn">Logout</a>
+
 </aside>

@@ -1,4 +1,9 @@
 <?php
+session_start();
+if (!isset($_SESSION['admin_id'])) {
+    header('Location: login.php');
+    exit;
+}
   // Optional: detect current page for sidebar highlight
   $currentPage = basename($_SERVER['PHP_SELF']);
 

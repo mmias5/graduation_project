@@ -1,4 +1,10 @@
 <?php
+session_start();
+if (!isset($_SESSION['admin_id'])) {
+    header('Location: login.php');
+    exit;
+}
+
 // Dummy data – later load by $_GET['id'] from DB
 $editRequest = [
     "club_name"   => "Birds",

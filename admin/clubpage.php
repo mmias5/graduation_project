@@ -1,4 +1,9 @@
 <?php
+session_start();
+if (!isset($_SESSION['admin_id'])) {
+    header('Location: login.php');
+    exit;
+}
 // Dummy data – later replace with DB query using $_GET['club_id']
 $club = [
   "id" => 1,
