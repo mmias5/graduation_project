@@ -315,7 +315,7 @@ if ($result && $result->num_rows > 0) {
               ?>
 
               <?php if (!empty($clubName) && !empty($clubId)): ?>
-                <a href="clubdetails.php?id=<?php echo (int)$clubId; ?>" class="club-pill">
+                <a href="clubpage.php?id=<?php echo (int)$clubId; ?>" class="club-pill">
                   <span class="club-pill-dot"></span>
                   <span><?php echo htmlspecialchars($clubName); ?></span>
                 </a>
