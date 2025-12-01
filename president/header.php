@@ -1,3 +1,9 @@
+<?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+$currentPage = basename($_SERVER['PHP_SELF']);
+?>
 <!doctype html>
 <html lang="en">
 <head>
@@ -374,7 +380,7 @@ body.menu-open .backdrop{ opacity:1; pointer-events:auto }
         <span>QR Code</span><span class="sub" aria-hidden="true">— Scan / Show</span>
       </button>
 
-      <a class="side-btn logout" href="login.php" role="button">Logout</a>
+      <a class="side-btn logout" href="../logout.php" role="button">Logout</a>
     </div>
   </aside>
 </div>

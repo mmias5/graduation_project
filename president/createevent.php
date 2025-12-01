@@ -1,4 +1,10 @@
 <?php
+session_start();
+
+if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
+    header('Location: ../login.php');
+    exit;
+}
 // event_create.php
 // session_start();
 // Optional: $club_id = $_GET['club_id'] ?? ($_SESSION['club_id'] ?? 1);

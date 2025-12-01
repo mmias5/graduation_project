@@ -239,6 +239,6 @@ $currentPage = basename($_SERVER['PHP_SELF']);
     </nav>
   </div>
 
-  <a href="../base/logout.php" class="logout-btn">Logout</a>
+  <a href="../logout.php" class="logout-btn">Logout</a>
 
 </aside>

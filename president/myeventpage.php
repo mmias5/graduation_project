@@ -1,4 +1,10 @@
 <?php
+session_start();
+
+if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
+    header('Location: ../login.php');
+    exit;
+}
 // event_details.php
 // session_start();
 // $isLeader = isset($_SESSION['role']) && $_SESSION['role']==='leader';

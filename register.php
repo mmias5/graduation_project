@@ -1,3 +1,9 @@
+<?php
+require_once 'config.php';
+
+// NO session_start() here
+?>
+
 <!doctype html>
 <html lang="en">
 <head>
@@ -210,7 +216,7 @@
       </div>
 
       <!-- Redirect to thankyou.php -->
-      <form method="post" action="thankyou.php">
+      <form method="post" action="register_process.php">
         <div class="form-grid">
           <div class="form-group">
             <label>Company Name</label>
@@ -229,7 +235,7 @@
 
                     <div class="form-group">
             <label>Website (Optional)</label>
-            <input type="text" name="name" placeholder="Your company's website" optional>
+            <input type="text" name="website" placeholder="Your company's website">
           </div>
 
 
@@ -257,3 +263,4 @@
 
 </body>
 </html>
+

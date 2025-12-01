@@ -1,4 +1,10 @@
 <?php
+session_start();
+
+if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
+    header('Location: ../login.php');
+    exit;
+}
 // event_edit.php
 // session_start();
 // if($_SESSION['role'] !== 'leader'){ http_response_code(403); exit('Forbidden'); }

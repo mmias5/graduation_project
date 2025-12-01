@@ -1,4 +1,10 @@
 <?php
+session_start();
+
+if (!isset($_SESSION['sponsor_id']) || $_SESSION['role'] !== 'sponsor') {
+    header('Location: ../login.php');
+    exit;
+}
 // index_sponsor.php
 ?>
 <!doctype html>

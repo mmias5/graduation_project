@@ -1,3 +1,9 @@
+<?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+$currentPage = basename($_SERVER['PHP_SELF']);
+?>
 <!doctype html>
 <html lang="en">
 <head>
@@ -203,7 +209,7 @@ body{
     </nav>
 
     <!-- Logout -->
-    <button class="logout-btn" onclick="location.href='login.php'">Logout</button>
+    <button class="logout-btn" onclick="location.href='../logout.php'">Logout</button>
 
   </div>
 </header>

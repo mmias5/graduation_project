@@ -1,4 +1,15 @@
 <?php
+session_start();
+
+if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
+    // لو بدك تخلي الـ president يدخل على صفحة مختلفة
+    if (isset($_SESSION['role']) && $_SESSION['role'] === 'club_president') {
+        header('Location: ../president/index.php');
+        exit;
+    }
+    header('Location: ../login.php');
+    exit;
+}
 // no_club.php — shown when the student hasn't joined any club yet
 ?>
 <!doctype html>
