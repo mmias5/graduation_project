@@ -1,11 +1,84 @@
 <?php
-session_start();
-if (!isset($_SESSION['admin_id'])) {
-    header('Location: login.php');
-    exit;
+// admin/index.php
+require_once '../config.php';
+require_once 'admin_auth.php';
+
+$currentPage = basename($_SERVER['PHP_SELF']);
+
+// Helper to get single int
+function getSingleInt(mysqli $conn, string $sql): int {
+    $res = $conn->query($sql);
+    if ($res && $row = $res->fetch_assoc()) {
+        return (int)$row['cnt'];
+    }
+    return 0;
+}
+
+/* ========= KPIs ========= */
+
+// Total students
+$totalStudents = getSingleInt($conn, "SELECT COUNT(*) AS cnt FROM student");
+
+// Total clubs (نحسب بس الـ active)
+$totalClubs = getSingleInt(
+    $conn,
+    "SELECT COUNT(*) AS cnt FROM club WHERE LOWER(status) = 'active'"
+);
+
+// Events completed (حالياً: كل الأحداث المسجلة)
+$totalEvents = getSingleInt($conn, "SELECT COUNT(*) AS cnt FROM event");
+
+// Engagement = طلاب منضمّين لأي نادي غير "No Club" (club_id = 1)
+$engagedStudents = getSingleInt(
+    $conn,
+    "SELECT COUNT(*) AS cnt FROM student WHERE club_id IS NOT NULL AND club_id <> 1"
+);
+$engagementRate = $totalStudents > 0
+    ? round(($engagedStudents * 100) / $totalStudents)
+    : 0;
+
+/* ========= Clubs ranking ========= */
+/*
+  النقاط = مجموع total_points لكل الطلاب في النادي
+  الأحداث = عدد الأحداث في جدول event لهذا النادي
+  الأعضاء = club.member_count من جدول club
+  الرعاة = أي sponsors Active حسب التواريخ في sponsor_club_support
+*/
+$clubsRanking = [];
+
+$sqlRank = "
+  SELECT
+    c.club_id,
+    c.club_name,
+    c.logo,
+    COALESCE(c.points, 0)                         AS points,
+    COALESCE(COUNT(DISTINCT e.event_id), 0)       AS events_count,
+    COALESCE(c.member_count, 0)                   AS members_count,
+    GROUP_CONCAT(DISTINCT sp.company_name
+                 ORDER BY sp.company_name
+                 SEPARATOR ', ')                 AS sponsors
+  FROM club c
+  LEFT JOIN event e
+    ON e.club_id = c.club_id
+  LEFT JOIN sponsor_club_support scs
+    ON scs.club_id = c.club_id
+   AND CURDATE() BETWEEN scs.start_date AND scs.end_date
+  LEFT JOIN sponsor sp
+    ON sp.sponsor_id = scs.sponsor_id
+  WHERE LOWER(c.status) = 'active'
+  GROUP BY c.club_id, c.club_name, c.logo, c.member_count, c.points
+  ORDER BY points DESC, c.club_name ASC
+  LIMIT 50
+";
+
+
+$resRank = $conn->query($sqlRank);
+if ($resRank && $resRank->num_rows > 0) {
+    while ($row = $resRank->fetch_assoc()) {
+        $clubsRanking[] = $row;
+    }
 }
 ?>
-
 <!doctype html>
 <html lang="en">
 <head>
@@ -35,7 +108,7 @@ if (!isset($_SESSION['admin_id'])) {
       --shadowSoft: 0 20px 38px rgba(15,23,42,.10);
       --shadowLight: 0 10px 24px rgba(15,23,42,.08);
 
-      --sidebarWidth: 230px;
+      --sidebarWidth: 240px;
     }
 
     *{
@@ -134,7 +207,7 @@ if (!isset($_SESSION['admin_id'])) {
 
     .bi-card{
       width:100%;
-      aspect-ratio:16 / 9;   /* you can change to 19 / 6 if you want */
+      aspect-ratio:16 / 9;
       border-radius:var(--radiusXl);
       background:var(--biCard);
       display:flex;
@@ -365,25 +438,33 @@ if (!isset($_SESSION['admin_id'])) {
       <div class="kpi-card">
         <div class="kpi-pill">Overview</div>
         <div class="kpi-label">Total students</div>
-        <div class="kpi-value">1,240</div>
+        <div class="kpi-value">
+          <?= number_format($totalStudents); ?>
+        </div>
       </div>
 
       <div class="kpi-card">
         <div class="kpi-pill">Overview</div>
         <div class="kpi-label">Total clubs</div>
-        <div class="kpi-value">32</div>
+        <div class="kpi-value">
+          <?= number_format($totalClubs); ?>
+        </div>
       </div>
 
       <div class="kpi-card">
         <div class="kpi-pill">Events</div>
         <div class="kpi-label">Events completed</div>
-        <div class="kpi-value">118</div>
+        <div class="kpi-value">
+          <?= number_format($totalEvents); ?>
+        </div>
       </div>
 
       <div class="kpi-card">
         <div class="kpi-pill">Engagement</div>
         <div class="kpi-label">Engagement rate</div>
-        <div class="kpi-value">74%</div>
+        <div class="kpi-value">
+          <?= $engagementRate; ?>%
+        </div>
       </div>
     </div>
 
@@ -423,85 +504,54 @@ if (!isset($_SESSION['admin_id'])) {
             </tr>
           </thead>
           <tbody>
-            <tr data-name="club d">
-              <td class="col-rank">1</td>
-              <td>
-                <div class="clubcell">
-                  <span class="club-avatar"><img src="pics/club-d.png" alt=""></span>
-                  <div class="club-meta">
-                    <span class="club-name">Club D</span>
-                    <span class="club-sponsor">Sponsored by <strong>Nike</strong></span>
+            <?php
+            if (empty($clubsRanking)): ?>
+              <tr>
+                <td colspan="5" style="padding:14px 16px; font-size:.9rem; color:var(--muted);">
+                  No active clubs found yet.
+                </td>
+              </tr>
+            <?php
+            else:
+              $rank = 1;
+              foreach ($clubsRanking as $club):
+                $clubName   = htmlspecialchars($club['club_name']);
+                $logo       = $club['logo'] ? htmlspecialchars($club['logo']) : '';
+                $points     = (int)$club['points'];
+                $eventsCnt  = (int)$club['events_count'];
+                $membersCnt = (int)$club['members_count'];
+                $sponsors   = $club['sponsors']
+                              ? htmlspecialchars($club['sponsors'])
+                              : 'No active sponsor';
+            ?>
+              <tr data-name="<?= strtolower($club['club_name']); ?>">
+                <td class="col-rank"><?= $rank; ?></td>
+                <td>
+                  <div class="clubcell">
+                    <span class="club-avatar">
+                      <?php if ($logo): ?>
+                        <img src="<?= $logo; ?>" alt="">
+                      <?php else: ?>
+                        <?= strtoupper(substr($clubName,0,1)); ?>
+                      <?php endif; ?>
+                    </span>
+                    <div class="club-meta">
+                      <span class="club-name"><?= $clubName; ?></span>
+                      <span class="club-sponsor">
+                        Sponsored by <strong><?= $sponsors; ?></strong>
+                      </span>
+                    </div>
                   </div>
-                </div>
-              </td>
-              <td class="points-cell">1950</td>
-              <td><span class="pill">22</span></td>
-              <td><span class="pill">85</span></td>
-            </tr>
-
-            <tr data-name="club b">
-              <td class="col-rank">2</td>
-              <td>
-                <div class="clubcell">
-                  <span class="club-avatar"><img src="pics/club-b.png" alt=""></span>
-                  <div class="club-meta">
-                    <span class="club-name">Club B</span>
-                    <span class="club-sponsor">Sponsored by <strong>Puma</strong></span>
-                  </div>
-                </div>
-              </td>
-              <td class="points-cell">1750</td>
-              <td><span class="pill">20</span></td>
-              <td><span class="pill">88</span></td>
-            </tr>
-
-            <tr data-name="club c">
-              <td class="col-rank">3</td>
-              <td>
-                <div class="clubcell">
-                  <span class="club-avatar"><img src="pics/club-c.png" alt=""></span>
-                  <div class="club-meta">
-                    <span class="club-name">Club C</span>
-                    <span class="club-sponsor">Sponsored by <strong>Pepsi</strong></span>
-                  </div>
-                </div>
-              </td>
-              <td class="points-cell">1700</td>
-              <td><span class="pill">13</span></td>
-              <td><span class="pill">72</span></td>
-            </tr>
-
-            <tr data-name="club a2">
-              <td class="col-rank">4</td>
-              <td>
-                <div class="clubcell">
-                  <span class="club-avatar"><img src="pics/club-a2.png" alt=""></span>
-                  <div class="club-meta">
-                    <span class="club-name">Club A2</span>
-                    <span class="club-sponsor">Sponsored by <strong>CarePlus</strong></span>
-                  </div>
-                </div>
-              </td>
-              <td class="points-cell">1580</td>
-              <td><span class="pill">19</span></td>
-              <td><span class="pill">88</span></td>
-            </tr>
-
-            <tr data-name="club e">
-              <td class="col-rank">5</td>
-              <td>
-                <div class="clubcell">
-                  <span class="club-avatar"><img src="pics/club-e.png" alt=""></span>
-                  <div class="club-meta">
-                    <span class="club-name">Club E</span>
-                    <span class="club-sponsor">Sponsored by <strong>ArtWorks</strong></span>
-                  </div>
-                </div>
-              </td>
-              <td class="points-cell">1530</td>
-              <td><span class="pill">22</span></td>
-              <td><span class="pill">67</span></td>
-            </tr>
+                </td>
+                <td class="points-cell"><?= number_format($points); ?></td>
+                <td><span class="pill"><?= $eventsCnt; ?></span></td>
+                <td><span class="pill"><?= $membersCnt; ?></span></td>
+              </tr>
+            <?php
+              $rank++;
+              endforeach;
+            endif;
+            ?>
           </tbody>
         </table>
       </div>
@@ -510,7 +560,7 @@ if (!isset($_SESSION['admin_id'])) {
   </main>
 
   <script>
-    // Search by club name (case-insensitive, using data-name like your original code)
+    // Search by club name
     (function () {
       const q = document.getElementById('rankSearch');
       if (!q) return;
@@ -519,7 +569,7 @@ if (!isset($_SESSION['admin_id'])) {
         const s = q.value.trim().toLowerCase();
         rows.forEach(tr => {
           const name = (tr.dataset.name || '').toLowerCase();
-          tr.style.display = name.includes(s) ? '' : 'none';
+          tr.style.display = !s || name.includes(s) ? '' : 'none';
         });
       });
     })();

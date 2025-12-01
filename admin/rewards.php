@@ -1,11 +1,118 @@
 <?php
-session_start();
-if (!isset($_SESSION['admin_id'])) {
-    header('Location: login.php');
-    exit;
+// admin/rewards.php
+require_once '../config.php';
+require_once 'admin_auth.php';
+
+$currentPage = basename($_SERVER['PHP_SELF']);
+
+// ===== Helper: generate code like COFFEE70 / random =====
+function generateRewardCode(): string {
+    $prefix = 'UH';
+    $chars  = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    $middle = '';
+    for ($i = 0; $i < 5; $i++) {
+        $middle .= $chars[random_int(0, strlen($chars) - 1)];
+    }
+    return $prefix . '-' . $middle;
 }
-  // just to know the current page for sidebar active state
-  $currentPage = basename($_SERVER['PHP_SELF']);
+
+// ===== Handle POST (add / delete) =====
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = $_POST['action'] ?? '';
+
+    // ---- Add new reward ----
+    if ($action === 'add') {
+        $name   = trim($_POST['reward_name'] ?? '');
+        $points = (int)($_POST['points_cost'] ?? 0);
+
+        if ($name === '' || $points <= 0) {
+            $_SESSION['flash_error'] = 'Please enter a valid reward name and points.';
+            header('Location: rewards.php');
+            exit;
+        }
+
+        // Upload image (optional)
+        $imagePath = null;
+        if (!empty($_FILES['reward_image']['name'])) {
+            $uploadDir = '../assets/rewards/';
+
+            if (!is_dir($uploadDir)) {
+                mkdir($uploadDir, 0777, true);
+            }
+
+            $fileTmp  = $_FILES['reward_image']['tmp_name'];
+            $fileName = basename($_FILES['reward_image']['name']);
+            $ext      = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+
+            $newName  = 'reward_' . time() . '_' . rand(1000, 9999) . '.' . $ext;
+            $target   = $uploadDir . $newName;
+
+            if (move_uploaded_file($fileTmp, $target)) {
+                $imagePath = 'assets/rewards/' . $newName; // مثل القيم اللي عندك
+            }
+        }
+
+        $code = generateRewardCode();
+
+        $sql = "INSERT INTO items_to_redeem (item_name, value, code, picture)
+                VALUES (?, ?, ?, ?)";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("siss", $name, $points, $code, $imagePath);
+
+        if ($stmt->execute()) {
+            $_SESSION['flash_success'] = 'Reward added successfully.';
+        } else {
+            $_SESSION['flash_error'] = 'Error adding reward: ' . $stmt->error;
+        }
+
+        header('Location: rewards.php');
+        exit;
+    }
+
+    // ---- Delete reward ----
+    if ($action === 'delete') {
+        $id = (int)($_POST['item_id'] ?? 0);
+
+        if ($id <= 0) {
+            $_SESSION['flash_error'] = 'Invalid reward id.';
+            header('Location: rewards.php');
+            exit;
+        }
+
+        // نجيب الصورة عشان نحذفها من المجلد
+        $sel = $conn->prepare("SELECT picture FROM items_to_redeem WHERE item_id = ? LIMIT 1");
+        $sel->bind_param("i", $id);
+        $sel->execute();
+        $res = $sel->get_result();
+        if ($row = $res->fetch_assoc()) {
+            $pic = $row['picture'];
+            if (!empty($pic) && file_exists('../' . $pic)) {
+                @unlink('../' . $pic);
+            }
+        }
+
+        $del = $conn->prepare("DELETE FROM items_to_redeem WHERE item_id = ?");
+        $del->bind_param("i", $id);
+
+        if ($del->execute()) {
+            $_SESSION['flash_success'] = 'Reward deleted successfully.';
+        } else {
+            $_SESSION['flash_error'] = 'Error deleting reward: ' . $del->error;
+        }
+
+        header('Location: rewards.php');
+        exit;
+    }
+}
+
+// ===== Fetch rewards from DB =====
+$rewards = [];
+$res = $conn->query("SELECT * FROM items_to_redeem ORDER BY item_id DESC");
+if ($res && $res->num_rows > 0) {
+    while ($row = $res->fetch_assoc()) {
+        $rewards[] = $row;
+    }
+}
 ?>
 <!doctype html>
 <html lang="en">
@@ -47,15 +154,13 @@ if (!isset($_SESSION['admin_id'])) {
       min-height:100vh;
     }
 
-    /* main area (sidebar style موجود عندك في sidebar.php) */
-.admin-main{
-  margin-left:var(--sidebarWidth);
-  padding:32px 24px;   /* كان 40px */
-  width: calc(100% - var(--sidebarWidth));
-  min-height:100vh;
-  background:radial-gradient(circle at top left,#f4f7ff 0,#eef2f7 55%,#e4e7f3 100%);
-}
-
+    .admin-main{
+      margin-left:var(--sidebarWidth);
+      padding:32px 24px;
+      width: calc(100% - var(--sidebarWidth));
+      min-height:100vh;
+      background:radial-gradient(circle at top left,#f4f7ff 0,#eef2f7 55%,#e4e7f3 100%);
+    }
 
     .page-header{
       display:flex;
@@ -77,17 +182,6 @@ if (!isset($_SESSION['admin_id'])) {
       margin:0;
       font-size:.95rem;
       color:var(--muted);
-    }
-
-    .page-badge{
-      background:#ffeef1;
-      color:var(--coral);
-      font-size:.8rem;
-      font-weight:600;
-      padding:6px 14px;
-      border-radius:999px;
-      box-shadow:0 8px 22px rgba(248,113,113,.28);
-      align-self:flex-start;
     }
 
     .card{
@@ -119,7 +213,6 @@ if (!isset($_SESSION['admin_id'])) {
       color:var(--muted);
     }
 
-    /* form */
     .form-grid{
       display:grid;
       grid-template-columns:2fr 1fr;
@@ -205,18 +298,6 @@ if (!isset($_SESSION['admin_id'])) {
 
     .btn-ghost:hover{
       background:rgba(72,113,219,.08);
-    }
-
-    .btn-outline{
-      border:1px solid #e5e7eb;
-      background:#ffffff;
-      color:var(--navy);
-      padding:7px 14px;
-      font-size:.8rem;
-    }
-
-    .btn-outline:hover{
-      background:#f3f4f6;
     }
 
     .btn-danger{
@@ -326,6 +407,21 @@ if (!isset($_SESSION['admin_id'])) {
       gap:6px;
     }
 
+    .flash{
+      margin-bottom:16px;
+      padding:10px 14px;
+      border-radius:12px;
+      font-size:.9rem;
+    }
+    .flash.success{
+      background:#dcfce7;
+      color:#166534;
+    }
+    .flash.error{
+      background:#fee2e2;
+      color:#991b1b;
+    }
+
     @media (max-width:900px){
       .admin-main{
         margin-left:0;
@@ -356,6 +452,17 @@ if (!isset($_SESSION['admin_id'])) {
       </div>
     </div>
 
+    <?php if (!empty($_SESSION['flash_success'])): ?>
+      <div class="flash success">
+        <?php echo htmlspecialchars($_SESSION['flash_success']); unset($_SESSION['flash_success']); ?>
+      </div>
+    <?php endif; ?>
+    <?php if (!empty($_SESSION['flash_error'])): ?>
+      <div class="flash error">
+        <?php echo htmlspecialchars($_SESSION['flash_error']); unset($_SESSION['flash_error']); ?>
+      </div>
+    <?php endif; ?>
+
     <!-- Add Reward Card -->
     <section class="card">
       <div class="card-header">
@@ -365,23 +472,27 @@ if (!isset($_SESSION['admin_id'])) {
         </div>
       </div>
 
-      <!-- frontend only: JS will handle submit -->
-      <form id="rewardForm">
+      <form id="rewardForm" action="rewards.php" method="post" enctype="multipart/form-data">
+        <input type="hidden" name="action" value="add">
+
         <div class="form-grid">
           <div class="form-group">
             <label for="reward_name">Reward name</label>
-            <input id="reward_name" type="text" class="input-text" placeholder="e.g. Free coffee at campus café" required>
+            <input id="reward_name" name="reward_name" type="text" class="input-text"
+                   placeholder="e.g. Coffee voucher" required>
           </div>
 
           <div class="form-group">
             <label for="points_cost">Points cost</label>
-            <input id="points_cost" type="number" min="1" class="input-number" placeholder="e.g. 150" required>
+            <input id="points_cost" name="points_cost" type="number" min="1"
+                   class="input-number" placeholder="e.g. 150" required>
           </div>
 
           <div class="form-group">
             <label for="reward_image">Reward image (optional)</label>
-            <input id="reward_image" type="file" class="input-file" accept="image/*">
-            <small>Image is only used in this page preview (no upload yet).</small>
+            <input id="reward_image" name="reward_image" type="file"
+                   class="input-file" accept="image/*">
+            <small>Images are stored under <code>assets/rewards/</code>.</small>
           </div>
         </div>
 
@@ -397,7 +508,9 @@ if (!isset($_SESSION['admin_id'])) {
       <div class="card-header">
         <div>
           <h2 class="card-title">All rewards</h2>
-          <p class="card-subtitle">This is a frontend demo list. Later you can connect it to your database.</p>
+          <p class="card-subtitle">
+            Showing <?php echo count($rewards); ?> reward(s) from <code>items_to_redeem</code>.
+          </p>
         </div>
       </div>
 
@@ -412,8 +525,73 @@ if (!isset($_SESSION['admin_id'])) {
               <th style="text-align:right;">Actions</th>
             </tr>
           </thead>
-          <tbody id="rewardsTableBody">
-            <!-- JS will inject rows here -->
+          <tbody>
+            <?php if (empty($rewards)): ?>
+              <tr>
+                <td colspan="5" style="text-align:center; padding:18px 10px; color:#6b7280;">
+                  No rewards yet. Use the form above to add one.
+                </td>
+              </tr>
+            <?php else: ?>
+              <?php foreach ($rewards as $reward): ?>
+                <tr>
+                  <!-- Reward cell (image + name + ID) -->
+                  <td>
+                    <div class="reward-row">
+                      <?php if (!empty($reward['picture'])): ?>
+                        <img src="../<?php echo htmlspecialchars($reward['picture']); ?>"
+                             alt="" class="reward-img">
+                      <?php else: ?>
+                        <div class="reward-img"></div>
+                      <?php endif; ?>
+
+                      <div>
+                        <div class="reward-name">
+                          <?php echo htmlspecialchars($reward['item_name']); ?>
+                        </div>
+                        <div class="reward-meta">
+                          ID #<?php echo (int)$reward['item_id']; ?>
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+
+                  <!-- Points -->
+                  <td>
+                    <span class="points-chip">
+                      <?php echo (int)$reward['value']; ?> pts
+                    </span>
+                  </td>
+
+                  <!-- Code -->
+                  <td>
+                    <span class="code-chip">
+                      <?php echo htmlspecialchars($reward['code']); ?>
+                    </span>
+                  </td>
+
+                  <!-- Created at (no column in DB, so just “—”) -->
+                  <td>
+  <span class="reward-meta">
+    <?php echo htmlspecialchars($reward['created_at']); ?>
+  </span>
+</td>
+
+
+                  <!-- Actions -->
+                  <td>
+                    <div class="table-actions">
+                      <form action="rewards.php" method="post"
+                            onsubmit="return confirm('Delete reward &quot;<?php echo htmlspecialchars($reward['item_name']); ?>&quot;?');">
+                        <input type="hidden" name="action" value="delete">
+                        <input type="hidden" name="item_id" value="<?php echo (int)$reward['item_id']; ?>">
+                        <button type="submit" class="btn btn-danger">Delete</button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+              <?php endforeach; ?>
+            <?php endif; ?>
           </tbody>
         </table>
       </div>
@@ -421,183 +599,6 @@ if (!isset($_SESSION['admin_id'])) {
 
   </main>
 </div>
-
-<script>
-  // ========= Dummy initial rewards =========
-  const rewards = [
-    {
-      id: 1,
-      name: "Free coffee",
-      points: 150,
-      code: "UH-CF-9X3A1",
-      createdAt: "2025-11-30 19:00",
-      imageUrl: "assets/reward-coffee.png"
-    },
-    {
-      id: 2,
-      name: "Bookstore 10% discount",
-      points: 300,
-      code: "UH-BK-7F8Q2",
-      createdAt: "2025-11-30 19:10",
-      imageUrl: "assets/reward-book.png"
-    }
-  ];
-
-  let nextId = 3;
-
-  const tbody = document.getElementById("rewardsTableBody");
-  const form  = document.getElementById("rewardForm");
-  const nameInput   = document.getElementById("reward_name");
-  const pointsInput = document.getElementById("points_cost");
-  const imageInput  = document.getElementById("reward_image");
-
-  function renderRewards(){
-    tbody.innerHTML = "";
-
-    if(rewards.length === 0){
-      const tr = document.createElement("tr");
-      const td = document.createElement("td");
-      td.colSpan = 5;
-      td.textContent = "No rewards yet. Use the form above to add one.";
-      tr.appendChild(td);
-      tbody.appendChild(tr);
-      return;
-    }
-
-    rewards.forEach(reward => {
-      const tr = document.createElement("tr");
-
-      // Reward cell
-      const tdReward = document.createElement("td");
-      const rowDiv = document.createElement("div");
-      rowDiv.className = "reward-row";
-
-      const img = document.createElement("img");
-      img.className = "reward-img";
-      if(reward.imageUrl){
-        img.src = reward.imageUrl;
-      }
-
-      const infoDiv = document.createElement("div");
-      const titleDiv = document.createElement("div");
-      titleDiv.className = "reward-name";
-      titleDiv.textContent = reward.name;
-
-      const metaDiv = document.createElement("div");
-      metaDiv.className = "reward-meta";
-      metaDiv.textContent = "ID #" + reward.id;
-
-      infoDiv.appendChild(titleDiv);
-      infoDiv.appendChild(metaDiv);
-
-      rowDiv.appendChild(img);
-      rowDiv.appendChild(infoDiv);
-      tdReward.appendChild(rowDiv);
-      tr.appendChild(tdReward);
-
-      // Points cell
-      const tdPoints = document.createElement("td");
-      const pointsChip = document.createElement("span");
-      pointsChip.className = "points-chip";
-      pointsChip.textContent = reward.points + " pts";
-      tdPoints.appendChild(pointsChip);
-      tr.appendChild(tdPoints);
-
-      // Code cell
-      const tdCode = document.createElement("td");
-      const codeChip = document.createElement("span");
-      codeChip.className = "code-chip";
-      codeChip.textContent = reward.code;
-      tdCode.appendChild(codeChip);
-      tr.appendChild(tdCode);
-
-      // Created at cell
-      const tdCreated = document.createElement("td");
-      const createdSpan = document.createElement("span");
-      createdSpan.className = "reward-meta";
-      createdSpan.textContent = reward.createdAt;
-      tdCreated.appendChild(createdSpan);
-      tr.appendChild(tdCreated);
-
-      // Actions cell
-      const tdActions = document.createElement("td");
-      const actionsDiv = document.createElement("div");
-      actionsDiv.className = "table-actions";
-
-
-      const deleteBtn = document.createElement("button");
-      deleteBtn.className = "btn btn-danger";
-      deleteBtn.type = "button";
-      deleteBtn.textContent = "Delete";
-      deleteBtn.onclick = () => {
-        const idx = rewards.findIndex(r => r.id === reward.id);
-        if(idx !== -1){
-          if(confirm("Delete reward \"" + reward.name + "\"?")){
-            rewards.splice(idx, 1);
-            renderRewards();
-          }
-        }
-      };
-
-      actionsDiv.appendChild(deleteBtn);
-      tdActions.appendChild(actionsDiv);
-      tr.appendChild(tdActions);
-
-      tbody.appendChild(tr);
-    });
-  }
-
-  function generateRewardCode(){
-    const prefix = "UH";
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    let middle = "";
-    for(let i=0;i<5;i++){
-      middle += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return `${prefix}-${middle}`;
-  }
-
-  function formatDateTime(d){
-    const pad = n => n.toString().padStart(2,"0");
-    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  }
-
-  form.addEventListener("submit", function(e){
-    e.preventDefault();
-
-    const name   = nameInput.value.trim();
-    const points = parseInt(pointsInput.value,10);
-
-    if(!name || !points || points <= 0){
-      alert("Please enter a valid reward name and points.");
-      return;
-    }
-
-    const code = generateRewardCode();
-    const createdAt = formatDateTime(new Date());
-    let imageUrl = "";
-
-    const file = imageInput.files[0];
-    if(file){
-      imageUrl = URL.createObjectURL(file); // preview only
-    }
-
-    rewards.unshift({
-      id: nextId++,
-      name,
-      points,
-      code,
-      createdAt,
-      imageUrl
-    });
-
-    form.reset();
-    renderRewards();
-  });
-
-  // initial render
-  renderRewards();
-</script>
 
 </body>
 </html>

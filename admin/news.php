@@ -1,47 +1,22 @@
 <?php
-session_start();
-if (!isset($_SESSION['admin_id'])) {
-    header('Location: login.php');
-    exit;
+// admin/news.php
+require_once '../config.php';
+require_once 'admin_auth.php';
+
+$currentPage = basename($_SERVER['PHP_SELF']);
+
+// جلب الأخبار
+$sql = "SELECT news_id, title, body, category, image, created_at, updated_at, admin_id
+        FROM news
+        ORDER BY created_at DESC";
+$result = $conn->query($sql);
+
+$newsItems = [];
+if ($result && $result->num_rows > 0) {
+    while($row = $result->fetch_assoc()) {
+        $newsItems[] = $row;
+    }
 }
-  // Optional: detect current page for sidebar highlight
-  $currentPage = basename($_SERVER['PHP_SELF']);
-
-  // TEMP SAMPLE DATA – replace with database results later
-  $newsItems = [
-    [
-      'title'    => 'Campus Clubs Hub expands cross-university activities with new analytics tools',
-      'category' => 'News',
-      'author'   => 'UniHive Team',
-      'date'     => 'Nov 2025',
-      'status'   => 'Published'
-    ],
-    [
-      'title'    => 'UniHive launches rewards upgrades for highly engaged students',
-      'category' => 'Update',
-      'author'   => 'UniHive Product',
-      'date'     => 'Oct 2025',
-      'status'   => 'Draft'
-    ],
-    [
-      'title'    => 'New sponsor partnerships announced for 2025–2026 activities',
-      'category' => 'Announcement',
-      'author'   => 'Partnerships',
-      'date'     => 'Sep 2025',
-      'status'   => 'Published'
-    ],
-  ];
-
-  // ====== SEARCH FILTER BY TITLE ======
-  $search = isset($_GET['q']) ? trim($_GET['q']) : '';
-  $filteredNews = $newsItems;
-
-  if ($search !== '') {
-    $filteredNews = array_filter($newsItems, function($item) use ($search) {
-      // case-insensitive search in the title
-      return stripos($item['title'], $search) !== false;
-    });
-  }
 ?>
 <!doctype html>
 <html lang="en">
@@ -50,27 +25,19 @@ if (!isset($_SESSION['admin_id'])) {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>UniHive — Manage News</title>
 
-  <!-- Raleway font -->
   <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
   <style>
     :root{
-      /* Layout */
       --sidebarWidth:240px;
-
-      /* Brand palette */
       --navy:#242751;
       --royal:#4871db;
       --coral:#ff5e5e;
       --gold:#e5b758;
       --paper:#eef2f7;
-
-      /* Neutrals */
       --white:#ffffff;
       --ink:#0e1228;
       --muted:#6b7280;
-
-      /* Misc */
       --shadow-card:0 18px 38px rgba(12,22,60,.14);
       --radius-card:22px;
     }
@@ -93,14 +60,12 @@ if (!isset($_SESSION['admin_id'])) {
       color:inherit;
     }
 
-    /* ========== Main layout with sidebar ========== */
     .admin-main{
       margin-left:var(--sidebarWidth);
       min-height:100vh;
       padding:28px 32px 40px;
       background:var(--paper);
     }
-
     @media(max-width:960px){
       .admin-main{
         margin-left:0;
@@ -108,7 +73,6 @@ if (!isset($_SESSION['admin_id'])) {
       }
     }
 
-    /* ========== Page header ========== */
     .page-header{
       display:flex;
       align-items:flex-start;
@@ -124,7 +88,6 @@ if (!isset($_SESSION['admin_id'])) {
       color:var(--navy);
       margin-bottom:6px;
     }
-
     .page-title-block p{
       font-size:.93rem;
       color:var(--muted);
@@ -136,7 +99,6 @@ if (!isset($_SESSION['admin_id'])) {
       gap:12px;
     }
 
-    /* ========== Search (pill-shaped) ========== */
     .search-wrapper{
       background:var(--white);
       border-radius:999px;
@@ -146,12 +108,10 @@ if (!isset($_SESSION['admin_id'])) {
       gap:8px;
       box-shadow:var(--shadow-card);
     }
-
     .search-icon{
       font-size:.95rem;
       color:var(--muted);
     }
-
     .search-input{
       border:none;
       outline:none;
@@ -160,11 +120,9 @@ if (!isset($_SESSION['admin_id'])) {
       width:210px;
       color:var(--ink);
     }
-
     .search-input::placeholder{
       color:var(--muted);
     }
-
     @media(max-width:720px){
       .page-header{
         flex-direction:column;
@@ -182,7 +140,6 @@ if (!isset($_SESSION['admin_id'])) {
       }
     }
 
-    /* ========== Buttons (no glow) ========== */
     .btn{
       border:none;
       outline:none;
@@ -197,9 +154,8 @@ if (!isset($_SESSION['admin_id'])) {
       justify-content:center;
       gap:6px;
       transition:background-color .15s ease, border-color .15s ease, color .15s ease, transform .1s ease;
-      box-shadow:none; /* no glow */
+      box-shadow:none;
     }
-
     .btn-primary{
       background:var(--coral);
       color:#ffffff;
@@ -238,7 +194,6 @@ if (!isset($_SESSION['admin_id'])) {
       transform:translateY(-1px);
     }
 
-    /* ========== Content card wrapper ========== */
     .content-card{
       background:var(--white);
       border-radius:var(--radius-card);
@@ -246,7 +201,6 @@ if (!isset($_SESSION['admin_id'])) {
       padding:22px 22px 24px;
       margin-bottom:26px;
     }
-
     .content-card-header{
       display:flex;
       align-items:center;
@@ -254,19 +208,16 @@ if (!isset($_SESSION['admin_id'])) {
       gap:12px;
       margin-bottom:18px;
     }
-
     .content-card-title{
       font-size:1.02rem;
       font-weight:700;
       color:var(--navy);
     }
-
     .content-card-subtitle{
       font-size:.86rem;
       color:var(--muted);
       margin-top:3px;
     }
-
     @media(max-width:720px){
       .content-card{
         padding:18px 16px 20px;
@@ -277,7 +228,6 @@ if (!isset($_SESSION['admin_id'])) {
       }
     }
 
-    /* ========== News list ========== */
     .news-list{
       display:flex;
       flex-direction:column;
@@ -295,27 +245,23 @@ if (!isset($_SESSION['admin_id'])) {
       gap:14px;
       border:1px solid rgba(226,232,240,.9);
     }
-
     .news-main{
       display:flex;
       flex-direction:column;
       gap:6px;
       max-width:100%;
     }
-
     .news-title-row{
       display:flex;
       flex-wrap:wrap;
       align-items:center;
       gap:8px;
     }
-
     .news-title{
       font-size:1rem;
       font-weight:700;
       color:var(--navy);
     }
-
     .news-category-pill{
       font-size:.72rem;
       text-transform:uppercase;
@@ -327,12 +273,10 @@ if (!isset($_SESSION['admin_id'])) {
       border:1px solid rgba(72,113,219,.45);
       white-space:nowrap;
     }
-
     .news-meta{
       font-size:.8rem;
       color:var(--muted);
     }
-
     .news-meta strong{
       color:var(--ink);
       font-weight:600;
@@ -346,7 +290,6 @@ if (!isset($_SESSION['admin_id'])) {
       white-space:nowrap;
       padding-top:2px;
     }
-
     .news-status-pill{
       font-size:.72rem;
       font-weight:700;
@@ -356,17 +299,10 @@ if (!isset($_SESSION['admin_id'])) {
       border-radius:999px;
       border:1px solid transparent;
     }
-
     .status-published{
       background:rgba(34,197,94,.08);
       color:#15803d;
       border-color:rgba(34,197,94,.55);
-    }
-
-    .status-draft{
-      background:rgba(148,163,184,.16);
-      color:#475569;
-      border-color:rgba(148,163,184,.8);
     }
 
     .news-actions-buttons{
@@ -390,7 +326,6 @@ if (!isset($_SESSION['admin_id'])) {
         flex:1;
       }
     }
-
     @media(max-width:480px){
       .news-actions{
         flex-direction:column;
@@ -403,12 +338,26 @@ if (!isset($_SESSION['admin_id'])) {
       }
     }
 
-    /* ========== Empty state ========== */
     .empty-state{
       padding:18px 10px 6px;
       text-align:center;
       font-size:.9rem;
       color:var(--muted);
+    }
+
+    .flash{
+      margin-bottom:16px;
+      padding:10px 14px;
+      border-radius:12px;
+      font-size:.9rem;
+    }
+    .flash.success{
+      background:#dcfce7;
+      color:#166534;
+    }
+    .flash.error{
+      background:#fee2e2;
+      color:#991b1b;
     }
   </style>
 </head>
@@ -418,7 +367,6 @@ if (!isset($_SESSION['admin_id'])) {
 
 <main class="admin-main">
 
-  <!-- Page header -->
   <header class="page-header">
     <div class="page-title-block">
       <h1>News Management</h1>
@@ -426,17 +374,15 @@ if (!isset($_SESSION['admin_id'])) {
     </div>
 
     <div class="page-actions">
-      <form method="get" class="search-wrapper">
+      <div class="search-wrapper">
         <span class="search-icon">🔍</span>
         <input
           type="text"
-          name="q"
           id="searchInput"
           class="search-input"
           placeholder="Search news by title..."
-          value="<?php echo htmlspecialchars($search); ?>"
         />
-      </form>
+      </div>
 
       <a href="addnews.php" class="btn btn-primary">
         + Add News
@@ -444,65 +390,70 @@ if (!isset($_SESSION['admin_id'])) {
     </div>
   </header>
 
-  <!-- Content card -->
+  <?php if (!empty($_SESSION['flash_success'])): ?>
+    <div class="flash success">
+      <?php echo htmlspecialchars($_SESSION['flash_success']); unset($_SESSION['flash_success']); ?>
+    </div>
+  <?php endif; ?>
+  <?php if (!empty($_SESSION['flash_error'])): ?>
+    <div class="flash error">
+      <?php echo htmlspecialchars($_SESSION['flash_error']); unset($_SESSION['flash_error']); ?>
+    </div>
+  <?php endif; ?>
+
   <section class="content-card">
     <div class="content-card-header">
       <div>
         <div class="content-card-title">All News Articles</div>
         <div class="content-card-subtitle">
-          <?php echo count($filteredNews); ?> total items (sample data). Connect to your database later.
+          <?php echo count($newsItems); ?> total news item(s).
         </div>
-      </div>
-
-      <div>
-        <button type="button" class="btn btn-ghost btn-small">
-          Sort by newest
-        </button>
       </div>
     </div>
 
     <div class="news-list">
       <div id="emptyState" class="empty-state" style="display:none;">
-  No news found for your search.
-</div>
-      <?php if (empty($filteredNews)): ?>
+        No news found for your search.
+      </div>
+
+      <?php if (empty($newsItems)): ?>
         <div class="empty-state">
-          <?php if ($search !== ''): ?>
-            No news found matching
-            "<strong><?php echo htmlspecialchars($search); ?></strong>".
-          <?php else: ?>
-            No news has been created yet. Click <strong>&ldquo;Add News&rdquo;</strong>
-            to publish your first article.
-          <?php endif; ?>
+          No news has been created yet. Click <strong>&ldquo;Add News&rdquo;</strong>
+          to publish your first article.
         </div>
       <?php else: ?>
-        <?php foreach ($filteredNews as $id => $news): ?>
-          <?php $isDraft = strtolower($news['status']) === 'draft'; ?>
-          <article class="news-card" data-title="<?php echo strtolower($news['title']); ?>">
+        <?php foreach ($newsItems as $news): ?>
+          <?php
+            $id       = (int)$news['news_id'];
+            $title    = $news['title'];
+            $category = $news['category'];
+            $date     = $news['created_at'];
+          ?>
+          <article class="news-card" data-title="<?php echo strtolower($title); ?>">
             <div class="news-main">
               <div class="news-title-row">
                 <h2 class="news-title">
-                  <?php echo htmlspecialchars($news['title']); ?>
+                  <?php echo htmlspecialchars($title); ?>
                 </h2>
                 <span class="news-category-pill">
-                  <?php echo htmlspecialchars($news['category']); ?>
+                  <?php echo htmlspecialchars($category); ?>
                 </span>
               </div>
 
               <div class="news-meta">
-                <span><strong><?php echo htmlspecialchars($news['author']); ?></strong></span>
+                <span><strong>UniHive Admin</strong></span>
                 <span> • </span>
-                <span><?php echo htmlspecialchars($news['date']); ?></span>
+                <span><?php echo htmlspecialchars($date); ?></span>
               </div>
             </div>
 
             <div class="news-actions">
-              <span class="news-status-pill <?php echo $isDraft ? 'status-draft' : 'status-published'; ?>">
-                <?php echo htmlspecialchars($news['status']); ?>
+              <span class="news-status-pill status-published">
+                Published
               </span>
               <div class="news-actions-buttons">
                 <a
-                  href="editnews.php?id=<?php echo $id + 1; ?>"
+                  href="editnews.php?id=<?php echo $id; ?>"
                   class="btn btn-small btn-ghost"
                 >
                   Edit
@@ -512,7 +463,7 @@ if (!isset($_SESSION['admin_id'])) {
                   method="post"
                   onsubmit="return confirm('Are you sure you want to delete this news item?');"
                 >
-                  <input type="hidden" name="id" value="<?php echo $id + 1; ?>">
+                  <input type="hidden" name="id" value="<?php echo $id; ?>">
                   <button type="submit" class="btn btn-small btn-outline-coral">
                     Delete
                   </button>
@@ -526,6 +477,7 @@ if (!isset($_SESSION['admin_id'])) {
   </section>
 
 </main>
+
 <script>
 document.getElementById("searchInput").addEventListener("input", function () {
     const query = this.value.toLowerCase();
@@ -533,7 +485,7 @@ document.getElementById("searchInput").addEventListener("input", function () {
     let anyVisible = false;
 
     cards.forEach(card => {
-        const title = card.getAttribute("data-title");
+        const title = card.getAttribute("data-title") || "";
         if (title.includes(query)) {
             card.style.display = "flex";
             anyVisible = true;
@@ -542,13 +494,8 @@ document.getElementById("searchInput").addEventListener("input", function () {
         }
     });
 
-    // Handle empty state
     const emptyState = document.getElementById("emptyState");
-    if (!anyVisible) {
-        emptyState.style.display = "block";
-    } else {
-        emptyState.style.display = "none";
-    }
+    emptyState.style.display = anyVisible ? "none" : "block";
 });
 </script>
 

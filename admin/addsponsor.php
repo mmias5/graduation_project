@@ -1,11 +1,44 @@
 <?php
-session_start();
-if (!isset($_SESSION['admin_id'])) {
-    header('Location: login.php');
-    exit;
+// admin/addsponsor.php
+require_once '../config.php';
+require_once 'admin_auth.php';
+
+$currentPage = basename($_SERVER['PHP_SELF']);
+
+$errors = [];
+$success = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $name     = trim($_POST['sponsor_name']    ?? '');
+    $email    = trim($_POST['sponsor_email']   ?? '');
+    $phone    = trim($_POST['sponsor_phone']   ?? '');
+    $password = trim($_POST['sponsor_password']?? '');
+
+    if ($name === '')   { $errors[] = 'Sponsor name is required.'; }
+    if ($email === '')  { $errors[] = 'Sponsor email is required.'; }
+    if ($password === '') { $errors[] = 'Initial password is required.'; }
+
+    if (empty($errors)) {
+        $logoPath = 'assets/sponsor_default.png'; // غيّريها لو عندك لوجو افتراضي آخر
+
+        $stmt = $conn->prepare("
+          INSERT INTO sponsor (company_name, email, phone, logo, password)
+          VALUES (?, ?, ?, ?, ?)
+        ");
+        if ($stmt) {
+            $stmt->bind_param("sssss", $name, $email, $phone, $logoPath, $password);
+            if ($stmt->execute()) {
+                $success = 'Sponsor created successfully.';
+            } else {
+                $errors[] = 'Database error while inserting sponsor.';
+            }
+            $stmt->close();
+        } else {
+            $errors[] = 'Failed to prepare insert statement.';
+        }
+    }
 }
 ?>
-
 <!doctype html>
 <html lang="en">
 <head>
@@ -24,7 +57,7 @@ if (!isset($_SESSION['admin_id'])) {
   --radius:22px;
   --shadow:0 14px 34px rgba(10,23,60,.12);
 
-  --sidebarWidth:260px;
+  --sidebarWidth:240px;
 }
 
 *{box-sizing:border-box;margin:0;padding:0}
@@ -54,6 +87,24 @@ body{
   margin-bottom:26px;
 }
 
+/* Messages */
+.alert{
+  padding:10px 14px;
+  border-radius:12px;
+  margin-bottom:18px;
+  font-size:.9rem;
+}
+.alert-success{
+  background:#ecfdf3;
+  color:#166534;
+  border:1px solid #bbf7d0;
+}
+.alert-error{
+  background:#fef2f2;
+  color:#b91c1c;
+  border:1px solid #fecaca;
+}
+
 /* Form shell */
 .form-shell{
   background:var(--card);
@@ -63,7 +114,7 @@ body{
   max-width:100%;
 }
 
-/* Two-column grid for top fields */
+/* Two-column grid */
 .form-grid{
   display:grid;
   grid-template-columns:1fr 1fr;
@@ -142,6 +193,10 @@ body{
   .full-width{
     grid-column:1 / 2;
   }
+  .content{
+    margin-left:0;
+    padding:24px 18px 40px;
+  }
 }
 </style>
 </head>
@@ -153,12 +208,21 @@ body{
 <div class="content">
   <div class="page-title">Add Sponsor</div>
   <div class="page-subtitle">
-    Create a new sponsor record and link it to a club or event.  
-    When the end date &amp; time passes, their partnership should end.
+    Create a new sponsor account that will be able to log in to the UniHive sponsor portal.
   </div>
 
-  <!-- For now this posts back to the same page.
-       Later you will handle $_POST to insert into the DB and redirect back to sponsors.php -->
+  <?php if (!empty($success)): ?>
+    <div class="alert alert-success">
+      <?= htmlspecialchars($success); ?>
+    </div>
+  <?php endif; ?>
+
+  <?php if (!empty($errors)): ?>
+    <div class="alert alert-error">
+      <?= implode('<br>', array_map('htmlspecialchars', $errors)); ?>
+    </div>
+  <?php endif; ?>
+
   <form method="post" action="addsponsor.php">
     <div class="form-shell">
 
@@ -171,7 +235,8 @@ body{
             name="sponsor_name"
             class="input-field"
             required
-            placeholder="e.g., TechCorp"
+            placeholder="e.g., Coffee Corner"
+            value="<?= isset($_POST['sponsor_name']) ? htmlspecialchars($_POST['sponsor_name']) : '';?>"
           >
         </div>
 
@@ -183,46 +248,33 @@ body{
             class="input-field"
             required
             placeholder="name@company.com"
+            value="<?= isset($_POST['sponsor_email']) ? htmlspecialchars($_POST['sponsor_email']) : '';?>"
           >
         </div>
 
-        <div class="full-width">
-          <div class="field-label">Club or event they’re sponsoring</div>
+        <div>
+          <div class="field-label">Phone (optional)</div>
           <input
             type="text"
-            name="sponsoring_for"
+            name="sponsor_phone"
             class="input-field"
-            required
-            placeholder="e.g., AI & Robotics Club or Welcome Week 2025"
+            placeholder="e.g., 0790000000"
+            value="<?= isset($_POST['sponsor_phone']) ? htmlspecialchars($_POST['sponsor_phone']) : '';?>"
           >
-          <div class="helper-text">
-            This can be a club name or a specific event name.
-          </div>
         </div>
 
         <div>
-          <div class="field-label">End date</div>
+          <div class="field-label">Initial password</div>
           <input
-            type="date"
-            name="end_date"
+            type="text"
+            name="sponsor_password"
             class="input-field"
             required
+            placeholder="e.g., coffee123"
+            value="<?= isset($_POST['sponsor_password']) ? htmlspecialchars($_POST['sponsor_password']) : '';?>"
           >
           <div class="helper-text">
-            Date when the sponsorship ends.
-          </div>
-        </div>
-
-        <div>
-          <div class="field-label">End time</div>
-          <input
-            type="time"
-            name="end_time"
-            class="input-field"
-            required
-          >
-          <div class="helper-text">
-            Time on the end date when the sponsorship stops.
+            Share this password with the sponsor so they can log in.
           </div>
         </div>
 
@@ -237,18 +289,6 @@ body{
 
     </div>
   </form>
-
-  <!--
-    BACKEND NOTE (for later):
-
-    - Save sponsor_name, sponsor_email, sponsoring_for, and a combined end_datetime
-      into a sponsors table, plus created_at, etc.
-
-    - Set up a scheduled script (cron job) that runs every day/hour:
-         DELETE FROM sponsors WHERE end_datetime <= NOW();
-      or mark them as inactive instead of deleting.
-
-  -->
 
 </div>
 

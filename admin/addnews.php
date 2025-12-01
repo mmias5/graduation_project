@@ -1,10 +1,70 @@
 <?php
-session_start();
-if (!isset($_SESSION['admin_id'])) {
-    header('Location: login.php');
-    exit;
+// admin/addnews.php
+require_once '../config.php';
+require_once 'admin_auth.php';
+
+$currentPage = basename($_SERVER['PHP_SELF']);
+
+// معالجة الإرسال
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $title    = trim($_POST['title'] ?? '');
+    $category = trim($_POST['category'] ?? 'News');
+    $body     = trim($_POST['body'] ?? '');
+    $date     = $_POST['date'] ?? ''; // YYYY-MM-DD
+    $adminId  = $_SESSION['admin_id'] ?? null;
+
+    if ($title === '' || $body === '' || !$adminId) {
+        $_SESSION['flash_error'] = 'Title and body are required.';
+        header('Location: addnews.php');
+        exit;
+    }
+
+    // التاريخ: لو مستخدم ما اختار، نستخدم الآن
+    if ($date) {
+        $createdAt = $date . ' 00:00:00';
+    } else {
+        $createdAt = date('Y-m-d H:i:s');
+    }
+    $updatedAt = $createdAt;
+
+    // رفع الصورة (اختياري)
+    $imagePath = null;
+    if (!empty($_FILES['image']['name'])) {
+        $uploadDir = '../assets/news/';
+
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0777, true);
+        }
+
+        $fileTmp  = $_FILES['image']['tmp_name'];
+        $fileName = basename($_FILES['image']['name']);
+        $ext      = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+
+        $newName  = 'news_' . time() . '_' . rand(1000, 9999) . '.' . $ext;
+        $target   = $uploadDir . $newName;
+
+        if (move_uploaded_file($fileTmp, $target)) {
+            // المسار كما في الداتا: assets/news/...
+            $imagePath = 'assets/news/' . $newName;
+        }
+    }
+
+    $sql = "INSERT INTO news (title, body, category, image, created_at, updated_at, admin_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)";
+
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("ssssssi", $title, $body, $category, $imagePath, $createdAt, $updatedAt, $adminId);
+
+    if ($stmt->execute()) {
+        $_SESSION['flash_success'] = 'News added successfully.';
+        header('Location: news.php');
+        exit;
+    } else {
+        $_SESSION['flash_error'] = 'Error while saving news: ' . $stmt->error;
+        header('Location: addnews.php');
+        exit;
+    }
 }
-  $currentPage = basename($_SERVER['PHP_SELF']);
 ?>
 <!doctype html>
 <html lang="en">
@@ -110,17 +170,13 @@ body{
   box-shadow:0 0 0 2px rgba(72,113,219,.25);
 }
 
-/* ========== CUSTOM CATEGORY DROPDOWN ========== */
-
-/* container */
+/* CUSTOM CATEGORY DROPDOWN */
 .custom-select{
   position:relative;
   width:100%;
   margin-bottom:20px;
   font-family:"Raleway",system-ui,sans-serif;
 }
-
-/* fake trigger (what you see) */
 .custom-select-trigger{
   width:100%;
   padding:12px 16px;
@@ -135,14 +191,11 @@ body{
   cursor:pointer;
   transition:.15s ease;
 }
-
 .custom-select-trigger span{
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
 }
-
-/* small arrow icon */
 .custom-select-arrow{
   border-style:solid;
   border-width:5px 4px 0 4px;
@@ -150,20 +203,15 @@ body{
   margin-left:10px;
   transition:transform .15s ease;
 }
-
 .custom-select.open .custom-select-arrow{
   transform:rotate(180deg);
 }
-
-/* focus / hover effect */
 .custom-select-trigger:hover{
   box-shadow:0 0 0 1px rgba(72,113,219,.40);
 }
 .custom-select.open .custom-select-trigger{
   box-shadow:0 0 0 2px rgba(72,113,219,.25);
 }
-
-/* options panel */
 .custom-options{
   position:absolute;
   top:100%;
@@ -177,11 +225,9 @@ body{
   z-index:10;
   display:none;
 }
-
 .custom-select.open .custom-options{
   display:block;
 }
-
 .custom-option{
   padding:9px 16px;
   font-size:.9rem;
@@ -191,17 +237,13 @@ body{
   align-items:center;
   justify-content:space-between;
 }
-
 .custom-option:hover{
   background:rgba(72,113,219,.06);
 }
-
 .custom-option.selected{
   font-weight:600;
   color:var(--coral);
 }
-
-/* small pill on the right to hint type */
 .custom-option-pill{
   font-size:.7rem;
   text-transform:uppercase;
@@ -224,7 +266,6 @@ body{
   transition:.15s;
   font-family:"Raleway",system-ui,sans-serif;
 }
-
 .btn-primary{
   background:var(--coral);
   color:#fff;
@@ -233,7 +274,6 @@ body{
   background:#e44c4c;
   transform:translateY(-1px);
 }
-
 .btn-ghost{
   background:transparent;
   border:1px solid rgba(148,163,184,.55);
@@ -246,12 +286,24 @@ body{
 .btn-ghost:hover{
   background:#e5e7eb;
 }
-
-/* BUTTON ROW */
 .actions{
   margin-top:24px;
   display:flex;
   gap:14px;
+}
+.flash{
+  margin-bottom:16px;
+  padding:10px 14px;
+  border-radius:12px;
+  font-size:.9rem;
+}
+.flash.error{
+  background:#fee2e2;
+  color:#991b1b;
+}
+.flash.success{
+  background:#dcfce7;
+  color:#166534;
 }
 </style>
 </head>
@@ -264,8 +316,14 @@ body{
   <h1 class="page-title">Add News Article</h1>
   <p class="page-sub">Create a new news post that will appear on the student news page.</p>
 
+  <?php if (!empty($_SESSION['flash_error'])): ?>
+    <div class="flash error">
+      <?php echo htmlspecialchars($_SESSION['flash_error']); unset($_SESSION['flash_error']); ?>
+    </div>
+  <?php endif; ?>
+
   <div class="card">
-    <form action="addnews_process.php" method="post" enctype="multipart/form-data">
+    <form action="addnews.php" method="post" enctype="multipart/form-data">
 
       <label class="form-label">Title</label>
       <input type="text" name="title" class="input-field" required>
@@ -273,7 +331,6 @@ body{
       <!-- CATEGORY (Custom Dropdown) -->
       <label class="form-label">Category</label>
 
-      <!-- Hidden input actually submitted to PHP -->
       <input type="hidden" name="category" id="categoryValue" value="News">
 
       <div class="custom-select" id="categorySelect">
@@ -322,35 +379,28 @@ body{
   const selectEl   = document.getElementById('categorySelect');
   const trigger    = selectEl.querySelector('.custom-select-trigger');
   const labelSpan  = document.getElementById('categoryLabel');
-  const optionsBox = selectEl.querySelector('.custom-options');
   const options    = selectEl.querySelectorAll('.custom-option');
   const hiddenInput= document.getElementById('categoryValue');
 
-  // open/close dropdown
   trigger.addEventListener('click', function(){
     selectEl.classList.toggle('open');
   });
 
-  // select an option
   options.forEach(opt => {
     opt.addEventListener('click', function(){
       const value = this.getAttribute('data-value');
       const text  = this.querySelector('span').innerText;
 
-      // update label and hidden value
       labelSpan.textContent = text;
       hiddenInput.value = value;
 
-      // mark selected
       options.forEach(o => o.classList.remove('selected'));
       this.classList.add('selected');
 
-      // close
       selectEl.classList.remove('open');
     });
   });
 
-  // close when clicking outside
   document.addEventListener('click', function(e){
     if(!selectEl.contains(e.target)){
       selectEl.classList.remove('open');

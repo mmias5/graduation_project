@@ -1,43 +1,37 @@
 <?php
-session_start();
-if (!isset($_SESSION['admin_id'])) {
-    header('Location: login.php');
-    exit;
-}
-// Dummy data – later replace with DB data
-$sponsors = [
-    [
-        "id" => 1,
-        "name" => "TechCorp",
-        "email" => "techcorp@company.com",
-        "sponsoring" => "AI & Robotics Club"
-    ],
-    [
-        "id" => 2,
-        "name" => "FitLife",
-        "email" => "contact@fitlife.com",
-        "sponsoring" => "Campus Runners"
-    ],
-    [
-        "id" => 3,
-        "name" => "ArtWorks",
-        "email" => "hello@artworks.com",
-        "sponsoring" => "Creative Studio"
-    ],
-    [
-        "id" => 4,
-        "name" => "CarePlus",
-        "email" => "partners@careplus.org",
-        "sponsoring" => "Volunteer Circle"
-    ],
-    [
-        "id" => 5,
-        "name" => "StarLab",
-        "email" => "team@starlab.com",
-        "sponsoring" => "Astronomy Society events"
-    ],
-];
+// admin/sponsors.php
+require_once '../config.php';
+require_once 'admin_auth.php';
 
+$currentPage = basename($_SERVER['PHP_SELF']);
+
+$message = $_GET['msg'] ?? '';
+$messageType = $_GET['type'] ?? 'success';
+
+// نحسب الـ active sponsorships فقط: start_date <= اليوم <= end_date
+$sql = "
+  SELECT
+    s.sponsor_id,
+    s.company_name,
+    s.email,
+    s.phone,
+    GROUP_CONCAT(DISTINCT c.club_name SEPARATOR ', ') AS active_clubs
+  FROM sponsor s
+  LEFT JOIN sponsor_club_support scs
+    ON scs.sponsor_id = s.sponsor_id
+   AND CURDATE() BETWEEN scs.start_date AND scs.end_date
+  LEFT JOIN club c ON c.club_id = scs.club_id
+  GROUP BY s.sponsor_id
+  ORDER BY s.company_name
+";
+
+$result = $conn->query($sql);
+$sponsors = [];
+if ($result && $result->num_rows > 0) {
+    while ($row = $result->fetch_assoc()) {
+        $sponsors[] = $row;
+    }
+}
 $totalSponsors = count($sponsors);
 ?>
 <!doctype html>
@@ -58,7 +52,7 @@ $totalSponsors = count($sponsors);
   --radius:22px;
   --shadow:0 14px 34px rgba(10,23,60,.12);
 
-  --sidebarWidth:260px; /* for sidebar.php */
+  --sidebarWidth:240px;
 }
 
 *{box-sizing:border-box;margin:0;padding:0}
@@ -69,7 +63,6 @@ body{
   font-family:"Raleway",system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
 }
 
-/* ===== Main content (sidebar is in sidebar.php) ===== */
 .content{
   margin-left:var(--sidebarWidth);
   padding:40px 50px 60px;
@@ -94,7 +87,25 @@ body{
   color:var(--muted);
 }
 
-/* Search + Add sponsor row */
+/* alerts */
+.alert{
+  padding:10px 14px;
+  border-radius:12px;
+  font-size:.9rem;
+  margin-bottom:16px;
+}
+.alert-success{
+  background:#ecfdf3;
+  color:#166534;
+  border:1px solid #bbf7d0;
+}
+.alert-error{
+  background:#fef2f2;
+  color:#b91c1c;
+  border:1px solid #fecaca;
+}
+
+/* Search + buttons */
 .top-controls{
   display:flex;
   gap:14px;
@@ -122,37 +133,44 @@ body{
   color:#9ca3af;
 }
 
-.add-btn{
+.btn{
   padding:12px 20px;
   border-radius:999px;
   border:none;
   cursor:pointer;
   font-size:.9rem;
   font-weight:700;
-  background:var(--coral);
-  color:#ffffff;
-  white-space:nowrap;
   text-decoration:none;
   display:inline-flex;
   align-items:center;
   justify-content:center;
-  /* NO glow */
   box-shadow:none;
 }
 
-.add-btn:hover{
-  background:#ff4949; /* darker coral, but still no glow */
+.btn-primary{
+  background:var(--coral);
+  color:#ffffff;
+}
+.btn-primary:hover{
+  background:#ff4949;
 }
 
+.btn-ghost{
+  background:#ffffff;
+  color:var(--navy);
+  border:1px solid #e5e7eb;
+}
+.btn-ghost:hover{
+  background:#f3f4f6;
+}
 
-/* Sponsors grid (similar to members layout) */
+/* grid */
 .sponsors-grid{
   display:grid;
   grid-template-columns:repeat(auto-fit,minmax(360px,1fr));
   gap:18px 20px;
 }
 
-/* Card */
 .sponsor-card{
   background:var(--card);
   border-radius:20px;
@@ -160,13 +178,14 @@ body{
   padding:16px 18px;
   display:flex;
   justify-content:space-between;
-  align-items:center;
+  align-items:flex-start;
+  gap:14px;
 }
 
 .sponsor-left{
   display:flex;
   flex-direction:column;
-  gap:3px;
+  gap:4px;
 }
 
 .sponsor-name{
@@ -185,21 +204,46 @@ body{
   color:var(--ink);
 }
 
-/* small label for “Sponsoring” */
 .sponsor-target span{
   font-weight:600;
 }
 
-/* Right side (placeholder if you want future buttons) */
+/* right part */
 .sponsor-right{
+  display:flex;
+  flex-direction:column;
+  align-items:flex-end;
+  gap:8px;
   font-size:.8rem;
   color:var(--muted);
 }
 
-/* Responsive tweak */
+.actions{
+  display:flex;
+  gap:6px;
+}
+
+.btn-small{
+  padding:7px 12px;
+  font-size:.8rem;
+}
+
+.btn-danger{
+  background:#fff7f7;
+  color:#b91c1c;
+  border:1px solid #fecaca;
+}
+.btn-danger:hover{
+  background:#fee2e2;
+}
+
 @media(max-width:900px){
   .sponsors-grid{
     grid-template-columns:1fr;
+  }
+  .content{
+    margin-left:0;
+    padding:24px 18px 40px;
   }
 }
 </style>
@@ -216,6 +260,12 @@ body{
     <div class="total-count"><?= $totalSponsors ?> total</div>
   </div>
 
+  <?php if (!empty($message)): ?>
+    <div class="alert <?= $messageType === 'error' ? 'alert-error' : 'alert-success'; ?>">
+      <?= htmlspecialchars($message); ?>
+    </div>
+  <?php endif; ?>
+
   <div class="top-controls">
     <div class="search-wrapper">
       <input
@@ -226,45 +276,71 @@ body{
       >
     </div>
 
-    <a href="addsponsor.php" class="add-btn">
+    <a href="addsponsor.php" class="btn btn-primary">
       + Add sponsor
     </a>
-    <a href="registrationrequests.php" class="add-btn">
-      + Registration requests
+    <a href="registrationrequests.php" class="btn btn-ghost">
+      Registration requests
     </a>
   </div>
 
   <div class="sponsors-grid" id="sponsorsGrid">
-    <?php foreach($sponsors as $s): ?>
-      <div
-        class="sponsor-card"
-        data-name="<?= strtolower($s['name']); ?>"
-      >
-        <div class="sponsor-left">
-          <div class="sponsor-name"><?= $s['name']; ?></div>
-          <div class="sponsor-email"><?= $s['email']; ?></div>
-          <div class="sponsor-target">
-            <span>Sponsoring:</span> <?= $s['sponsoring']; ?>
+    <?php if (empty($sponsors)): ?>
+      <p style="font-size:.9rem;color:var(--muted);">
+        No sponsors found yet.
+      </p>
+    <?php else: ?>
+      <?php foreach($sponsors as $s): ?>
+        <?php
+          $name   = htmlspecialchars($s['company_name']);
+          $email  = htmlspecialchars($s['email']);
+          $phone  = htmlspecialchars($s['phone']);
+          $clubs  = $s['active_clubs']
+                    ? htmlspecialchars($s['active_clubs'])
+                    : 'Not sponsoring any club or event';
+        ?>
+        <div
+          class="sponsor-card"
+          data-name="<?= strtolower($s['company_name']); ?>"
+        >
+          <div class="sponsor-left">
+            <div class="sponsor-name"><?= $name; ?></div>
+            <div class="sponsor-email"><?= $email; ?></div>
+            <?php if ($phone): ?>
+              <div class="sponsor-email"><?= $phone; ?></div>
+            <?php endif; ?>
+            <div class="sponsor-target">
+              <span>Currently sponsoring:</span> <?= $clubs; ?>
+            </div>
+          </div>
+
+          <div class="sponsor-right">
+            <div>ID <?= (int)$s['sponsor_id']; ?></div>
+            <div class="actions">
+              <a href="editsponsor.php?id=<?= (int)$s['sponsor_id']; ?>" class="btn btn-small btn-ghost">
+                Edit
+              </a>
+              <form method="post" action="deletesponsor.php" onsubmit="return confirm('Delete this sponsor?');">
+                <input type="hidden" name="sponsor_id" value="<?= (int)$s['sponsor_id']; ?>">
+                <button type="submit" class="btn btn-small btn-danger">
+                  Delete
+                </button>
+              </form>
+            </div>
           </div>
         </div>
-
-        <div class="sponsor-right">
-          ID <?= $s['id']; ?>
-        </div>
-      </div>
-    <?php endforeach; ?>
+      <?php endforeach; ?>
+    <?php endif; ?>
   </div>
 
 </div>
 
 <script>
-// ===== Search by sponsor name =====
 const searchInput = document.getElementById('searchSponsors');
 const sponsorCards = document.querySelectorAll('.sponsor-card');
 
 searchInput.addEventListener('input', () => {
   const q = searchInput.value.toLowerCase().trim();
-
   sponsorCards.forEach(card => {
     const name = card.dataset.name;
     card.style.display = !q || name.includes(q) ? 'flex' : 'none';

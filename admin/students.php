@@ -1,40 +1,34 @@
 <?php
-session_start();
-if (!isset($_SESSION['admin_id'])) {
-    header('Location: login.php');
-    exit;
-}
-  // ========== Example data (استبدليه بجلب حقيقي من الـ DB) ==========
-  // include '../includes/db_connect.php';
-  //
-  // $sql = "SELECT s.name, s.email, s.major, s.department, c.club_name
-  //         FROM students s
-  //         LEFT JOIN clubs c ON s.club_id = c.id";
-  // $result = $conn->query($sql);
-  //
-  // $students = [];
-  // if ($result && $result->num_rows > 0) {
-  //   while ($row = $result->fetch_assoc()) {
-  //     $students[] = $row;
-  //   }
-  // }
+// admin/students.php
+require_once '../config.php';
+require_once 'admin_auth.php';
 
-  $students = [
-    [
-      'name'       => 'Omar Ali',
-      'email'      => 'omar.ali@example.com',
-      'major'      => 'Computer Science',
-      'department' => 'Faculty of IT',
-      'club_name'  => 'Programming Club',
-    ],
-    [
-      'name'       => 'Laila Hasan',
-      'email'      => 'laila.hasan@example.com',
-      'major'      => 'Marketing',
-      'department' => 'Faculty of Business',
-      'club_name'  => 'Media & Marketing Club',
-    ],
-  ];
+$currentPage = basename($_SERVER['PHP_SELF']);
+
+// ===== Fetch students with club name =====
+$sql = "
+  SELECT 
+    s.student_id,
+    s.student_name,
+    s.email,
+    s.major,
+    s.total_points,
+    s.role,
+    s.club_id,
+    c.club_name
+  FROM student s
+  LEFT JOIN club c ON s.club_id = c.club_id
+  ORDER BY s.student_name
+";
+
+$result = $conn->query($sql);
+$students = [];
+
+if ($result && $result->num_rows > 0) {
+  while ($row = $result->fetch_assoc()) {
+    $students[] = $row;
+  }
+}
 ?>
 <!doctype html>
 <html lang="en">
@@ -56,6 +50,7 @@ if (!isset($_SESSION['admin_id'])) {
       --muted:#6b7280;
       --shadow-soft:0 16px 36px rgba(15,23,42,.08);
       --radius-card:24px;
+      --sidebarWidth:240px;
     }
 
     *{box-sizing:border-box;margin:0;padding:0}
@@ -67,13 +62,11 @@ if (!isset($_SESSION['admin_id'])) {
       min-height:100vh;
     }
 
-    /* نفس فكرة viewclubs: sidebar ثابت، الكونتنت يمين */
     .admin-main{
-      margin-left:var(--sidebarWidth,260px); /* لازم تطابق sidebar.php */
+      margin-left:var(--sidebarWidth);
       padding:26px 32px 40px;
     }
 
-    /* ====== Header & search (نفس ستايل view clubs) ====== */
     .page-header{
       display:flex;
       justify-content:space-between;
@@ -115,7 +108,6 @@ if (!isset($_SESSION['admin_id'])) {
       color:#9ca3af;
     }
 
-    /* ====== Wrapper مشابه لـ viewclubs ====== */
     .students-wrapper{
       background:linear-gradient(145deg,#f9fafb,#edf2ff);
       border-radius:32px;
@@ -137,7 +129,6 @@ if (!isset($_SESSION['admin_id'])) {
       font-weight:600;
     }
 
-    /* ====== Cards grid (نفس vibe كروت الأندية) ====== */
     .students-grid{
       display:grid;
       grid-template-columns:repeat(auto-fill,minmax(320px,1fr));
@@ -193,7 +184,7 @@ if (!isset($_SESSION['admin_id'])) {
     .label{
       font-weight:600;
       color:var(--muted);
-      min-width:80px;
+      min-width:90px;
     }
 
     .club-pill{
@@ -209,6 +200,7 @@ if (!isset($_SESSION['admin_id'])) {
       display:inline-flex;
       align-items:center;
       gap:6px;
+      text-decoration:none;
     }
 
     .club-pill-dot{
@@ -249,7 +241,7 @@ if (!isset($_SESSION['admin_id'])) {
     <div class="page-header">
       <div class="page-title">
         <h1>View Students</h1>
-        <p>See all registered students and which clubs they belong to.</p>
+        <p>See all registered students, their role, points, and which clubs they belong to.</p>
       </div>
 
       <div class="students-toolbar">
@@ -274,11 +266,11 @@ if (!isset($_SESSION['admin_id'])) {
       <div class="students-grid" id="studentsGrid">
         <?php foreach ($students as $student): ?>
           <div class="student-card"
-               data-name="<?php echo htmlspecialchars($student['name']); ?>"
+               data-name="<?php echo htmlspecialchars($student['student_name']); ?>"
                data-email="<?php echo htmlspecialchars($student['email']); ?>">
             <div class="student-main">
               <div class="student-name">
-                <?php echo htmlspecialchars($student['name']); ?>
+                <?php echo htmlspecialchars($student['student_name']); ?>
               </div>
               <div class="student-email">
                 <?php echo htmlspecialchars($student['email']); ?>
@@ -290,21 +282,49 @@ if (!isset($_SESSION['admin_id'])) {
               </div>
 
               <div class="student-row">
-                <span class="label">Department:</span>
-                <span><?php echo htmlspecialchars($student['department']); ?></span>
+                <span class="label">Total points:</span>
+                <span><?php echo (int)$student['total_points']; ?></span>
               </div>
 
-             <?php if (!empty($student['club_name'])): ?>
-                 <a href="clubdetails.php?id=<?php echo $student['club_id']; ?>" class="club-pill">
+             <?php
+  // Normalize role display
+  $rawRole = strtolower(trim($student['role'] ?? ''));
+
+  switch ($rawRole) {
+    case 'student':
+      $displayRole = 'Student';
+      break;
+    case 'club_president':
+      $displayRole = 'Club president';
+      break;
+    default:
+      // fallback: just nice formatting
+      $displayRole = ucfirst(str_replace('_', ' ', $rawRole));
+      break;
+  }
+?>
+<div class="student-row">
+  <span class="label">Role:</span>
+  <span><?php echo htmlspecialchars($displayRole); ?></span>
+</div>
+
+
+              <?php
+                $clubName = $student['club_name'] ?? '';
+                $clubId   = $student['club_id'];
+              ?>
+
+              <?php if (!empty($clubName) && !empty($clubId)): ?>
+                <a href="clubdetails.php?id=<?php echo (int)$clubId; ?>" class="club-pill">
                   <span class="club-pill-dot"></span>
-                  <span><?php echo htmlspecialchars($student['club_name']); ?></span>
-                 </a>
-                <?php else: ?>
-                    <div class="club-pill">
-                         <span class="club-pill-dot"></span>
-                         <span>No club</span>
-                    </div>
-            <?php endif; ?>
+                  <span><?php echo htmlspecialchars($clubName); ?></span>
+                </a>
+              <?php else: ?>
+                <div class="club-pill">
+                  <span class="club-pill-dot"></span>
+                  <span>No club</span>
+                </div>
+              <?php endif; ?>
 
             </div>
           </div>

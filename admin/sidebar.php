@@ -165,7 +165,7 @@ $currentPage = basename($_SERVER['PHP_SELF']);
 
       <!-- Club management dropdown -->
       <?php
-        $clubPages = ['clubcreation.php','clubedit.php','viewclubs.php','viewmembers.php'];
+        $clubPages = ['clubcreation.php','clubeditreq.php','viewclubs.php','viewmembers.php'];
         $clubActive = in_array($currentPage, $clubPages);
       ?>
       <div class="nav-group">
@@ -178,8 +178,8 @@ $currentPage = basename($_SERVER['PHP_SELF']);
              class="nav-sub <?php echo $currentPage === 'clubcreation.php' ? 'active' : ''; ?>">
             Creation requests
           </a>
-          <a href="clubedit.php"
-             class="nav-sub <?php echo $currentPage === 'clubedit.php' ? 'active' : ''; ?>">
+          <a href="clubeditreq.php"
+             class="nav-sub <?php echo $currentPage === 'clubeditreq.php' ? 'active' : ''; ?>">
             Edit requests
           </a>
           <a href="viewclubs.php"
