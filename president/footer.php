@@ -189,7 +189,7 @@ $currentPage = basename($_SERVER['PHP_SELF']);
       </ul>
 
       <div class="cch-bottom">
-        © <span id="cchYear"></span> Campus Clubs Hub. All rights reserved.
+        © <span id="cchYear"></span> UNIHIVE. All rights reserved.
       </div>
     </div>
   </div>
