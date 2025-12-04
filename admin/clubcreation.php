@@ -5,30 +5,23 @@ if (!isset($_SESSION['admin_id'])) {
     exit;
 }
 
-// Temporary dummy data – replace with DB later
-$requests = [
-    [
-        "id" => 1,
-        "club_name" => "Debate Club",
-        "applicant" => "Sarah Ahmad",
-        "logo" => "assets/club1.png",
-        "description" => "A club focused on improving public speaking, debating, and logical thinking..."
-    ],
-    [
-        "id" => 2,
-        "club_name" => "Photography Club",
-        "applicant" => "Khaled Youssef",
-        "logo" => "assets/club2.png",
-        "description" => "A community for students who love photography and visual storytelling..."
-    ],
-    [
-        "id" => 3,
-        "club_name" => "Music Club",
-        "applicant" => "Lama Hassan",
-        "logo" => "assets/club3.png",
-        "description" => "A space for students who enjoy playing instruments and performing..."
-    ]
-];
+require_once '../config.php'; // اتصال DB
+
+// اجلب كل الطلبات اللي لسا ما انعمل إلها review
+$sql = "
+    SELECT request_id, club_name, applicant_name, logo, description
+    FROM club_creation_request
+    WHERE reviewed_at IS NULL
+    ORDER BY submitted_at DESC
+";
+$result = mysqli_query($conn, $sql);
+
+$requests = [];
+if ($result && mysqli_num_rows($result) > 0) {
+    while ($row = mysqli_fetch_assoc($result)) {
+        $requests[] = $row;
+    }
+}
 ?>
 <!doctype html>
 <html lang="en">
@@ -101,7 +94,7 @@ body{
   align-items:center;
   justify-content:space-between;
   background:var(--card);
-  padding:18px 26px;               /* slightly tighter */
+  padding:18px 26px;
   border-radius:var(--radius);
   box-shadow:var(--shadow);
   margin-bottom:18px;
@@ -114,7 +107,7 @@ body{
 }
 
 .club-logo{
-  width:60px;                       /* a bit smaller */
+  width:60px;
   height:60px;
   border-radius:18px;
   object-fit:cover;
@@ -172,6 +165,12 @@ body{
   background:#1b1e42;
   transform:translateY(-1px);
 }
+
+.empty-msg{
+  margin-top:10px;
+  color:var(--muted);
+  font-size:.96rem;
+}
 </style>
 </head>
 
@@ -192,28 +191,32 @@ body{
     >
   </div>
 
-  <?php foreach($requests as $r): ?>
-    <div class="request-card">
-      <div class="request-left">
-        <img src="<?= $r['logo'] ?>" alt="Club logo" class="club-logo">
+  <?php if (empty($requests)): ?>
+    <div class="empty-msg">No pending club creation requests right now.</div>
+  <?php else: ?>
+    <?php foreach($requests as $r): ?>
+      <div class="request-card">
+        <div class="request-left">
+          <img src="<?= htmlspecialchars($r['logo']) ?>" alt="Club logo" class="club-logo">
 
-        <div class="request-text">
-          <div class="club-name"><?= $r['club_name'] ?></div>
-          <div class="applicant-line">
-            Applicant:
-            <span class="applicant-name"><?= $r['applicant'] ?></span>
-          </div>
-          <div class="desc">
-            <?= substr($r['description'], 0, 80) ?>…
+          <div class="request-text">
+            <div class="club-name"><?= htmlspecialchars($r['club_name']) ?></div>
+            <div class="applicant-line">
+              Applicant:
+              <span class="applicant-name"><?= htmlspecialchars($r['applicant_name']) ?></span>
+            </div>
+            <div class="desc">
+              <?= htmlspecialchars(substr($r['description'], 0, 80)) ?>…
+            </div>
           </div>
         </div>
+
+        <div class="divider"></div>
+
+        <a href="creationform.php?id=<?= (int)$r['request_id'] ?>" class="view-btn">View</a>
       </div>
-
-      <div class="divider"></div>
-
-      <a href="creationform.php?id=<?= $r['id'] ?>" class="view-btn">View</a>
-    </div>
-  <?php endforeach; ?>
+    <?php endforeach; ?>
+  <?php endif; ?>
 
 </div>
 

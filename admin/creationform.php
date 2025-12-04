@@ -5,20 +5,126 @@ if (!isset($_SESSION['admin_id'])) {
     exit;
 }
 
-// Dummy data – later you will fetch by $_GET['id']
-$request = [
-    "club_name"      => "Debate Club",
-    "applicant_name" => "Sarah Ahmad",
-    "category"       => "Academic",
-    "description"    => "A club focused on improving public speaking, debating, and logical thinking...",
-    "email"          => "debate@university.edu",
-    "logo"           => "assets/club1.png",
+require_once '../config.php';
 
-    // Social links (optional)
-    "linkedin"  => "https://www.linkedin.com/company/debate-club",
-    "facebook"  => "https://www.facebook.com/debateclub",
-    "instagram" => "https://www.instagram.com/debateclub"
-];
+$adminId   = (int)$_SESSION['admin_id'];
+$requestId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+
+if ($requestId <= 0) {
+    header('Location: clubcreation.php');
+    exit;
+}
+
+// اجلب الطلب من DB
+$stmt = $conn->prepare("SELECT * FROM club_creation_request WHERE request_id = ?");
+$stmt->bind_param("i", $requestId);
+$stmt->execute();
+$result  = $stmt->get_result();
+$request = $result->fetch_assoc();
+$stmt->close();
+
+if (!$request) {
+    header('Location: clubcreation.php');
+    exit;
+}
+
+$alreadyReviewed = !is_null($request['reviewed_at']);
+$errorMsg = "";
+
+// معالجة approve / reject
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$alreadyReviewed) {
+
+    if (isset($_POST['approve'])) {
+
+        mysqli_begin_transaction($conn);
+
+        try {
+            // بيانات النادي
+            $clubName    = $request['club_name'];
+            $description = $request['description'];
+            $category    = $request['category'];
+
+            // لو حابة تحتفظي بـ social_links الأساسي
+            $socialMain  = $request['social_links'];
+
+            $facebook    = $request['facebook_url'];
+            $instagram   = $request['instagram_url'];
+            $linkedin    = $request['linkedin_url'];
+
+            $logo        = $request['logo'];
+            $email       = $request['applicant_email'];
+
+            $creationDate = date('Y-m-d H:i:s');
+            $status       = 'active';
+            $memberCount  = 0;
+            $points       = 0;
+
+            // INSERT في جدول club (تأكدي إن أسماء الأعمدة هي نفسها في الجدول)
+            $stmt1 = $conn->prepare("
+                INSERT INTO club
+                    (club_name, description, category,
+                     social_media_link, facebook_url, instagram_url, linkedin_url,
+                     logo, creation_date, status, contact_email, member_count, points)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ");
+
+            $stmt1->bind_param(
+                "sssssssssssii",
+                $clubName,
+                $description,
+                $category,
+                $socialMain,
+                $facebook,
+                $instagram,
+                $linkedin,
+                $logo,
+                $creationDate,
+                $status,
+                $email,
+                $memberCount,
+                $points
+            );
+            $stmt1->execute();
+            $stmt1->close();
+
+            // نعلّم الطلب إنه تمت مراجعته
+            $reviewedAt = date('Y-m-d H:i:s');
+            $stmt2 = $conn->prepare("
+                UPDATE club_creation_request
+                SET reviewed_at = ?, review_admin_id = ?
+                WHERE request_id = ?
+            ");
+            $stmt2->bind_param("sii", $reviewedAt, $adminId, $requestId);
+            $stmt2->execute();
+            $stmt2->close();
+
+            mysqli_commit($conn);
+
+            header("Location: clubcreation.php");
+            exit;
+
+        } catch (Exception $e) {
+            mysqli_rollback($conn);
+            $errorMsg = "Error while approving the request. Please try again.";
+        }
+
+    } elseif (isset($_POST['reject'])) {
+
+        $reviewedAt = date('Y-m-d H:i:s');
+        $stmt3 = $conn->prepare("
+            UPDATE club_creation_request
+            SET reviewed_at = ?, review_admin_id = ?
+            WHERE request_id = ?
+        ");
+        $stmt3->bind_param("sii", $reviewedAt, $adminId, $requestId);
+        $stmt3->execute();
+        $stmt3->close();
+
+        header("Location: clubcreation.php");
+        exit;
+    }
+}
+
 ?>
 <!doctype html>
 <html lang="en">
@@ -93,17 +199,6 @@ body{
 }
 
 /* SOCIAL LINKS STYLING */
-.social-grid{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:18px;
-  margin-top:15px;
-}
-
-.social-full{
-  grid-column:1 / 3;
-}
-
 .social-pill{
   display:flex;
   align-items:center;
@@ -113,6 +208,7 @@ body{
   border-radius:14px;
   color:var(--ink);
   border:1px solid #e5e7eb;
+  margin-top:10px;
 }
 
 .social-pill img{
@@ -144,6 +240,22 @@ body{
 .action-btn.reject{
   background:var(--coral);
 }
+
+.action-btn[disabled]{
+  opacity:0.6;
+  cursor:not-allowed;
+}
+
+.error{
+  margin-top:18px;
+  color:var(--coral);
+  font-size:.95rem;
+}
+.info{
+  margin-top:12px;
+  color:var(--muted);
+  font-size:.95rem;
+}
 </style>
 </head>
 
@@ -155,61 +267,107 @@ body{
   <div class="page-title">Review Club Request</div>
 
   <div class="form-box">
-    <img src="<?= $request['logo'] ?>" alt="Club logo" class="logo-img">
+    <img src="<?= htmlspecialchars($request['logo']) ?>" alt="Club logo" class="logo-img">
 
     <div class="field-label">Club Name</div>
-    <div class="field-value"><?= $request['club_name'] ?></div>
+    <div class="field-value"><?= htmlspecialchars($request['club_name']) ?></div>
 
     <div class="field-label">Applicant Name</div>
-    <div class="field-value"><?= $request['applicant_name'] ?></div>
+    <div class="field-value"><?= htmlspecialchars($request['applicant_name']) ?></div>
 
     <div class="field-label">Category</div>
-    <div class="field-value"><?= $request['category'] ?></div>
+    <div class="field-value"><?= htmlspecialchars($request['category']) ?></div>
 
     <div class="field-label">Description</div>
-    <div class="field-value"><?= $request['description'] ?></div>
+    <div class="field-value"><?= nl2br(htmlspecialchars($request['description'])) ?></div>
 
     <div class="field-label">Contact Email</div>
-    <div class="field-value"><?= $request['email'] ?></div>
+    <div class="field-value"><?= htmlspecialchars($request['applicant_email']) ?></div>
 
-    <!-- ▬▬▬ SOCIAL LINKS ADDED HERE ▬▬▬ -->
     <div class="field-label" style="margin-top:20px;">Social Links</div>
 
-    <div class="social-grid">
+    <?php
+      $hasSocial =
+        !empty($request['facebook_url']) ||
+        !empty($request['instagram_url']) ||
+        !empty($request['linkedin_url']) ||
+        !empty($request['social_links']);
+    ?>
 
-      <!-- LinkedIn -->
-      <div class="social-pill">
-        <img src="https://cdn-icons-png.flaticon.com/512/174/174857.png">
-        <a href="<?= $request['linkedin'] ?>" target="_blank" style="color:var(--ink); text-decoration:none;">
-          <?= $request['linkedin'] ?>
-        </a>
+    <?php if (!$hasSocial): ?>
+
+      <div class="field-value">No social links provided.</div>
+
+    <?php else: ?>
+
+      <?php if (!empty($request['facebook_url'])): ?>
+        <div class="social-pill">
+          <img src="https://cdn-icons-png.flaticon.com/512/733/733547.png" alt="Facebook">
+          <a href="<?= htmlspecialchars($request['facebook_url']) ?>" target="_blank" style="color:var(--ink); text-decoration:none;">
+            <?= htmlspecialchars($request['facebook_url']) ?>
+          </a>
+        </div>
+      <?php endif; ?>
+
+      <?php if (!empty($request['instagram_url'])): ?>
+        <div class="social-pill">
+          <img src="https://cdn-icons-png.flaticon.com/512/2111/2111463.png" alt="Instagram">
+          <a href="<?= htmlspecialchars($request['instagram_url']) ?>" target="_blank" style="color:var(--ink); text-decoration:none;">
+            <?= htmlspecialchars($request['instagram_url']) ?>
+          </a>
+        </div>
+      <?php endif; ?>
+
+      <?php if (!empty($request['linkedin_url'])): ?>
+        <div class="social-pill">
+          <img src="https://cdn-icons-png.flaticon.com/512/174/174857.png" alt="LinkedIn">
+          <a href="<?= htmlspecialchars($request['linkedin_url']) ?>" target="_blank" style="color:var(--ink); text-decoration:none;">
+            <?= htmlspecialchars($request['linkedin_url']) ?>
+          </a>
+        </div>
+      <?php endif; ?>
+
+      <?php if (!empty($request['social_links'])): ?>
+        <div class="social-pill">
+          <img src="https://cdn-icons-png.flaticon.com/512/25/25694.png" alt="Website">
+          <a href="<?= htmlspecialchars($request['social_links']) ?>" target="_blank" style="color:var(--ink); text-decoration:none;">
+            <?= htmlspecialchars($request['social_links']) ?>
+          </a>
+        </div>
+      <?php endif; ?>
+
+    <?php endif; ?>
+
+    <?php if ($alreadyReviewed): ?>
+      <div class="info">
+        This request was already reviewed on <?= htmlspecialchars($request['reviewed_at']) ?>.
       </div>
+    <?php endif; ?>
 
-      <!-- Facebook -->
-      <div class="social-pill">
-        <img src="https://cdn-icons-png.flaticon.com/512/733/733547.png">
-        <a href="<?= $request['facebook'] ?>" target="_blank" style="color:var(--ink); text-decoration:none;">
-          <?= $request['facebook'] ?>
-        </a>
-      </div>
-
-      <!-- Instagram (full width) -->
-      <div class="social-pill social-full">
-        <img src="https://cdn-icons-png.flaticon.com/512/2111/2111463.png">
-        <a href="<?= $request['instagram'] ?>" target="_blank" style="color:var(--ink); text-decoration:none;">
-          <?= $request['instagram'] ?>
-        </a>
-      </div>
-
-    </div>
-    <!-- ▬▬▬ END SOCIAL LINKS ▬▬▬ -->
-
+    <?php if (!empty($errorMsg)): ?>
+      <div class="error"><?= $errorMsg ?></div>
+    <?php endif; ?>
   </div>
 
-  <div class="btn-row">
-    <button class="action-btn approve">Approve</button>
-    <button class="action-btn reject">Reject</button>
-  </div>
+  <form method="post" class="btn-row">
+    <button
+      type="submit"
+      name="approve"
+      class="action-btn approve"
+      <?= $alreadyReviewed ? 'disabled' : '' ?>
+    >
+      Approve
+    </button>
+
+    <button
+      type="submit"
+      name="reject"
+      class="action-btn reject"
+      <?= $alreadyReviewed ? 'disabled' : '' ?>
+    >
+      Reject
+    </button>
+  </form>
 </div>
 
 </body>
