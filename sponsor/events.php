@@ -5,6 +5,66 @@ if (!isset($_SESSION['sponsor_id']) || $_SESSION['role'] !== 'sponsor') {
     header('Location: ../login.php');
     exit;
 }
+
+require_once '../config.php'; // الاتصال مع الداتابيس
+
+// ========== جلب قواعد النقاط الخاصة بالـ events ==========
+$eventRules = [];
+$rulesSql = "
+    SELECT rule_id, rule_type, min_attendees, max_attendees, points
+    FROM points_rule
+    WHERE rule_type LIKE 'event_attendance_%'
+";
+$rulesRes = $conn->query($rulesSql);
+if ($rulesRes && $rulesRes->num_rows > 0) {
+    while ($r = $rulesRes->fetch_assoc()) {
+        $eventRules[] = $r;
+    }
+}
+
+// helper بسيط يحسب النقاط حسب عدد الحضور
+function getEventPointsBadge($attendees_count, $eventRules) {
+    if ($attendees_count === null) return null;
+
+    foreach ($eventRules as $rule) {
+        $min = is_null($rule['min_attendees']) ? 0 : (int)$rule['min_attendees'];
+        $max = is_null($rule['max_attendees']) ? 999999 : (int)$rule['max_attendees'];
+
+        if ($attendees_count >= $min && $attendees_count <= $max) {
+            return (int)$rule['points'];
+        }
+    }
+    return null;
+}
+
+// ========== جلب الأحداث القادمة من جدول event ==========
+$events = [];
+// نعتبر "قادمة" = starting_date >= NOW()
+$sql = "
+    SELECT 
+        e.event_id,
+        e.event_name,
+        e.description,
+        e.event_location,
+        e.starting_date,
+        e.ending_date,
+        e.attendees_count,
+        c.club_name,
+        c.club_id,
+        s.company_name AS sponsor_name
+    FROM event e
+    INNER JOIN club c ON e.club_id = c.club_id
+    LEFT JOIN sponsor_club_support scs ON scs.club_id = c.club_id
+    LEFT JOIN sponsor s ON scs.sponsor_id = s.sponsor_id
+    WHERE e.starting_date >= NOW()
+    ORDER BY e.starting_date ASC
+";
+$res = $conn->query($sql);
+if ($res && $res->num_rows > 0) {
+    while ($row = $res->fetch_assoc()) {
+        $events[] = $row;
+    }
+}
 ?>
 <!doctype html>
 <html lang="en">
@@ -206,61 +266,60 @@ if (!isset($_SESSION['sponsor_id']) || $_SESSION['role'] !== 'sponsor') {
     <h2>Upcoming Events</h2>
     <div class="grid">
 
-      <!-- ===== EVENT 1 ===== -->
-      <article
-        class="card"
-        data-href="eventpage.php"
-        role="link"
-        tabindex="0"
-        aria-label="Open event: Club B — Hack Night">
-        <div class="date">
-          <div class="day">10</div>
-          <div class="mon">SEP</div>
-          <div class="sep">Tue</div>
-        </div>
-        <div>
-          <div class="topline">
-            <span class="badge">+30 pt</span>
-            <span class="chip sponsor">Sponsor: TechCorp</span>
-          </div>
-          <div class="title">Club B — Hack Night</div>
-          <div class="mini">
-            <span>📍 Innovation Lab</span>
-          </div>
-          <div class="footer">
-            <span class="mini">🕒 6:00 PM</span>
-          </div>
-        </div>
-      </article>
+      <?php if (empty($events)): ?>
+        <p style="grid-column:1/-1; color:var(--muted); font-size:14px;">
+          No upcoming events found at the moment.
+        </p>
+      <?php else: ?>
+        <?php foreach ($events as $ev): ?>
+          <?php
+            $start  = $ev['starting_date'] ? new DateTime($ev['starting_date']) : null;
+            $day    = $start ? $start->format('d') : '--';
+            $mon    = $start ? strtoupper($start->format('M')) : '--';
+            $dow    = $start ? $start->format('D') : '';
+            $time   = $start ? $start->format('g:i A') : '';
 
-      <!-- ===== EVENT 2 ===== -->
-      <article
-        class="card"
-        data-href="eventpage.php"
-        role="link"
-        tabindex="0"
-        aria-label="Open event: Club B — Finance 101">
-        <div class="date">
-          <div class="day">15</div>
-          <div class="mon">SEP</div>
-          <div class="sep">Sun</div>
-        </div>
-        <div>
-          <div class="topline">
-            <span class="badge">+30 pt</span>
-            <span class="chip sponsor">Sponsor: BlueBank</span>
-          </div>
-          <div class="title">Club B — Finance 101</div>
-          <div class="mini">
-            <span>📍 Main Hall</span>
-          </div>
-          <div class="footer">
-            <span class="mini">🕒 4:30 PM</span>
-          </div>
-        </div>
-      </article>
+            $pointsBadge = getEventPointsBadge((int)$ev['attendees_count'], $eventRules);
+            $sponsorName = $ev['sponsor_name'] ?: 'TBD';
 
-      <!-- You can add more upcoming events here using the same card structure -->
+            $cardTitle = $ev['club_name'] . ' — ' . $ev['event_name'];
+            $eventUrl  = 'eventpage.php?id=' . (int)$ev['event_id'];
+          ?>
+          <article
+            class="card"
+            data-href="<?php echo htmlspecialchars($eventUrl); ?>"
+            role="link"
+            tabindex="0"
+            aria-label="Open event: <?php echo htmlspecialchars($cardTitle); ?>">
+            <div class="date">
+              <div class="day"><?php echo htmlspecialchars($day); ?></div>
+              <div class="mon"><?php echo htmlspecialchars($mon); ?></div>
+              <div class="sep"><?php echo htmlspecialchars($dow); ?></div>
+            </div>
+            <div>
+              <div class="topline">
+                <?php if (!is_null($pointsBadge)): ?>
+                  <span class="badge">+<?php echo (int)$pointsBadge; ?> pt</span>
+                <?php endif; ?>
+                <span class="chip sponsor">
+                  Sponsor: <?php echo htmlspecialchars($sponsorName); ?>
+                </span>
+              </div>
+              <div class="title"><?php echo htmlspecialchars($cardTitle); ?></div>
+              <div class="mini">
+                <?php if (!empty($ev['event_location'])): ?>
+                  <span>📍 <?php echo htmlspecialchars($ev['event_location']); ?></span>
+                <?php endif; ?>
+              </div>
+              <div class="footer">
+                <?php if ($time): ?>
+                  <span class="mini">🕒 <?php echo htmlspecialchars($time); ?></span>
+                <?php endif; ?>
+              </div>
+            </div>
+          </article>
+        <?php endforeach; ?>
+      <?php endif; ?>
 
     </div>
   </section>

@@ -5,6 +5,52 @@ if (!isset($_SESSION['sponsor_id']) || $_SESSION['role'] !== 'sponsor') {
     header('Location: ../login.php');
     exit;
 }
+
+require_once __DIR__ . '/../config.php'; // نفس الكونفيغ تبع المشروع
+
+$sponsorId = (int)$_SESSION['sponsor_id'];
+
+// بنجيب club_id من الرابط: pastevents.php?id=XX
+$clubId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+
+$pastEvents = [];
+
+if ($clubId > 0) {
+    // نجيب كل الأحداث الماضية لهذا الكلب فقط
+    $sql = "
+        SELECT 
+            e.event_id,
+            e.event_name,
+            e.event_location,
+            e.starting_date,
+            e.ending_date,
+            c.club_name,
+            AVG(r.rating) AS avg_rating
+        FROM event e
+        INNER JOIN club c 
+            ON e.club_id = c.club_id
+        LEFT JOIN rating r 
+            ON r.event_id = e.event_id
+        WHERE e.ending_date < NOW()     -- past events فقط
+          AND e.club_id = ?
+        GROUP BY 
+            e.event_id,
+            e.event_name,
+            e.event_location,
+            e.starting_date,
+            e.ending_date,
+            c.club_name
+        ORDER BY e.starting_date DESC
+    ";
+
+    if ($stmt = $conn->prepare($sql)) {
+        $stmt->bind_param('i', $clubId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $pastEvents = $result->fetch_all(MYSQLI_ASSOC);
+        $stmt->close();
+    }
+}
 ?>
 <!doctype html>
 <html lang="en">
@@ -83,7 +129,7 @@ if (!isset($_SESSION['sponsor_id']) || $_SESSION['role'] !== 'sponsor') {
     font-weight:800;
   }
 
-  /* ===== Grid + cards (same base as upcoming) ===== */
+  /* ===== Grid + cards ===== */
   .grid{
     display:grid;
     grid-template-columns:repeat(2,1fr);
@@ -238,78 +284,78 @@ if (!isset($_SESSION['sponsor_id']) || $_SESSION['role'] !== 'sponsor') {
 
 <?php include 'header.php'; ?>
 
-<!-- ===== Past Events Content (same layout as Upcoming) ===== -->
+<!-- ===== Past Events Content ===== -->
 <div class="wrapper">
   <h1 class="page-title">Past Events</h1>
   <p class="subtle">
-    Explore what this club has already organized — completed events, sponsors, and engagement.
+    Explore what this club has already organized — completed events, locations, and ratings.
   </p>
 
   <section class="section">
     <h2>Completed Events</h2>
-    <div class="grid">
 
-      <!-- ===== PAST EVENT 1 ===== -->
-      <article
-        class="card"
-        data-href="eventpage.php"
-        role="link"
-        tabindex="0"
-        aria-label="Open event: Club D — Bake-Off Charity (past)">
-        <div class="date">
-          <div class="day">06</div>
-          <div class="mon">SEP</div>
-          <div class="sep">Fri</div>
-        </div>
-        <div>
-          <div class="topline">
-            <span class="state completed">Completed</span>
-            <span class="chip sponsor">Sponsor: StarFoods</span>
-          </div>
-          <div class="title">Club D — Bake-Off Charity</div>
-          <div class="mini">
-            <span>📍 Cafeteria</span>
-          </div>
-          <div class="footer">
-            <span class="review">
-              <span class="stars" style="--rating:4.5"></span>4.5
-            </span>
-          </div>
-        </div>
-      </article>
+    <?php if (empty($pastEvents)): ?>
+      <p class="subtle">No past events yet for this club.</p>
+    <?php else: ?>
+      <div class="grid">
 
-      <!-- ===== PAST EVENT 2 ===== -->
-      <article
-        class="card"
-        data-href="eventpage.php"
-        role="link"
-        tabindex="0"
-        aria-label="Open event: Club A — Sustainability Talk (past)">
-        <div class="date">
-          <div class="day">28</div>
-          <div class="mon">AUG</div>
-          <div class="sep">Thu</div>
-        </div>
-        <div>
-          <div class="topline">
-            <span class="state completed">Completed</span>
-            <span class="chip sponsor">Sponsor: GreenLabs</span>
-          </div>
-          <div class="title">Club A — Sustainability Talk</div>
-          <div class="mini">
-            <span>📍 Auditorium</span>
-          </div>
-          <div class="footer">
-            <span class="review">
-              <span class="stars" style="--rating:3.8"></span>3.8
-            </span>
-          </div>
-        </div>
-      </article>
+        <?php foreach ($pastEvents as $event): 
+            $start = strtotime($event['starting_date']);
+            $day   = date('d', $start);
+            $mon   = strtoupper(date('M', $start)); // SEP, AUG...
+            $dow   = date('D', $start);             // Mon, Tue...
 
-      <!-- add more past events here with same structure -->
+            $avgRating = $event['avg_rating'] !== null 
+              ? round($event['avg_rating'], 1)
+              : null;
 
-    </div>
+            $clubName  = $event['club_name'];
+            $eventName = $event['event_name'];
+            $fullTitle = $clubName . ' — ' . $eventName;
+        ?>
+        <!-- ===== PAST EVENT CARD ===== -->
+        <article
+          class="card"
+          data-href="eventpage.php?id=<?php echo (int)$event['event_id']; ?>"
+          role="link"
+          tabindex="0"
+          aria-label="Open event: <?php echo htmlspecialchars($fullTitle); ?> (past)">
+          <div class="date">
+            <div class="day"><?php echo htmlspecialchars($day); ?></div>
+            <div class="mon"><?php echo htmlspecialchars($mon); ?></div>
+            <div class="sep"><?php echo htmlspecialchars($dow); ?></div>
+          </div>
+          <div>
+            <div class="topline">
+              <span class="state completed">Completed</span>
+              <span class="chip sponsor">
+                Club: <?php echo htmlspecialchars($clubName); ?>
+              </span>
+            </div>
+            <div class="title">
+              <?php echo htmlspecialchars($fullTitle); ?>
+            </div>
+            <div class="mini">
+              <?php if (!empty($event['event_location'])): ?>
+                <span>📍 <?php echo htmlspecialchars($event['event_location']); ?></span>
+              <?php endif; ?>
+            </div>
+            <div class="footer">
+              <?php if ($avgRating !== null): ?>
+                <span class="review">
+                  <span class="stars" style="--rating:<?php echo $avgRating; ?>"></span>
+                  <?php echo $avgRating; ?>
+                </span>
+              <?php else: ?>
+                <span class="mini">No ratings yet</span>
+              <?php endif; ?>
+            </div>
+          </div>
+        </article>
+        <?php endforeach; ?>
+
+      </div>
+    <?php endif; ?>
   </section>
 </div>
 

@@ -1,0 +1,441 @@
+/* =============================
+   Global Styles — Sponsor Portal
+   ============================= */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: "Raleway", sans-serif;
+  background: #ffffff;
+  color: #242751;
+}
+
+/* Container */
+.wrapper {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+/* =============================
+   Hero Video Section
+   ============================= */
+
+.hero {
+  position: relative;
+  width: 100%;
+  height: 320px;
+  overflow: hidden;
+  border-radius: 20px;
+  margin-bottom: 30px;
+}
+
+.hero video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.hero .hero-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0,0,0,0.4), rgba(0,0,0,0.55));
+}
+
+.hero-content {
+  position: absolute;
+  bottom: 25px;
+  left: 25px;
+  color: #fff;
+}
+
+.hero-title {
+  font-size: 2rem;
+  font-weight: 800;
+}
+
+.hero-sub {
+  opacity: 0.9;
+  margin-top: 4px;
+}
+
+/* =============================
+   BI Dashboard Placeholder
+   ============================= */
+
+.bi-box {
+  background: #eef2f7;
+  border-radius: 20px;
+  padding: 25px;
+  margin-bottom: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+  font-size: 1.1rem;
+  border: 2px dashed #d0d5dd;
+}
+
+/* =============================
+   Best Of Ranking Section
+   ============================= */
+
+.section-title {
+  font-size: 1.8rem;
+  font-weight: 800;
+  margin-bottom: 15px;
+}
+
+.ranking-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 40px;
+}
+
+.ranking-row {
+  background: #f9fafb;
+  border-radius: 16px;
+  padding: 12px 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.06);
+}
+
+.ranking-row.top {
+  background: #e5b758;
+  color: #fff;
+}
+
+.ranking-row.left {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.club-badge {
+  width: 46px;
+  height: 46px;
+  background: #242751;
+  color: #fff;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 1rem;
+}
+
+.club-text-main {
+  font-weight: 700;
+}
+
+.club-text-sub {
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+
+.ranking-medal {
+  font-size: 1.5rem;
+}
+
+/* ==================================
+   Page Titles
+   ================================== */
+
+.page-header {
+  margin: 20px 0 30px;
+}
+
+.page-header h1 {
+  font-size: 2rem;
+  font-weight: 800;
+}
+
+
+/* =============================
+   Clubs Ranking — Podium
+   ============================= */
+
+.podium {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 35px;
+  gap: 25px;
+}
+
+.pod {
+  text-align: center;
+}
+
+.pod .medal {
+  width: 90px;
+  height: 90px;
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 0 auto;
+  border: 4px solid #eee;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.medal img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.pod .clubname {
+  margin-top: 10px;
+  font-weight: 700;
+}
+
+.pod .subpt {
+  font-size: 0.9rem;
+  margin-top: 4px;
+  opacity: 0.75;
+}
+
+/* =============================
+   Ranking Table
+   ============================= */
+
+.ranking-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 40px;
+}
+
+.ranking-table th,
+.ranking-table td {
+  padding: 12px 14px;
+  text-align: left;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.ranking-table th {
+  font-weight: 700;
+  color: #242751;
+}
+
+.ranking-table .avatar img {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  margin-right: 10px;
+}
+
+/* =============================
+   Discover Clubs Grid
+   ============================= */
+
+.club-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 22px;
+  margin-bottom: 40px;
+}
+
+.club-card {
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 18px;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+  transition: 0.2s;
+}
+
+.club-card:hover {
+  transform: translateY(-4px);
+}
+
+.club-card .club-logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  margin-right: 12px;
+}
+
+.club-card .club-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.club-card .club-desc {
+  margin: 12px 0;
+  font-size: 0.9rem;
+  opacity: 0.9;
+}
+
+.category-chip {
+  background: #4871db;
+  color: #fff;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+}
+
+/* =============================
+   Cards (Events / Past Events)
+   ============================= */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 25px;
+}
+
+.card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.card:hover {
+  transform: translateY(-3px);
+}
+
+.card .date {
+  background: #242751;
+  color: #fff;
+  width: 64px;
+  height: 80px;
+  border-radius: 12px;
+  padding: 6px;
+  text-align: center;
+  margin-bottom: 14px;
+}
+
+.card .date .day {
+  font-size: 1.4rem;
+  font-weight: 800;
+}
+
+.card .title {
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.card .mini {
+  font-size: 0.9rem;
+  opacity: 0.75;
+  margin-top: 6px;
+}
+
+.card .topline {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.badge {
+  background: #e5b758;
+  padding: 4px 10px;
+  border-radius: 999px;
+  color: #242751;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.state.completed {
+  background: #4871db;
+  color: #fff;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+}
+
+/* Stars (Past Events rating) */
+.stars {
+  --rating: 4;
+  display: inline-block;
+  font-size: 1rem;
+  color: gold;
+}
+
+.stars::after {
+  content: "★★★★★";
+  background: linear-gradient(90deg, gold calc(var(--rating) * 20%), #ccc calc(var(--rating) * 20%));
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+/* =============================
+   Club Page
+   ============================= */
+
+.club-hero {
+  text-align: center;
+  margin-bottom: 25px;
+  margin-top: 20px;
+}
+
+.club-hero strong {
+  font-size: 2rem;
+  font-weight: 800;
+}
+
+.club-section {
+  background: #ffffff;
+  padding: 20px;
+  border-radius: 18px;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+  margin-bottom: 25px;
+}
+
+.kpi-box {
+  display: flex;
+  gap: 25px;
+  margin-top: 18px;
+}
+
+.kpi {
+  background: #eef2f7;
+  padding: 18px;
+  border-radius: 12px;
+  width: 140px;
+  text-align: center;
+  font-weight: 700;
+}
+
+/* =============================
+   Event Detail Page
+   ============================= */
+
+.event-hero img {
+  width: 100%;
+  height: 300px;
+  border-radius: 20px;
+  object-fit: cover;
+  margin-bottom: 20px;
+}
+
+.event-block {
+  background: #fff;
+  padding: 18px;
+  border-radius: 18px;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+  margin-bottom: 20px;
+}
+
+.event-title {
+  font-size: 1.8rem;
+  font-weight: 800;
+}
+
+.event-sub {
+  font-size: 0.95rem;
+  opacity: 0.75;
+  margin-top: 6px;
+}
+
