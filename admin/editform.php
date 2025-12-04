@@ -5,19 +5,121 @@ if (!isset($_SESSION['admin_id'])) {
     exit;
 }
 
-// Dummy data – later load by $_GET['id'] from DB
+require_once '../config.php';
+
+$adminId   = (int)$_SESSION['admin_id'];
+$requestId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+
+if ($requestId <= 0) {
+    header('Location: clubeditreq.php');
+    exit;
+}
+
+// جلب طلب التعديل من DB
+$sql  = "SELECT * FROM club_edit_request WHERE request_id = $requestId";
+$res  = mysqli_query($conn, $sql);
+$row  = $res && mysqli_num_rows($res) ? mysqli_fetch_assoc($res) : null;
+
+if (!$row) {
+    header('Location: clubeditreq.php');
+    exit;
+}
+
+$alreadyReviewed = !is_null($row['reviewed_at']);
+
+// نكوّن array بنفس keys الواجهة القديمة
 $editRequest = [
-    "club_name"   => "Birds",
-    "category"    => "Technology",
-    "email"       => "club@example.edu",
-    "sponsor"     => "Amazone",
-    "description" => "Description about the club goes here. It can be two to three sentences long.",
-    "logo"        => "assets/birds-logo.png",
-    "cover"       => "assets/birds-cover.jpg",
-    "instagram"   => "https://www.instagram.com/yourclub",
-    "facebook"    => "https://www.facebook.com/yourclub",
-    "linkedin"    => "https://www.linkedin.com/company/yourclub"
+    "club_name"   => $row['new_club_name'],
+    "category"    => $row['new_category'],
+    "email"       => $row['new_contact_email'],
+    "sponsor"     => "",                    // ما في بالسكنشوت عمود للسـبونسر، نخليه فاضي
+    "description" => $row['new_description'],
+    "logo"        => $row['new_logo'],
+    "cover"       => $row['new_logo'],      // لسا ما عنا new_cover، فبنستعمل نفس اللوغو مؤقتاً
+    "instagram"   => $row['instagram'],
+    "facebook"    => $row['facebook'],
+    "linkedin"    => $row['linkedin']
 ];
+
+$errorMsg = "";
+
+// معالجة Approve / Reject
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$alreadyReviewed) {
+
+    $clubId = (int)$row['club_id'];
+
+    if (isset($_POST['approve'])) {
+
+        // قيم جاهزة للتحديث
+        $clubName   = mysqli_real_escape_string($conn, $editRequest['club_name']);
+        $category   = mysqli_real_escape_string($conn, $editRequest['category']);
+        $email      = mysqli_real_escape_string($conn, $editRequest['email']);
+        $desc       = mysqli_real_escape_string($conn, $editRequest['description']);
+        $mainLink   = mysqli_real_escape_string($conn, $row['new_social_media_link']);
+        $insta      = mysqli_real_escape_string($conn, $editRequest['instagram']);
+        $fb         = mysqli_real_escape_string($conn, $editRequest['facebook']);
+        $ln         = mysqli_real_escape_string($conn, $editRequest['linkedin']);
+        $logo       = mysqli_real_escape_string($conn, $editRequest['logo']);
+
+        // تحديث جدول club
+        $updateClubSql = "
+            UPDATE club
+            SET club_name        = '$clubName',
+                description      = '$desc',
+                category         = '$category',
+                contact_email    = '$email',
+                social_media_link= '$mainLink',
+                instagram_url    = '$insta',
+                facebook_url     = '$fb',
+                linkedin_url     = '$ln',
+                logo             = '$logo'
+            WHERE club_id = $clubId
+        ";
+
+        mysqli_begin_transaction($conn);
+
+        if (mysqli_query($conn, $updateClubSql)) {
+
+            $reviewedAt = date('Y-m-d H:i:s');
+            $updateReqSql = "
+                UPDATE club_edit_request
+                SET reviewed_at = '$reviewedAt',
+                    review_admin_id = $adminId
+                WHERE request_id = $requestId
+            ";
+
+            if (mysqli_query($conn, $updateReqSql)) {
+                mysqli_commit($conn);
+                header('Location: clubeditreq.php');
+                exit;
+            } else {
+                mysqli_rollback($conn);
+                $errorMsg = "Error updating edit request.";
+            }
+
+        } else {
+            mysqli_rollback($conn);
+            $errorMsg = "Error updating club.";
+        }
+
+    } elseif (isset($_POST['reject'])) {
+
+        $reviewedAt = date('Y-m-d H:i:s');
+        $updateReqSql = "
+            UPDATE club_edit_request
+            SET reviewed_at = '$reviewedAt',
+                review_admin_id = $adminId
+            WHERE request_id = $requestId
+        ";
+
+        if (mysqli_query($conn, $updateReqSql)) {
+            header('Location: clubeditreq.php');
+            exit;
+        } else {
+            $errorMsg = "Error rejecting edit request.";
+        }
+    }
+}
 ?>
 <!doctype html>
 <html lang="en">
@@ -200,6 +302,17 @@ body{
 .action-btn.reject{
   background:var(--coral);
 }
+
+.action-btn[disabled]{
+  opacity:0.6;
+  cursor:not-allowed;
+}
+
+.error{
+  margin-top:18px;
+  color:var(--coral);
+  font-size:.95rem;
+}
 </style>
 </head>
 
@@ -281,13 +394,32 @@ body{
       </div>
     </div>
 
+    <?php if (!empty($errorMsg)): ?>
+      <div class="error"><?= $errorMsg; ?></div>
+    <?php endif; ?>
+
   </div>
 
   <!-- Approve / Reject buttons -->
-  <div class="btn-row">
-    <button class="action-btn approve">Approve</button>
-    <button class="action-btn reject">Reject</button>
-  </div>
+  <form method="post" class="btn-row">
+    <button
+      type="submit"
+      name="approve"
+      class="action-btn approve"
+      <?= $alreadyReviewed ? 'disabled' : '' ?>
+    >
+      Approve
+    </button>
+
+    <button
+      type="submit"
+      name="reject"
+      class="action-btn reject"
+      <?= $alreadyReviewed ? 'disabled' : '' ?>
+    >
+      Reject
+    </button>
+  </form>
 
 </div>
 

@@ -4,27 +4,36 @@ if (!isset($_SESSION['admin_id'])) {
     header('Location: login.php');
     exit;
 }
-// Dummy data – replace later with DB results for "edit" requests
-$editRequests = [
-    [
-        "id"        => 1,
-        "club_name" => "Birds",
-        "applicant" => "Sarah Ahmad",
-        "logo"      => "assets/club1.png"
-    ],
-    [
-        "id"        => 2,
-        "club_name" => "Photography Club",
-        "applicant" => "Khaled Youssef",
-        "logo"      => "assets/club2.png"
-    ],
-    [
-        "id"        => 3,
-        "club_name" => "Music Club",
-        "applicant" => "Lama Hassan",
-        "logo"      => "assets/club3.png"
-    ]
-];
+
+require_once '../config.php'; // اتصال DB
+
+// جلب طلبات التعديل (غير المراجَعة) مع اسم الطالب
+$sql = "
+    SELECT 
+        cer.request_id,
+        cer.new_club_name,
+        cer.new_logo,
+        s.student_name
+    FROM club_edit_request cer
+    JOIN student s 
+        ON cer.requested_by_student_id = s.student_id
+    WHERE cer.reviewed_at IS NULL
+    ORDER BY cer.submitted_at DESC
+";
+
+$result = mysqli_query($conn, $sql);
+
+$editRequests = [];
+if ($result && mysqli_num_rows($result) > 0) {
+    while ($row = mysqli_fetch_assoc($result)) {
+        $editRequests[] = [
+            'id'        => $row['request_id'],
+            'club_name' => $row['new_club_name'],
+            'applicant' => $row['student_name'],  // اسم الطالب
+            'logo'      => $row['new_logo'] ?: 'assets/club-placeholder.png'
+        ];
+    }
+}
 ?>
 <!doctype html>
 <html lang="en">
@@ -185,20 +194,20 @@ body{
   <?php foreach($editRequests as $r): ?>
     <div class="request-card">
       <div class="request-left">
-        <img src="<?= $r['logo'] ?>" alt="Club logo" class="club-logo">
+        <img src="<?= htmlspecialchars($r['logo']) ?>" alt="Club logo" class="club-logo">
 
         <div class="request-text">
-          <div class="club-name"><?= $r['club_name'] ?></div>
+          <div class="club-name"><?= htmlspecialchars($r['club_name']) ?></div>
           <div class="applicant-line">
             Applicant:
-            <span class="applicant-name"><?= $r['applicant'] ?></span>
+            <span class="applicant-name"><?= htmlspecialchars($r['applicant']) ?></span>
           </div>
         </div>
       </div>
 
       <div class="divider"></div>
 
-      <a href="editform.php?id=<?= $r['id'] ?>" class="view-btn">View</a>
+      <a href="editform.php?id=<?= (int)$r['id'] ?>" class="view-btn">View</a>
     </div>
   <?php endforeach; ?>
 
