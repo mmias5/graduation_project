@@ -4,72 +4,63 @@ if (!isset($_SESSION['admin_id'])) {
     header('Location: login.php');
     exit;
 }
-// Dummy data – replace later with DB data
-$clubs = [
-    [
-        "id" => 1,
-        "name" => "AI & Robotics Club",
-        "category" => "Technology",
-        "sponsor" => "TechCorp",
-        "description" => "Build robots, compete in challenges, and learn cutting-edge AI.",
-        "members" => 120,
-        "events"  => 15,
-        "points"  => 555,
-        "logo"    => "assets/club1.png",
-        "active"  => true
-    ],
-    [
-        "id" => 2,
-        "name" => "Campus Runners",
-        "category" => "Sports",
-        "sponsor" => "FitLife",
-        "description" => "Weekly runs, marathon training, and fitness challenges.",
-        "members" => 98,
-        "events"  => 22,
-        "points"  => 610,
-        "logo"    => "assets/club2.png",
-        "active"  => true
-    ],
-    [
-        "id" => 3,
-        "name" => "Creative Studio",
-        "category" => "Arts",
-        "sponsor" => "ArtWorks",
-        "description" => "Design, art, illustration and creative collaboration.",
-        "members" => 140,
-        "events"  => 18,
-        "points"  => 530,
-        "logo"    => "assets/club3.png",
-        "active"  => false
-    ],
-    [
-        "id" => 4,
-        "name" => "Volunteer Circle",
-        "category" => "Community",
-        "sponsor" => "CarePlus",
-        "description" => "Volunteer projects and charity events across campus.",
-        "members" => 200,
-        "events"  => 35,
-        "points"  => 890,
-        "logo"    => "assets/club4.png",
-        "active"  => true
-    ],
-    [
-        "id" => 5,
-        "name" => "Astronomy Society",
-        "category" => "Science",
-        "sponsor" => "StarLab",
-        "description" => "Stargazing nights, telescopes and science talks.",
-        "members" => 85,
-        "events"  => 12,
-        "points"  => 410,
-        "logo"    => "assets/club5.png",
-        "active"  => true
-    ]
-];
 
-// Build list of unique categories for the filter
-$categories = array_unique(array_map(fn($c) => $c["category"], $clubs));
+require_once '../config.php'; // عدّل المسار إذا كان مختلف عندك
+
+// ==================== Fetch clubs from DB ====================
+
+// نجهّز مصفوفة الكلابز
+$clubs = [];
+$categories = [];
+
+$sql = "
+    SELECT 
+        club_id,
+        club_name,
+        description,
+        category,
+        logo,
+        status,
+        contact_email,
+        member_count,
+        points
+    FROM club
+    ORDER BY club_name ASC
+";
+
+if ($result = $conn->query($sql)) {
+    while ($row = $result->fetch_assoc()) {
+
+        // نعمل mapping للأعمدة على نفس شكل المصفوفة القديمة
+        $club = [
+            "id"        => (int)$row['club_id'],
+            "name"      => $row['club_name'],
+            "category"  => $row['category'] ?: 'Uncategorized',
+            // ما في عمود sponsor حالياً، فبنحط نص ثابت مؤقتاً
+            "sponsor"   => "No sponsor yet",
+            "description" => $row['description'],
+            "members"   => (int)$row['member_count'],
+            // ما في events count في جدول club، فحالياً نخليها 0 (تقدري تحدثيها لاحقاً)
+            "events"    => 0,
+            "points"    => (int)$row['points'],
+            // لو اللوغو فاضي نحط placeholder
+            "logo"      => $row['logo'] !== null && $row['logo'] !== '' 
+                            ? $row['logo'] 
+                            : 'assets/club_placeholder.png',
+            "active"    => ($row['status'] === 'active')
+        ];
+
+        $clubs[] = $club;
+
+        // نبني قائمة الكاتيجوريز
+        if (!empty($club['category'])) {
+            $categories[] = $club['category'];
+        }
+    }
+}
+
+// نحذف التكرار ونرتب الكاتيجوريز
+$categories = array_unique($categories);
 sort($categories);
 ?>
 <!doctype html>

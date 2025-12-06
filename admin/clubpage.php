@@ -4,43 +4,110 @@ if (!isset($_SESSION['admin_id'])) {
     header('Location: login.php');
     exit;
 }
-// Dummy data – later replace with DB query using $_GET['club_id']
-$club = [
-  "id" => 1,
-  "name" => "Birds",
-  "category" => "Nature & Wildlife",
-  "sponsor" => "Amazone",
-  "status" => "Active", // or "Inactive"
-  "members" => 200,
-  "events_count" => 12,
-  "points" => 5000,
-  "president_email" => "president@campusclub.com",
-  "description" => "Description about the club goes here. It can be two to three sentences long. 
-                    Share your mission, activities, and what makes your club special for students."
-];
 
-$events = [
-  [
-    "day" => "10",
-    "month" => "SEP",
-    "weekday" => "Tue",
-    "title" => "Club B — Hack Night",
-    "location" => "Innovation Lab",
-    "time" => "6:00 PM",
-    "points" => "+30 pt",
-    "sponsor" => "TechCorp"
-  ],
-  [
-    "day" => "15",
-    "month" => "SEP",
-    "weekday" => "Sun",
-    "title" => "Club B — Finance 101",
-    "location" => "Main Hall",
-    "time" => "4:30 PM",
-    "points" => "+30 pt",
-    "sponsor" => "BlueBank"
-  ]
+require_once '../config.php'; // عدّلي المسار إذا الملف بمكان ثاني
+
+// ====================== Get club_id from URL ======================
+$clubId = isset($_GET['club_id']) ? (int)$_GET['club_id'] : 0;
+
+if ($clubId <= 0) {
+    // ما في id صحيح → رجّعيه على صفحة الكلابز
+    header('Location: viewclubs.php');
+    exit;
+}
+
+// ====================== Fetch club from DB ======================
+$stmt = $conn->prepare("
+    SELECT 
+        club_id,
+        club_name,
+        description,
+        category,
+        social_media_link,
+        facebook_url,
+        instagram_url,
+        linkedin_url,
+        logo,
+        creation_date,
+        status,
+        contact_email,
+        member_count,
+        points
+    FROM club
+    WHERE club_id = ?
+    LIMIT 1
+");
+$stmt->bind_param("i", $clubId);
+$stmt->execute();
+$result = $stmt->get_result();
+$row = $result->fetch_assoc();
+$stmt->close();
+
+if (!$row) {
+    // ما لقينا كلَب بهالـ id
+    echo "<h2 style='font-family:system-ui;margin:40px;'>Club not found.</h2>";
+    exit;
+}
+
+// نعمل mapping زي ما عملنا بصفحة all clubs
+$club = [
+    "id"             => (int)$row['club_id'],
+    "name"           => $row['club_name'],
+    "category"       => $row['category'] ?: 'Uncategorized',
+    // حالياً ما في sponsor بالجدول، فبنحط placeholder
+    "sponsor"        => "No sponsor yet",
+    // من status في الجدول (active / inactive)
+    "status"         => ($row['status'] === 'active') ? 'Active' : 'Inactive',
+    "members"        => (int)$row['member_count'],
+    // لحد ما نربط جدول events فعلياً
+    "events_count"   => 0,
+    "points"         => (int)$row['points'],
+    "president_email"=> $row['contact_email'] ?: 'no-email@unihive',
+    "description"    => $row['description'] ?: 'No description provided yet.',
+    // للّوغو
+    "logo"           => (!empty($row['logo']) ? $row['logo'] : 'assets/club_placeholder.png'),
 ];
+// ====================== Fetch upcoming events for this club ======================
+$events = [];
+
+$eventStmt = $conn->prepare("
+    SELECT
+        event_id,
+        event_name,
+        event_location,
+        starting_date,
+        ending_date,
+        attendees_count
+    FROM event
+    WHERE club_id = ?
+      AND starting_date >= NOW()
+    ORDER BY starting_date ASC
+");
+
+$eventStmt->bind_param("i", $clubId);
+$eventStmt->execute();
+$eventResult = $eventStmt->get_result();
+
+while ($e = $eventResult->fetch_assoc()) {
+
+    $start = new DateTime($e['starting_date']);
+
+    $events[] = [
+        "day"      => $start->format('d'),
+        "month"    => strtoupper($start->format('M')),
+        "weekday"  => $start->format('D'),
+        "title"    => $e['event_name'],
+        "location" => $e['event_location'],
+        "time"     => $start->format('g:i A'),
+        // هاي مش موجودة بالجدول كنقاط، فنخليها عدد الحضور
+        "points"   => $e['attendees_count'] . " attending",
+        // حالياً ما في sponsor بالـ event table
+        "sponsor"  => "–"
+    ];
+}
+
+$eventStmt->close();
+
 ?>
 <!doctype html>
 <html lang="en">
