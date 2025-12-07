@@ -1,4 +1,7 @@
 <?php
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
 session_start();
 if (!isset($_SESSION['admin_id'])) {
     header('Location: login.php');
@@ -6,55 +9,77 @@ if (!isset($_SESSION['admin_id'])) {
 }
 
 // ===============================
-// Dummy Data for UI Testing
+// DB Connection
 // ===============================
-$eventRequests = [
-    [
-        "id" => 1,
-        "title" => "Tech Hack Night",
-        "location" => "Main Hall / Room 1204",
-        "event_date" => "2025-01-10",
-        "start_time" => "06:00 PM",
-        "end_time" => "10:00 PM",
-        "category" => "Technology",
-        "sponsor" => "TechCorp",
-        "description" => "A night full of coding challenges and teamwork. Students join to compete in hackathon-style problems.",
-        "cover_image" => "assets/sample/event1.jpg",
-        "club_name" => "Computer Science Club",
-        "requested_by" => "Ahmad Yousef",
-        "created_at" => "2025-01-05 09:33:00"
-    ],
-    [
-        "id" => 2,
-        "title" => "Art & Creativity Day",
-        "location" => "Art Center - Building B",
-        "event_date" => "2025-02-02",
-        "start_time" => "02:00 PM",
-        "end_time" => "06:00 PM",
-        "category" => "Art",
-        "sponsor" => "",
-        "description" => "A creative workshop where students participate in live painting, crafting, and photography activities.",
-        "cover_image" => "",
-        "club_name" => "Arts Club",
-        "requested_by" => "Dana Khalil",
-        "created_at" => "2025-01-12 13:22:00"
-    ],
-    [
-        "id" => 3,
-        "title" => "Business Networking Meetup",
-        "location" => "Auditorium C",
-        "event_date" => "2025-03-14",
-        "start_time" => "11:00 AM",
-        "end_time" => "01:00 PM",
-        "category" => "Business",
-        "sponsor" => "Jordan Bank",
-        "description" => "Students meet business professionals, exchange ideas, and learn about entrepreneurship opportunities.",
-        "cover_image" => "assets/sample/event2.jpg",
-        "club_name" => "Business Club",
-        "requested_by" => "Lana Saadeh",
-        "created_at" => "2025-01-20 15:17:00"
-    ],
-];
+require_once '../config.php'; // غيّر المسار إذا كان غير ذلك
+
+// ===============================
+// Handle Approve / Reject (POST)
+// ===============================
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'], $_POST['event_id'])) {
+
+    $eventId = (int)$_POST['event_id'];
+    $adminId = $_SESSION['admin_id'];
+
+    if ($_POST['action'] === 'approve') {
+        // ✅ لاحقًا: تنسخ البيانات لجدول event
+    }
+
+    // تحديث حالة المراجعة
+    $stmt = $conn->prepare("
+        UPDATE event_creation_request
+        SET reviewed_at = NOW(),
+            review_admin_id = ?
+        WHERE request_id = ?
+        LIMIT 1
+    ");
+    $stmt->bind_param("ii", $adminId, $eventId);
+    $stmt->execute();
+    $stmt->close();
+
+    header("Location: event_requests.php");
+    exit;
+}
+// ===============================
+// Fetch Pending Event Requests
+// ===============================
+
+// ملاحظة مهمة:
+// - غيّر أسماء الجداول والحقول تحت لتطابق الـ DB تبعتك
+// - عملت aliases عشان تمشي مع أسماء الـ keys اللي مستخدمها بالـ frontend تبعك
+$eventRequests = [];
+
+$sql = "
+SELECT 
+    e.request_id            AS id,
+    e.event_name            AS title,
+    e.event_location        AS location,
+    DATE(e.starting_date)   AS event_date,
+    DATE_FORMAT(e.starting_date, '%h:%i %p') AS start_time,
+    DATE_FORMAT(e.ending_date, '%h:%i %p')   AS end_time,
+    'General'               AS category,         -- مؤقت
+    NULL                    AS sponsor,          -- مؤقت
+    e.description           AS description,
+    e.banner_image          AS cover_image,
+    c.club_name             AS club_name,
+    s.student_name AS requested_by,
+    e.submitted_at          AS created_at
+FROM event_creation_request e
+LEFT JOIN club c 
+       ON e.club_id = c.club_id
+LEFT JOIN student s 
+       ON e.requested_by_student_id = s.student_id
+WHERE e.reviewed_at IS NULL
+ORDER BY e.submitted_at DESC
+";
+
+
+$result = $conn->query($sql);
+if ($result && $result->num_rows > 0) {
+    while($row = $result->fetch_assoc()){
+        $eventRequests[] = $row;
+    }
+}
 ?>
 
 <!doctype html>
@@ -347,7 +372,6 @@ $eventRequests = [
 
 <?php
   // include your existing admin sidebar
-  // make sure this file defines --sidebarWidth or body margin left will be 0
   include 'sidebar.php';
 ?>
 
@@ -435,7 +459,7 @@ $eventRequests = [
             </form>
           </div>
         </article>
-        <?php endforeach; ?>
+      <?php endforeach; ?>
     <?php else: ?>
       <p class="empty-state">There are no pending event creation requests right now.</p>
     <?php endif; ?>
