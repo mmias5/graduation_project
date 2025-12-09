@@ -8,254 +8,177 @@ if (!isset($_SESSION['sponsor_id']) || $_SESSION['role'] !== 'sponsor') {
 
 require_once '../config.php';
 
-// ========== قراءة ID من الرابط ==========
-$eventId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+// --------- Get event_id from URL ---------
+$eventId = isset($_GET['event_id']) ? (int)$_GET['event_id'] : 0;
 if ($eventId <= 0) {
-    // لو مافي ID نرجع للـ Upcoming Events
-    header('Location: events.php');
-    exit;
+    die('Invalid event ID.');
 }
 
-// ========== جلب بيانات الحدث من الداتابيس ==========
-$sql = "
-    SELECT 
-        e.event_id,
-        e.event_name,
-        e.description,
-        e.event_location,
-        e.starting_date,
-        e.ending_date,
-        e.attendees_count,
-        c.club_name,
-        c.club_id,
-        s.company_name AS sponsor_name
-    FROM event e
-    INNER JOIN club c ON e.club_id = c.club_id
-    LEFT JOIN sponsor_club_support scs ON scs.club_id = c.club_id
-    LEFT JOIN sponsor s ON scs.sponsor_id = s.sponsor_id
-    WHERE e.event_id = ?
-    LIMIT 1
-";
-
-$stmt = $conn->prepare($sql);
+// --------- Fetch event from DB ---------
+$stmt = $conn->prepare("
+    SELECT event_id, event_name, description, event_location,
+           max_attendees, starting_date, ending_date,
+           attendees_count, banner_image
+    FROM event
+    WHERE event_id = ?
+");
 $stmt->bind_param("i", $eventId);
 $stmt->execute();
 $result = $stmt->get_result();
-
-if ($result->num_rows === 0) {
-    // لو مافي حدث بهالرقم
-    $event = null;
-} else {
-    $event = $result->fetch_assoc();
-}
+$event = $result->fetch_assoc();
 $stmt->close();
 
-// ========== جلب قواعد النقاط الخاصة بالحضور (اختياري للعرض) ==========
-$eventRules = [];
-$rulesSql = "
-    SELECT rule_id, rule_type, min_attendees, max_attendees, points
-    FROM points_rule
-    WHERE rule_type LIKE 'event_attendance_%'
-";
-$rulesRes = $conn->query($rulesSql);
-if ($rulesRes && $rulesRes->num_rows > 0) {
-    while ($r = $rulesRes->fetch_assoc()) {
-        $eventRules[] = $r;
-    }
+if (!$event) {
+    die('Event not found.');
 }
 
-// helper بسيط لحساب النقاط المتوقعة حسب attendees_count
-function getEventPointsBadge($attendees_count, $eventRules) {
-    if ($attendees_count === null) return null;
+// --------- Format dates for display + calendar ---------
+date_default_timezone_set('Asia/Amman');
 
-    foreach ($eventRules as $rule) {
-        $min = is_null($rule['min_attendees']) ? 0 : (int)$rule['min_attendees'];
-        $max = is_null($rule['max_attendees']) ? 999999 : (int)$rule['max_attendees'];
+$startDt = new DateTime($event['starting_date']);
+$endDt   = new DateTime($event['ending_date']);
 
-        if ($attendees_count >= $min && $attendees_count <= $max) {
-            return (int)$rule['points'];
-        }
-    }
-    return null;
-}
+// Example: Thursday • Dec 10, 2025 • 4:00 PM–6:00 PM
+$whenText = $startDt->format('l • M d, Y • g:i A') . '–' . $endDt->format('g:i A');
 
-$pointsBadge = null;
-if ($event) {
-    $pointsBadge = getEventPointsBadge((int)$event['attendees_count'], $eventRules);
-}
-
-// تجهيز تواريخ للعرض
-$startObj = $event && $event['starting_date'] ? new DateTime($event['starting_date']) : null;
-$endObj   = $event && $event['ending_date']   ? new DateTime($event['ending_date'])   : null;
-
-$startDateStr = $startObj ? $startObj->format('l, d M Y') : '—';
-$startTimeStr = $startObj ? $startObj->format('g:i A')    : '—';
-
-$endDateStr   = $endObj   ? $endObj->format('l, d M Y')   : '—';
-$endTimeStr   = $endObj   ? $endObj->format('g:i A')      : '—';
+// ICS format: 20251210T160000
+$icsStart = $startDt->format('Ymd\THis');
+$icsEnd   = $endDt->format('Ymd\THis');
 ?>
 <!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>UniHive — Event Details</title>
+<title>UniHive — <?php echo htmlspecialchars($event['event_name']); ?></title>
 
 <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;600;700;800&display=swap" rel="stylesheet">
 
 <style>
+  /* ===== Sponsor Brand Tokens ===== */
   :root{
-    --navy:#242751;
-    --royal:#4871db;
+    --navy:#242751;        /* deep navy used for text & icons */
+    --royal:#e5b758;       /* sponsor gold used as primary accent */
+    --lightBlue:#ffe9a8;   /* soft warm highlight */
     --gold:#e5b758;
-    --lightGold:#f4df6d;
-    --paper:#EEF2F7;
+    --paper:#fff7e3;       /* warm background */
+    --ink:#1e1a16;
     --card:#ffffff;
-    --ink:#0e1228;
-    --muted:#6b7280;
-    --shadow:0 14px 34px rgba(10,23,60,.12);
-    --radius:18px;
+    --shadow:0 18px 38px rgba(77,54,16,.16);
+    --radius:22px;
+    --maxw:1100px;
   }
+
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
 
   body{
-    margin:0;
     font-family:"Raleway",system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+    background:linear-gradient(180deg,#fff9ec,#f7f0dd);
     color:var(--ink);
-    background:
-      radial-gradient(1200px 700px at -10% 40%, rgba(168,186,240,.3), transparent 60%),
-      radial-gradient(900px 600px at 110% 60%, rgba(72,113,219,.22), transparent 60%),
-      var(--paper);
-    background-repeat:no-repeat;
   }
 
-  .wrapper{
-    max-width:960px;
-    margin:32px auto 48px;
-    padding:0 18px;
-  }
+  /* MAIN WRAPPER */
+  .wrap{ max-width:var(--maxw); margin:40px auto 0; padding:0 20px; }
+  .content{ max-width:var(--maxw); margin:40px auto 60px; padding:0 20px; }
 
-  .back-link{
-    display:inline-flex;
-    align-items:center;
-    gap:6px;
-    font-size:13px;
-    color:var(--royal);
-    text-decoration:none;
-    font-weight:600;
-    margin-bottom:10px;
-  }
-  .back-link span{
-    font-size:16px;
-  }
-  .back-link:hover{
-    text-decoration:underline;
-  }
-
-  .page-title{
-    font-size:28px;
-    font-weight:800;
+  /* ===== HEADLINE ===== */
+  .headline{
+    margin:10px 0 16px;
+    font-weight:800; line-height:1.1;
+    font-size:clamp(32px, 4.7vw, 52px);
     color:var(--navy);
-    margin:6px 0 4px;
   }
 
-  .page-sub{
-    font-size:14px;
-    color:var(--muted);
-    margin:0 0 18px;
+  .meta{
+    display:flex; flex-wrap:wrap; align-items:center; gap:14px;
+    margin-bottom:22px; color:#7c6122; font-weight:700;
+  }
+  .badge{
+    background:var(--gold); color:#fff; padding:6px 12px;
+    border-radius:999px; font-size:13px;
+  }
+  .dot{ width:6px;height:6px;border-radius:50%;background:#d9c38e; }
+
+  /* ===== HERO IMAGE ===== */
+  .hero{
+    position:relative; border-radius:var(--radius); overflow:hidden;
+    box-shadow:var(--shadow); background:#f4d15b; aspect-ratio:16 / 9;
+  }
+  .hero img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .credit{
+    position:absolute;right:12px;bottom:10px;
+    background:rgba(0,0,0,.55); color:#fff; font-size:12px;
+    padding:6px 10px; border-radius:999px;
   }
 
-  .layout{
-    display:grid;
-    grid-template-columns: minmax(0,2.1fr) minmax(0,1.3fr);
-    gap:20px;
+  /* ===== ARTICLE ===== */
+  article{
+    margin-top:28px; background:var(--card);
+    border-radius:var(--radius); box-shadow:var(--shadow); padding:30px;
   }
-  @media (max-width:880px){
-    .layout{
-      grid-template-columns:1fr;
-    }
+  article p{ margin:0 0 18px; line-height:1.75; font-size:18px; }
+  article p.lead{ font-size:19px; font-weight:600; }
+
+  /* ===== EVENT EXTRAS ===== */
+  .summary{
+    display:grid; gap:18px; margin-top:22px;
+    grid-template-columns: 1.2fr .8fr;
+  }
+  @media (max-width: 880px){ .summary{ grid-template-columns:1fr; } }
+
+  .info{
+    background:var(--card); border-radius:var(--radius);
+    box-shadow:var(--shadow); padding:22px;
+  }
+  .info-grid{
+    display:grid; gap:14px; grid-template-columns:1fr 1fr;
+  }
+  @media (max-width:700px){ .info-grid{ grid-template-columns:1fr; } }
+  .info-item{
+    display:flex; gap:12px; align-items:flex-start;
+    background:#fff5d1; padding:14px 16px; border-radius:14px;
+  }
+  .info-item .icon{
+    width:28px; height:28px; display:grid; place-items:center;
+    border-radius:10px; background:#ffe8a4;
+    font-weight:800; color:var(--navy);
+    flex:0 0 28px;
+  }
+  .info-item b{ display:block; font-size:14px; color:#5b4215; margin-bottom:4px; }
+  .info-item span{ display:block; font-size:15px; color:#302319; }
+
+  .cta{
+    display:flex; flex-wrap:wrap; gap:12px; margin-top:16px;
+  }
+  .btn{
+    border:0; border-radius:12px; padding:12px 16px; font-weight:800;
+    cursor:pointer; box-shadow:0 8px 18px rgba(77,54,16,.18);
+    background:#fff3c2; color:#5a4613;
+  }
+  .btn.primary{ background:var(--gold); color:var(--navy); }
+  .btn.ghost{
+    background:#fff;
+    border:2px solid #f3d47a;
+    color:#7a5a1a;
   }
 
-  .card{
-    background:var(--card);
-    border-radius:var(--radius);
-    box-shadow:var(--shadow);
-    padding:18px 18px 20px;
+  .side-card{
+    background:var(--card); border-radius:var(--radius);
+    box-shadow:var(--shadow); padding:22px;
+  }
+  .side-card h3{ margin:0 0 10px; font-size:18px; color:var(--navy); }
+  .tagline{ color:#7e6a3d; font-weight:600; }
+
+  /* Map */
+  .map-wrap{ margin-top:26px; }
+  .map{
+    border:0; width:100%; height:320px;
+    border-radius:16px; box-shadow:var(--shadow);
   }
 
-  .section-title{
-    font-size:16px;
-    font-weight:800;
-    color:var(--navy);
-    margin:0 0 10px;
-  }
-
-  .desc{
-    font-size:14px;
-    line-height:1.6;
-    color:var(--ink);
-    white-space:pre-line;
-  }
-
-  .meta-row{
-    display:flex;
-    align-items:flex-start;
-    gap:10px;
-    font-size:14px;
-    color:var(--ink);
-    margin-bottom:8px;
-  }
-
-  .meta-label{
-    font-weight:700;
-    min-width:80px;
-  }
-
-  .pill{
-    display:inline-flex;
-    align-items:center;
-    gap:6px;
-    padding:5px 10px;
-    border-radius:999px;
-    font-size:12px;
-    font-weight:700;
-    background:#e8f5ff;
-    color:#135f9b;
-  }
-
-  .pill.gold{
-    background:#fff7db;
-    color:#8a5b00;
-    border:1px solid #ffe9a7;
-  }
-
-  .pill.neutral{
-    background:#f3f4f6;
-    color:#374151;
-  }
-
-  .stack{
-    display:flex;
-    flex-direction:column;
-    gap:8px;
-    margin-top:10px;
-  }
-
-  .badge-row{
-    display:flex;
-    flex-wrap:wrap;
-    gap:8px;
-    margin-top:6px;
-  }
-
-  .empty-state{
-    text-align:center;
-    padding:40px 22px;
-    background:rgba(255,255,255,.6);
-    border-radius:var(--radius);
-    border:1px dashed rgba(148,163,184,.8);
-    font-size:14px;
-    color:var(--muted);
-  }
+  /* Remove extra space bottom from global footer include */
+  footer{ margin-top:0 !important; }
 </style>
 </head>
 
@@ -263,138 +186,173 @@ $endTimeStr   = $endObj   ? $endObj->format('g:i A')      : '—';
 
 <?php include 'header.php'; ?>
 
-<div class="wrapper">
+<main class="wrap">
 
-  <a href="events.php" class="back-link">
-    <span>←</span> Back to Upcoming Events
-  </a>
+  <h1 class="headline">
+    <?php echo htmlspecialchars($event['event_name']); ?>
+  </h1>
 
-  <?php if (!$event): ?>
-    <div class="empty-state">
-      Event not found or no longer available.
+  <figure class="hero">
+    <img src="<?php echo htmlspecialchars($event['banner_image']); ?>"
+         alt="<?php echo htmlspecialchars($event['event_name']); ?>">
+    <figcaption class="credit">Event Banner</figcaption>
+  </figure>
+
+  <!-- SUMMARY: details + side card (tickets / notes) -->
+  <section class="summary">
+    <div class="info">
+      <div class="info-grid">
+        <div class="info-item">
+          <div class="icon">🗓</div>
+          <div>
+            <b>When</b>
+            <span id="whenText">
+              <?php echo htmlspecialchars($whenText); ?>
+            </span>
+          </div>
+        </div>
+        <div class="info-item">
+          <div class="icon">📍</div>
+          <div>
+            <b>Where</b>
+            <span id="whereText">
+              <?php echo htmlspecialchars($event['event_location']); ?>
+            </span>
+          </div>
+        </div>
+        <div class="info-item">
+          <div class="icon">🏷</div>
+          <div>
+            <b>Max attendees</b>
+            <span>
+              <?php echo (int)$event['max_attendees']; ?> seats
+              • <?php echo (int)$event['attendees_count']; ?> registered
+            </span>
+          </div>
+        </div>
+        <div class="info-item">
+          <div class="icon">🤝</div>
+          <div>
+            <b>Sponsored by</b>
+            <span>TechVision Corp</span>
+            <!-- لاحقاً تقدر تربطها بتابل sponsor -->
+          </div>
+        </div>
+      </div>
+
+      <div class="cta">
+        <button class="btn primary" id="addCalBtn">Add to Calendar</button>
+        <button class="btn ghost" id="shareBtn">Share</button>
+      </div>
     </div>
-  <?php else: ?>
 
-    <h1 class="page-title">
-      <?php echo htmlspecialchars($event['event_name']); ?>
-    </h1>
-    <p class="page-sub">
-      Club: <?php echo htmlspecialchars($event['club_name']); ?>
-      <?php if (!empty($event['sponsor_name'])): ?>
-        · Sponsored by <?php echo htmlspecialchars($event['sponsor_name']); ?>
-      <?php endif; ?>
+    <aside class="side-card">
+      <h3>Tickets & Notes</h3>
+      <p class="tagline">
+        General admission is free. Seats are first-come, first-served.
+      </p>
+      <ul style="margin:10px 0 0 18px; line-height:1.7;">
+        <li>Please bring your student ID.</li>
+        <li>QR check-in available at entrance.</li>
+        <li>Snacks & coffee provided.</li>
+      </ul>
+    </aside>
+  </section>
+
+  <!-- DESCRIPTION -->
+  <article class="content">
+    <p class="lead">
+      <?php echo nl2br(htmlspecialchars($event['description'])); ?>
     </p>
 
-    <div class="layout">
-      <!-- ========== Left: Description ========== -->
-      <section class="card">
-        <h2 class="section-title">About this event</h2>
-        <p class="desc">
-          <?php 
-            echo $event['description'] 
-              ? nl2br(htmlspecialchars($event['description'])) 
-              : 'No description provided for this event yet.';
-          ?>
-        </p>
-      </section>
+    <p>
+      This event is part of the UniHive initiative to support active student
+      clubs, sponsors, and cross-university collaboration.
+    </p>
 
-      <!-- ========== Right: Details & Points ========== -->
-      <aside class="card">
-        <h2 class="section-title">Event details</h2>
-
-        <div class="meta-row">
-          <div class="meta-label">Club</div>
-          <div><?php echo htmlspecialchars($event['club_name']); ?></div>
-        </div>
-
-        <div class="meta-row">
-          <div class="meta-label">Location</div>
-          <div>
-            <?php echo $event['event_location'] 
-              ? htmlspecialchars($event['event_location']) 
-              : 'Not specified'; ?>
-          </div>
-        </div>
-
-        <div class="meta-row">
-          <div class="meta-label">Starts</div>
-          <div><?php echo htmlspecialchars($startDateStr); ?><br>
-            <span style="font-size:13px; color:var(--muted);">
-              <?php echo htmlspecialchars($startTimeStr); ?>
-            </span>
-          </div>
-        </div>
-
-        <div class="meta-row">
-          <div class="meta-label">Ends</div>
-          <div><?php echo htmlspecialchars($endDateStr); ?><br>
-            <span style="font-size:13px; color:var(--muted);">
-              <?php echo htmlspecialchars($endTimeStr); ?>
-            </span>
-          </div>
-        </div>
-
-        <div class="meta-row">
-          <div class="meta-label">Attendees</div>
-          <div>
-            <?php
-              $att = $event['attendees_count'];
-              echo is_null($att) ? '—' : (int)$att . ' students';
-            ?>
-          </div>
-        </div>
-
-        <div class="stack">
-          <div class="section-title" style="font-size:14px; margin-bottom:4px;">
-            Points preview
-          </div>
-
-          <?php if (!is_null($pointsBadge)): ?>
-            <div class="badge-row">
-              <span class="pill gold">
-                +<?php echo (int)$pointsBadge; ?> points
-              </span>
-              <span class="pill neutral">
-                Based on current attendees: 
-                <?php echo is_null($att) ? 'N/A' : (int)$att; ?>
-              </span>
-            </div>
-          <?php else: ?>
-            <p style="font-size:13px; color:var(--muted); margin:0;">
-              No matching rule found for this attendees count yet.
-            </p>
-          <?php endif; ?>
-
-          <?php if (!empty($eventRules)): ?>
-            <div style="margin-top:10px;">
-              <div style="font-size:12px; font-weight:700; color:var(--muted); margin-bottom:4px;">
-                Event attendance rules (summary):
-              </div>
-              <div style="font-size:12px; color:var(--muted); line-height:1.5;">
-                <?php foreach ($eventRules as $rule): ?>
-                  <?php
-                    $min = is_null($rule['min_attendees']) ? 0 : (int)$rule['min_attendees'];
-                    $max = is_null($rule['max_attendees']) ? null : (int)$rule['max_attendees'];
-                  ?>
-                  •
-                  <?php if (is_null($max)): ?>
-                    <?php echo $min; ?>+ attendees → <?php echo (int)$rule['points']; ?> pts<br>
-                  <?php else: ?>
-                    <?php echo $min; ?>–<?php echo $max; ?> attendees → <?php echo (int)$rule['points']; ?> pts<br>
-                  <?php endif; ?>
-                <?php endforeach; ?>
-              </div>
-            </div>
-          <?php endif; ?>
-        </div>
-      </aside>
+    <!-- Map -->
+    <div class="map-wrap">
+      <h2 style="color:var(--navy); margin:0 0 12px;">Location</h2>
+      <iframe
+        class="map"
+        loading="lazy"
+        referrerpolicy="no-referrer-when-downgrade"
+        src="https://www.google.com/maps?q=<?php
+          echo urlencode($event['event_location'] . ' Jordan');
+        ?>&output=embed">
+      </iframe>
     </div>
 
-  <?php endif; ?>
+  </article>
 
-</div>
+</main>
 
 <?php include 'footer.php'; ?>
+
+<script>
+// ========= Interactions =========
+
+// Use PHP values inside JS
+const eventTitle = <?php echo json_encode($event['event_name']); ?>;
+const eventDesc  = <?php echo json_encode($event['description']); ?>;
+const eventLoc   = <?php echo json_encode($event['event_location']); ?>;
+const icsStart   = <?php echo json_encode($icsStart); ?>;
+const icsEnd     = <?php echo json_encode($icsEnd); ?>;
+
+// Share (uses Web Share API when available; falls back to copy)
+document.getElementById('shareBtn').addEventListener('click', async () => {
+  const shareData = {
+    title: eventTitle,
+    text: 'Join me at this UniHive event: ' + eventTitle,
+    url: window.location.href
+  };
+  try {
+    if (navigator.share) {
+      await navigator.share(shareData);
+    } else {
+      await navigator.clipboard.writeText(shareData.url);
+      alert('Link copied to clipboard!');
+    }
+  } catch(e) {
+    console.log(e);
+  }
+});
+
+// Add to Calendar (.ics generator)
+document.getElementById('addCalBtn').addEventListener('click', () => {
+  const title = eventTitle;
+  const desc  = eventDesc;
+  const loc   = eventLoc;
+  const start = icsStart;
+  const end   = icsEnd;
+
+  const ics =
+`BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Campus Clubs Hub//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+BEGIN:VEVENT
+DTSTART:${start}
+DTEND:${end}
+SUMMARY:${title}
+DESCRIPTION:${desc}
+LOCATION:${loc}
+UID:${Date.now()}@cch.local
+END:VEVENT
+END:VCALENDAR`;
+
+  const blob = new Blob([ics], {type: 'text/calendar;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'event-<?php echo (int)$event['event_id']; ?>.ics';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+});
+</script>
 
 </body>
 </html>

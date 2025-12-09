@@ -283,7 +283,9 @@ if ($res && $res->num_rows > 0) {
             $sponsorName = $ev['sponsor_name'] ?: 'TBD';
 
             $cardTitle = $ev['club_name'] . ' — ' . $ev['event_name'];
-            $eventUrl  = 'eventpage.php?id=' . (int)$ev['event_id'];
+
+            // 🔹 هنا التعديل المهم: نستخدم event_id في الـ GET
+            $eventUrl  = 'eventpage.php?event_id=' . (int)$ev['event_id'];
           ?>
           <article
             class="card"
