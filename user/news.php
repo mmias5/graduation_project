@@ -1,17 +1,92 @@
 <?php
 session_start();
 
-if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
-    // لو بدك تخلي الـ president يدخل على صفحة مختلفة
-    if (isset($_SESSION['role']) && $_SESSION['role'] === 'club_president') {
-        header('Location: ../president/index.php');
-        exit;
-    }
+if (
+    !isset($_SESSION['student_id']) ||
+    ($_SESSION['role'] !== 'student' && $_SESSION['role'] !== 'club_president')
+) {
     header('Location: ../login.php');
     exit;
 }
-?>
 
+require_once '../config.php';
+
+/**
+ * Load a single news row.
+ * We use SELECT * so it works with your actual columns.
+ */
+function loadNews(mysqli $conn, ?int $newsId): ?array {
+    // If a specific ID is given
+    if ($newsId && $newsId > 0) {
+        $stmt = $conn->prepare("
+            SELECT *
+            FROM news
+            WHERE news_id = ?
+            LIMIT 1
+        ");
+        $stmt->bind_param("i", $newsId);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $row = $res->fetch_assoc() ?: null;
+        $stmt->close();
+        return $row;
+    }
+
+    // Fallback: latest news
+    $sql = "SELECT * FROM news ORDER BY created_at DESC LIMIT 1";
+    $res = $conn->query($sql);
+    if ($res && $res->num_rows > 0) {
+        return $res->fetch_assoc();
+    }
+    return null;
+}
+
+/* ---------- Read id from URL (supports ?news_id= and ?id=) ---------- */
+$newsIdParam = null;
+if (isset($_GET['news_id'])) {
+    $newsIdParam = (int)$_GET['news_id'];
+} elseif (isset($_GET['id'])) {
+    $newsIdParam = (int)$_GET['id'];
+}
+
+$news = loadNews($conn, $newsIdParam);
+
+/* ---------- Map data safely ---------- */
+$hasNews   = (bool)$news;
+$title     = $hasNews ? ($news['title'] ?? 'News article') : 'News article not found';
+$category  = $hasNews ? ($news['category'] ?? 'News')       : 'News';
+
+/* Try to guess which column holds the long text.
+   Adjust this list to match your actual table if needed. */
+$content = '';
+if ($hasNews) {
+    if (isset($news['content'])) {
+        $content = $news['content'];
+    } elseif (isset($news['body'])) {
+        $content = $news['body'];
+    } elseif (isset($news['description'])) {
+        $content = $news['description'];
+    } else {
+        $content = ''; // no text column, stays empty
+    }
+}
+
+$heroImage = $hasNews && !empty($news['hero_image'])
+    ? $news['hero_image']
+    : 'https://images.unsplash.com/photo-1521737604893-d14cc237f11d?q=80&w=1600&auto=format&fit=crop';
+
+$createdAt = '';
+if ($hasNews && !empty($news['created_at'])) {
+    try {
+        $dt = new DateTime($news['created_at']);
+        $createdAt = $dt->format('M Y'); // e.g., "Nov 2025"
+    } catch (Exception $e) {
+        $createdAt = $news['created_at'];
+    }
+} else {
+    $createdAt = '—';
+}
+?>
 <!doctype html>
 <html lang="en">
 <head>
@@ -22,7 +97,6 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
 <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;600;700;800&display=swap" rel="stylesheet">
 
 <style>
-  /* ===== Brand Tokens ===== */
   :root{
     --navy:#242751;
     --royal:#4871db;
@@ -45,7 +119,6 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
     color:var(--ink);
   }
 
-  /* MAIN WRAPPER */
   .wrap{
     max-width:var(--maxw);
     margin:40px auto 0px;
@@ -57,13 +130,12 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
     padding:0 20px;
   }
 
-  /* ===== HEADLINE ===== */
   .headline{
     margin:10px 0 16px;
     font-weight:800;
     line-height:1.1;
     font-size:clamp(32px, 4.7vw, 52px);
-    color:var(--navy);             /* You requested a navy title */
+    color:var(--navy);
   }
 
   .meta{
@@ -73,10 +145,11 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
     margin-bottom:22px;
     color:#666c85;
     font-weight:700;
+    flex-wrap:wrap;
   }
 
   .badge{
-    background:var(--royal);       /* Matches new header/footer color */
+    background:var(--royal);
     color:#fff;
     padding:6px 12px;
     border-radius:999px;
@@ -87,7 +160,6 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
     width:6px;height:6px;border-radius:50%;background:#c5c9d7;
   }
 
-  /* ===== HERO IMAGE ===== */
   .hero{
     position:relative;
     border-radius:var(--radius);
@@ -95,6 +167,7 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
     box-shadow:var(--shadow);
     background:#d0d8ff;
     aspect-ratio: 16 / 9;
+    margin-bottom:6px;
   }
   .hero img{
     width:100%;
@@ -111,7 +184,6 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
     border-radius:999px;
   }
 
-  /* ===== ARTICLE ===== */
   article{
     margin-top:28px;
     background:var(--card);
@@ -129,62 +201,57 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
     font-weight:600;
   }
 
-  /* Remove extra space bottom */
+  .not-found{
+    margin:40px 0 0;
+    font-size:17px;
+    color:#4b5168;
+  }
+
   footer{ margin-top:0 !important; }
 </style>
 </head>
 
 <body>
 
-<!-- HEADER GOES HERE -->
 <?php include('header.php'); ?>
 
 <main class="wrap">
 
-    <h1 class="headline">Campus Clubs Hub expands cross-university activities with new analytics tools</h1>
+  <h1 class="headline">
+    <?php echo htmlspecialchars($title); ?>
+  </h1>
 
-    <div class="meta">
-      <span class="badge">News</span>
-      <span class="dot"></span>
-      <span>Campus Clubs Hub • Nov 2025</span>
-    </div>
+  <div class="meta">
+    <span class="badge"><?php echo htmlspecialchars($category); ?></span>
+    <span class="dot"></span>
+    <span>UNIHIVE • <?php echo htmlspecialchars($createdAt); ?></span>
+  </div>
 
+  <?php if ($hasNews): ?>
     <figure class="hero">
-      <img src="https://images.unsplash.com/photo-1521737604893-d14cc237f11d?q=80&w=1600&auto=format&fit=crop"
-           alt="Students collaborating during a campus event">
+      <img src="<?php echo htmlspecialchars($heroImage); ?>"
+           alt="<?php echo htmlspecialchars($title); ?>">
       <figcaption class="credit">Photo: CCH Media</figcaption>
     </figure>
 
     <article class="content">
-      <p class="lead">
-        Campus Clubs Hub (CCH) introduced a major update that enhances how students and clubs engage
-        across multiple universities, bringing a more connected community experience.
-      </p>
-
-      <p>
-        The new update introduces smarter analytics tools allowing club leaders to track event
-        performance, engagement peaks, and growth trends. These insights help clubs identify what
-        activities students enjoy most and how they can improve participation. The system also
-        enhances the ranking algorithm by combining participation, event creation, and community
-        feedback metrics.
-      </p>
-
-      <p>
-        Students now enjoy a unified feed of events and announcements from various universities,
-        making it easier to explore new clubs, attend activities, and collaborate beyond their own
-        campus. Additionally, the update includes improved loyalty point tracking, QR check-in for
-        events, and sponsor-ready highlight summaries.
-      </p>
-
-      <p>
-        With more features planned for early 2026, CCH continues to grow toward becoming the leading
-        digital hub for student activities in Jordan and the region.
+      <?php
+        // If your column already stores HTML, echo it directly:
+        //   echo $content;
+        // If it’s plain text, keep escaping like this:
+        echo nl2br(htmlspecialchars($content));
+      ?>
+    </article>
+  <?php else: ?>
+    <article class="content">
+      <p class="not-found">
+        We couldn’t find this news article. It might have been removed or the link is incorrect.
       </p>
     </article>
+  <?php endif; ?>
 
 </main>
 
-<!-- FOOTER GOES HERE -->
 <?php include('footer.php'); ?>
 
 </body>
