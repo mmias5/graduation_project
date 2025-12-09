@@ -1,17 +1,59 @@
 <?php
 session_start();
 
-if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
-    // لو بدك تخلي الـ president يدخل على صفحة مختلفة
-    if (isset($_SESSION['role']) && $_SESSION['role'] === 'club_president') {
-        header('Location: ../president/index.php');
-        exit;
-    }
+if (!isset($_SESSION['student_id']) || ($_SESSION['role'] !== 'student' && $_SESSION['role'] !== 'club_president')) {
     header('Location: ../login.php');
     exit;
 }
-?>
 
+require_once '../config.php';
+
+$eventId = isset($_GET['event_id']) ? (int)$_GET['event_id'] : 0;
+
+$sql = "
+    SELECT
+        e.*,
+        c.club_name,
+        s.company_name AS sponsor_name
+    FROM event e
+    INNER JOIN club c
+        ON e.club_id = c.club_id
+    LEFT JOIN sponsor_club_support scs
+        ON scs.club_id = c.club_id
+    LEFT JOIN sponsor s
+        ON scs.sponsor_id = s.sponsor_id
+    WHERE e.event_id = ?
+    LIMIT 1
+";
+
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("i", $eventId);
+$stmt->execute();
+$res  = $stmt->get_result();
+$event = $res->fetch_assoc();
+$stmt->close();
+
+if (!$event) {
+    // simple 404
+    http_response_code(404);
+    $title = "Event not found";
+} else {
+    $title = $event['event_name'];
+}
+
+function formatWhenFull($startStr, $endStr): string {
+    if (!$startStr) return 'Date to be announced';
+    $start = new DateTime($startStr);
+    if ($endStr) {
+        $end = new DateTime($endStr);
+        if ($start->format('Y-m-d') === $end->format('Y-m-d')) {
+            return $start->format('l • M d, Y • g:i A') . ' – ' . $end->format('g:i A');
+        }
+        return $start->format('M d, Y g:i A') . ' – ' . $end->format('M d, Y g:i A');
+    }
+    return $start->format('l • M d, Y • g:i A');
+}
+?>
 <!doctype html>
 <html lang="en">
 <head>
@@ -22,7 +64,6 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
 <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;600;700;800&display=swap" rel="stylesheet">
 
 <style>
-  /* ===== Brand Tokens ===== */
   :root{
     --navy:#242751;
     --royal:#4871db;
@@ -45,11 +86,9 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
     color:var(--ink);
   }
 
-  /* MAIN WRAPPER */
   .wrap{ max-width:var(--maxw); margin:40px auto 0; padding:0 20px; }
   .content{ max-width:var(--maxw); margin:40px auto 60px; padding:0 20px; }
 
-  /* ===== HEADLINE ===== */
   .headline{
     margin:10px 0 16px;
     font-weight:800; line-height:1.1;
@@ -67,7 +106,6 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
   }
   .dot{ width:6px;height:6px;border-radius:50%;background:#c5c9d7; }
 
-  /* ===== HERO IMAGE ===== */
   .hero{
     position:relative; border-radius:var(--radius); overflow:hidden;
     box-shadow:var(--shadow); background:#d0d8ff; aspect-ratio:16 / 9;
@@ -79,7 +117,6 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
     padding:6px 10px; border-radius:999px;
   }
 
-  /* ===== ARTICLE ===== */
   article{
     margin-top:28px; background:var(--card);
     border-radius:var(--radius); box-shadow:var(--shadow); padding:30px;
@@ -87,7 +124,6 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
   article p{ margin:0 0 18px; line-height:1.75; font-size:18px; }
   article p.lead{ font-size:19px; font-weight:600; }
 
-  /* ===== EVENT EXTRAS ===== */
   .summary{
     display:grid; gap:18px; margin-top:22px;
     grid-template-columns: 1.2fr .8fr;
@@ -132,132 +168,135 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
   .side-card h3{ margin:0 0 10px; font-size:18px; color:var(--navy); }
   .tagline{ color:#596180; font-weight:600; }
 
-  /* Map */
   .map-wrap{ margin-top:26px; }
   .map{
     border:0; width:100%; height:320px;
     border-radius:16px; box-shadow:var(--shadow);
   }
 
-  /* Remove extra space bottom from global footer include */
   footer{ margin-top:0 !important; }
 </style>
 </head>
 
 <body>
 
-<!-- HEADER -->
 <?php include('header.php'); ?>
 
 <main class="wrap">
+  <?php if (!$event): ?>
+    <h1 class="headline">Event not found</h1>
+    <p style="font-size:18px;color:#6b7280;">This event does not exist or was removed.</p>
+  <?php else: ?>
+    <h1 class="headline"><?php echo htmlspecialchars($event['event_name']); ?></h1>
 
-  <h1 class="headline">CCH Tech & Innovation Meetup — Fall 2025</h1>
-
-  <div class="meta">
-    <span class="badge">Event</span>
-    <span class="dot"></span>
-    <span>Hosted by: Campus Clubs Hub • Jordan</span>
-  </div>
-
-  <figure class="hero">
-    <img src="https://images.unsplash.com/photo-1551836022-d5d88e9218df?q=80&w=1600&auto=format&fit=crop"
-         alt="Students attending a technology meetup on campus">
-    <figcaption class="credit">Photo: CCH Media</figcaption>
-  </figure>
-
-  <!-- SUMMARY: details + side card (tickets / notes) -->
-  <section class="summary">
-    <div class="info">
-      <div class="info-grid">
-        <div class="info-item">
-          <div class="icon">🗓</div>
-          <div>
-            <b>When</b>
-            <!-- Use absolute date/time (your timezone is Asia/Amman) -->
-            <span id="whenText">Thursday • Nov 20, 2025 • 4:00–7:30 PM</span>
-          </div>
-        </div>
-        <div class="info-item">
-          <div class="icon">📍</div>
-          <div>
-            <b>Where</b>
-            <span id="whereText">Amman, JU Main Campus — Innovation Hall</span>
-          </div>
-        </div>
-        <div class="info-item">
-          <div class="icon">🏷</div>
-          <div>
-            <b>Category</b>
-            <span>Technology • Workshops • Networking</span>
-          </div>
-        </div>
-        <div class="info-item">
-  <div class="icon">🤝</div>
-  <div>
-    <b>Sponsored by</b>
-    <span>TechVision Corp</span>
-    <!-- Example for dynamic sponsor -->
-    <!-- <span><?php echo htmlspecialchars($sponsor_name ?? 'No sponsor listed'); ?></span> -->
-  </div>
-</div>
-      </div>
-
-      <div class="cta">
-        <button class="btn primary" id="addCalBtn">Add to Calendar</button>
-        <button class="btn ghost" id="shareBtn">Share</button>
-      </div>
+    <div class="meta">
+      <span class="badge">Event</span>
+      <span class="dot"></span>
+      <span>
+        Hosted by: <?php echo htmlspecialchars($event['club_name']); ?>
+        <?php if (!empty($event['sponsor_name'])): ?>
+          • Sponsored by <?php echo htmlspecialchars($event['sponsor_name']); ?>
+        <?php endif; ?>
+      </span>
     </div>
 
-    <aside class="side-card">
-      <h3>Tickets & Notes</h3>
-      <p class="tagline">General admission is free. Seats are first-come, first-served.</p>
-      <ul style="margin:10px 0 0 18px; line-height:1.7;">
-        <li>Please bring your student ID.</li>
-        <li>QR check-in available at entrance.</li>
-        <li>Snacks & coffee inprovided.</li>
-      </ul>
-    </aside>
-  </section>
+    <figure class="hero">
+      <?php if (!empty($event['banner_image'])): ?>
+        <img src="<?php echo htmlspecialchars($event['banner_image']); ?>"
+             alt="Event banner">
+      <?php else: ?>
+        <img src="https://images.unsplash.com/photo-1551836022-d5d88e9218df?q=80&w=1600&auto=format&fit=crop"
+             alt="Students attending an event">
+      <?php endif; ?>
+      <figcaption class="credit">Photo: CCH Media</figcaption>
+    </figure>
 
-  <!-- DESCRIPTION -->
-  <article class="content">
-    <p class="lead">
-      A hands-on evening to explore analytics, club growth tactics, and tech demos built on Campus Clubs Hub.
-      Meet student leaders, exchange ideas, and discover what’s launching next.
-    </p>
+    <section class="summary">
+      <div class="info">
+        <div class="info-grid">
+          <div class="info-item">
+            <div class="icon">🗓</div>
+            <div>
+              <b>When</b>
+              <span id="whenText">
+                <?php echo htmlspecialchars(formatWhenFull($event['starting_date'], $event['ending_date'])); ?>
+              </span>
+            </div>
+          </div>
+          <div class="info-item">
+            <div class="icon">📍</div>
+            <div>
+              <b>Where</b>
+              <span id="whereText">
+                <?php
+                  echo htmlspecialchars(
+                    $event['event_location'] ?: 'Location to be announced'
+                  );
+                ?>
+              </span>
+            </div>
+          </div>
+          <div class="info-item">
+            <div class="icon">🏷</div>
+            <div>
+              <b>Category</b>
+              <span>Campus Event • Workshop</span>
+            </div>
+          </div>
+          <div class="info-item">
+            <div class="icon">🤝</div>
+            <div>
+              <b>Sponsored by</b>
+              <span>
+                <?php echo htmlspecialchars($event['sponsor_name'] ?: 'No sponsor listed'); ?>
+              </span>
+            </div>
+          </div>
+        </div>
 
-    <p>
-      The meetup features practical mini-workshops on event analytics, loyalty points, and cross-university
-      collaboration. You’ll learn how to interpret engagement peaks, configure ranking signals, and package
-      sponsor-ready highlight summaries after each event.
-    </p>
-    <!-- Map -->
-    <div class="map-wrap">
-      <h2 style="color:var(--navy); margin:0 0 12px;">Location</h2>
-      <!-- Replace q= with your exact venue -->
-      <iframe
-        class="map"
-        loading="lazy"
-        referrerpolicy="no-referrer-when-downgrade"
-        src="https://www.google.com/maps?q=Jordan%20University%20Innovation%20Hall&output=embed">
-      </iframe>
-    </div>
+        <div class="cta">
+          <button class="btn primary" id="addCalBtn">Add to Calendar</button>
+          <button class="btn ghost" id="shareBtn">Share</button>
+        </div>
+      </div>
 
-  </article>
+      <aside class="side-card">
+        <h3>Tickets & Notes</h3>
+        <p class="tagline">General admission is free. Seats are first-come, first-served.</p>
+        <ul style="margin:10px 0 0 18px; line-height:1.7;">
+          <li>Please bring your student ID.</li>
+          <li>QR check-in available at entrance.</li>
+          <li>Snacks & coffee provided.</li>
+        </ul>
+      </aside>
+    </section>
 
+    <article class="content">
+      <p class="lead">
+        <?php echo htmlspecialchars($event['description'] ?: 'Event description will be added soon.'); ?>
+      </p>
+
+      <div class="map-wrap">
+        <h2 style="color:var(--navy); margin:0 0 12px;">Location</h2>
+        <iframe
+          class="map"
+          loading="lazy"
+          referrerpolicy="no-referrer-when-downgrade"
+          src="https://www.google.com/maps?q=<?php echo urlencode($event['event_location'] ?: 'Jordan University'); ?>&output=embed">
+        </iframe>
+      </div>
+    </article>
+  <?php endif; ?>
 </main>
 
-<!-- FOOTER -->
 <?php include('footer.php'); ?>
 
 <script>
-/* ========= Interactions ========= */
-
-// Share (uses Web Share API when available; falls back to copy)
+<?php if ($event): ?>
 document.getElementById('shareBtn').addEventListener('click', async () => {
   const shareData = {
-    title: 'CCH Tech & Innovation Meetup — Fall 2025',
-    text: 'Join me at the CCH Tech & Innovation Meetup!',
+    title: '<?php echo addslashes($event['event_name']); ?>',
+    text: 'Join me at this CCH event!',
     url: window.location.href
   };
   try{
@@ -267,19 +306,20 @@ document.getElementById('shareBtn').addEventListener('click', async () => {
       await navigator.clipboard.writeText(shareData.url);
       alert('Link copied to clipboard!');
     }
-  }catch(e){ console.log(e); }
+  }catch(e){}
 });
 
-// Add to Calendar (.ics generator)
 document.getElementById('addCalBtn').addEventListener('click', () => {
-  // Set your real event details here:
-  const title = 'CCH Tech & Innovation Meetup — Fall 2025';
-  const desc  = 'Hands-on workshops, panels, and networking across universities. Powered by CCH.';
-  const loc   = 'Amman, JU Main Campus — Innovation Hall';
-  // Time in local (Asia/Amman, UTC+3). Convert to YYYYMMDDTHHMMSS format.
-  // Example: Nov 20, 2025 16:00–19:30 local time
-  const start = '20251120T160000';
-  const end   = '20251120T193000';
+  const title = '<?php echo addslashes($event['event_name']); ?>';
+  const desc  = '<?php echo addslashes($event['description'] ?? 'CCH event'); ?>';
+  const loc   = '<?php echo addslashes($event['event_location'] ?? 'Campus'); ?>';
+  const start = '<?php echo $event['starting_date'] ? (new DateTime($event['starting_date']))->format("Ymd\THis") : ""; ?>';
+  const end   = '<?php echo $event['ending_date'] ? (new DateTime($event['ending_date']))->format("Ymd\THis") : ""; ?>';
+
+  if(!start){
+    alert('Start date not set for this event yet.');
+    return;
+  }
 
   const ics =
 `BEGIN:VCALENDAR
@@ -289,7 +329,7 @@ CALSCALE:GREGORIAN
 METHOD:PUBLISH
 BEGIN:VEVENT
 DTSTART:${start}
-DTEND:${end}
+${end ? 'DTEND:'+end : ''}
 SUMMARY:${title}
 DESCRIPTION:${desc}
 LOCATION:${loc}
@@ -307,6 +347,7 @@ END:VCALENDAR`;
   a.remove();
   URL.revokeObjectURL(url);
 });
+<?php endif; ?>
 </script>
 
 </body>
