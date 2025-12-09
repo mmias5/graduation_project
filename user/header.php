@@ -1,16 +1,56 @@
 <?php
+// ----- Session + Login Guard -----
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-$currentPage = basename($_SERVER['PHP_SELF']);
-?>
 
+// لازم يكون داخل كـ student أو club_president
+if (
+    !isset($_SESSION['student_id']) ||
+    !isset($_SESSION['role']) ||
+    !in_array($_SESSION['role'], ['student', 'club_president'])
+) {
+    // header موجود داخل فولدر user/
+    header('Location: ../login.php');
+    exit;
+}
+
+$currentPage = basename($_SERVER['PHP_SELF']);
+
+// ----- DB Connection -----
+require_once __DIR__ . '/../config.php';
+
+// ----- Fetch logged-in student info -----
+$studentId    = (int) $_SESSION['student_id'];
+$studentName  = $_SESSION['student_name']  ?? 'Student';
+$totalPoints  = $_SESSION['total_points']  ?? 0;
+
+// نحاول نجيب آخر قيمة من جدول student
+if (isset($conn) && $conn instanceof mysqli) {
+    $stmt = $conn->prepare("
+        SELECT student_name, total_points
+        FROM student
+        WHERE student_id = ?
+        LIMIT 1
+    ");
+    if ($stmt) {
+        $stmt->bind_param("i", $studentId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        if ($row = $result->fetch_assoc()) {
+            $studentName = $row['student_name'];
+            $totalPoints = (int) $row['total_points'];
+        }
+        $stmt->close();
+    }
+}
+?>
 <!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>CCH — Header + Sidebar + Hover Dropdowns</title>
+<title>CCH — Student Portal</title>
 
 <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;600;700;800&display=swap" rel="stylesheet">
 
@@ -81,7 +121,7 @@ $currentPage = basename($_SERVER['PHP_SELF']);
   .user-icon{ width:28px; height:28px; border-radius:50%; display:grid; place-items:center; border:2px solid #f4df6d; }
   .menu-btn{ background:transparent; border:0; padding:8px; border-radius:10px; cursor:pointer; }
   .menu-btn:hover{ background:rgba(255,255,255,.08) }
-  .menu-btn:focus-visible{ outline:2px solid var(--sun); outline-offset:2px }
+  .menu-btn:focus-visible{ outline:2px solid(var(--sun)); outline-offset:2px }
 
   .underbar{ max-width:1200px; margin:0 auto; padding:18px 16px 28px; }
 
@@ -266,7 +306,9 @@ $currentPage = basename($_SERVER['PHP_SELF']);
             <path d="M20 21a8 8 0 1 0-16 0"></path><circle cx="12" cy="7" r="4"></circle>
           </svg>
         </span>
-        <span id="activeUser" class="display">User</span>
+        <span id="activeUser" class="display">
+          <?php echo htmlspecialchars($studentName); ?>
+        </span>
       </div>
       <button id="menuToggle" class="menu-btn" aria-label="Open menu">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f4df6d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -291,7 +333,9 @@ $currentPage = basename($_SERVER['PHP_SELF']);
       </div>
       <div style="display:flex; flex-direction:column;">
         <div style="display:flex; align-items:center; gap:8px;">
-          <div id="sideTitle" class="user-name display">User</div>
+          <div id="sideTitle" class="user-name display">
+            <?php echo htmlspecialchars($studentName); ?>
+          </div>
           <!-- Edit profile button -->
           <a href="editprofile.php"
              style="display:flex; align-items:center; justify-content:center; width:22px; height:22px;
@@ -304,7 +348,10 @@ $currentPage = basename($_SERVER['PHP_SELF']);
             </svg>
           </a>
         </div>
-        <div class="points" id="points"><span aria-hidden="true">⭐</span><span><strong>120</strong> pts</span></div>
+        <div class="points" id="points">
+          <span aria-hidden="true">⭐</span>
+          <span><strong><?php echo number_format($totalPoints); ?></strong> pts</span>
+        </div>
       </div>
     </div>
     <div class="sidebar-content" id="sideDesc">

@@ -1,8 +1,8 @@
 <?php
 session_start();
 
+// فقط الطالب العادي (مش الرئيس) يدخل هون
 if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
-    // لو بدك تخلي الـ president يدخل على صفحة مختلفة
     if (isset($_SESSION['role']) && $_SESSION['role'] === 'club_president') {
         header('Location: ../president/index.php');
         exit;
@@ -10,6 +10,127 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
     header('Location: ../login.php');
     exit;
 }
+
+require_once __DIR__ . '/../config.php';
+
+$studentId = (int) $_SESSION['student_id'];
+
+$successMessage = '';
+$errorMessage   = '';
+
+// ---------- جلب بيانات الطالب ----------
+$stmt = $conn->prepare("
+    SELECT student_id, student_name, email, major, role, profile_photo
+    FROM student
+    WHERE student_id = ?
+    LIMIT 1
+");
+$stmt->bind_param("i", $studentId);
+$stmt->execute();
+$result  = $stmt->get_result();
+$student = $result->fetch_assoc();
+$stmt->close();
+
+if (!$student) {
+    // لو صار اشي غلط
+    $errorMessage = 'Student not found.';
+    $student = [
+        'student_id'    => $studentId,
+        'student_name'  => 'Student',
+        'email'         => '',
+        'major'         => '',
+        'role'          => 'student',
+        'profile_photo' => null,
+    ];
+}
+
+// مسارات الصور
+$defaultAvatarUrl = 'tools/pics/default-avatar.png'; // حطي صورة افتراضية بهالمسار
+$avatarUrl        = !empty($student['profile_photo'])
+    ? '../uploads/students/' . $student['profile_photo']
+    : $defaultAvatarUrl;
+
+// ---------- معالجة الفورم (رفع / إزالة الصورة) ----------
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_profile'])) {
+
+    // تحديث بيانات من DB من جديد (للتأكد من آخر صورة)
+    $currentPhoto = $student['profile_photo'];
+
+    $removePhoto = isset($_POST['remove_photo']) && $_POST['remove_photo'] === '1';
+    $hasFile     = isset($_FILES['profile_photo']) && $_FILES['profile_photo']['error'] !== UPLOAD_ERR_NO_FILE;
+
+    // مجلد الرفع
+    $uploadDir = __DIR__ . '/../uploads/students/';
+    if (!is_dir($uploadDir)) {
+        @mkdir($uploadDir, 0775, true);
+    }
+
+    // لو المستخدم اختار إزالة الصورة
+    if ($removePhoto) {
+        if ($currentPhoto) {
+            $oldPath = $uploadDir . $currentPhoto;
+            if (is_file($oldPath)) {
+                @unlink($oldPath);
+            }
+        }
+
+        $stmt = $conn->prepare("UPDATE student SET profile_photo = NULL WHERE student_id = ?");
+        $stmt->bind_param("i", $studentId);
+        $stmt->execute();
+        $stmt->close();
+
+        $student['profile_photo'] = null;
+        $avatarUrl = $defaultAvatarUrl;
+        $successMessage = 'Profile photo removed successfully.';
+    }
+    // لو في صورة جديدة مرفوعة
+    elseif ($hasFile) {
+        $file     = $_FILES['profile_photo'];
+        $allowed  = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
+        $maxSize  = 2 * 1024 * 1024; // 2MB
+
+        if ($file['error'] !== UPLOAD_ERR_OK) {
+            $errorMessage = 'Error uploading file.';
+        } elseif (!array_key_exists($file['type'], $allowed)) {
+            $errorMessage = 'Only JPG, PNG, or WEBP images are allowed.';
+        } elseif ($file['size'] > $maxSize) {
+            $errorMessage = 'File is too large. Max size is 2MB.';
+        } else {
+            $ext      = $allowed[$file['type']];
+            $newName  = 'student_' . $studentId . '_' . time() . '.' . $ext;
+            $destPath = $uploadDir . $newName;
+
+            if (move_uploaded_file($file['tmp_name'], $destPath)) {
+                // احذف القديمة لو موجودة
+                if ($currentPhoto) {
+                    $oldPath = $uploadDir . $currentPhoto;
+                    if (is_file($oldPath)) {
+                        @unlink($oldPath);
+                    }
+                }
+
+                // حدّث DB
+                $stmt = $conn->prepare("UPDATE student SET profile_photo = ? WHERE student_id = ?");
+                $stmt->bind_param("si", $newName, $studentId);
+                $stmt->execute();
+                $stmt->close();
+
+                $student['profile_photo'] = $newName;
+                $avatarUrl = '../uploads/students/' . $newName;
+                $successMessage = 'Profile photo updated successfully.';
+            } else {
+                $errorMessage = 'Could not save uploaded file.';
+            }
+        }
+    } else {
+        // لو كبس Save بدون ما يغيّر اشي
+        $successMessage = 'Nothing to update.';
+    }
+}
+
+// role label
+$roleLabel = ($student['role'] === 'club_president') ? 'Club President' : 'Student Member';
+$joinedLabel = 'Joined — ' . date('Y'); // ما عنا عمود join_date فاستعملنا السنة الحالية
 ?>
 
 <!doctype html>
@@ -53,7 +174,7 @@ body{
 }
 .hero-inner{
   position:relative;z-index:1;width:100%;
-  display:grid;grid-template-columns:170px 1fr; /* balanced size (same as profile page) */
+  display:grid;grid-template-columns:170px 1fr;
   gap:20px;align-items:flex-end;padding:24px 22px 26px;
 }
 @media (max-width:720px){
@@ -153,6 +274,24 @@ body{
   font-weight:700;
 }
 
+/* alerts */
+.alert{
+  margin-bottom:16px;
+  padding:10px 14px;
+  border-radius:12px;
+  font-size:14px;
+}
+.alert-success{
+  background:#ecfdf3;
+  border:1px solid #bbf7d0;
+  color:#166534;
+}
+.alert-error{
+  background:#fef2f2;
+  border:1px solid #fecaca;
+  color:#991b1b;
+}
+
 /* bottom actions */
 .form-actions{
   display:flex;
@@ -188,111 +327,104 @@ body{
 
 <div class="wrap">
 
-  <!-- HERO -->
-  <section class="hero">
-    <div class="hero-inner">
-      <div class="avatar-wrap">
-        <img id="avatar" class="avatar" src="" alt="Member avatar">
-        <div class="avatar-actions">
-          <button type="button" id="changePhotoBtn" class="chip-btn">Change Photo</button>
-          <button type="button" id="removePhotoBtn" class="chip-btn secondary">Remove</button>
+  <?php if ($successMessage): ?>
+    <div class="alert alert-success"><?php echo htmlspecialchars($successMessage); ?></div>
+  <?php endif; ?>
+
+  <?php if ($errorMessage): ?>
+    <div class="alert alert-error"><?php echo htmlspecialchars($errorMessage); ?></div>
+  <?php endif; ?>
+
+  <form action="editprofile.php" method="post" enctype="multipart/form-data">
+    <!-- HERO -->
+    <section class="hero">
+      <div class="hero-inner">
+        <div class="avatar-wrap">
+          <img id="avatar" class="avatar"
+               src="<?php echo htmlspecialchars($avatarUrl); ?>"
+               alt="Member avatar">
+
+          <div class="avatar-actions">
+            <button type="button" id="changePhotoBtn" class="chip-btn">Change Photo</button>
+            <button type="button" id="removePhotoBtn" class="chip-btn secondary">Remove</button>
+          </div>
+
+          <input type="file" name="profile_photo" id="photoInput" accept="image/*" style="display:none">
+          <input type="hidden" name="remove_photo" id="removePhotoFlag" value="0">
         </div>
 
-        <input type="file" id="photoInput" accept="image/*" style="display:none">
-      </div>
-
-      <div>
-        <h2 id="name" class="name">Member Name</h2>
-        <div id="email" class="sub">email@university.edu</div>
-        <div class="badges">
-          <span id="role" class="role">President</span>
-          <span id="joined" class="joined">Joined — 2025-01-01</span>
+        <div>
+          <h2 id="name" class="name">
+            <?php echo htmlspecialchars($student['student_name']); ?>
+          </h2>
+          <div id="email" class="sub">
+            <?php echo htmlspecialchars($student['email']); ?>
+          </div>
+          <div class="badges">
+            <span id="role" class="role">
+              <?php echo htmlspecialchars($roleLabel); ?>
+            </span>
+            <span id="joined" class="joined">
+              <?php echo htmlspecialchars($joinedLabel); ?>
+            </span>
+          </div>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- ABOUT INFO -->
-  <section class="card">
-    <h3>Member Info</h3>
-    <div class="grid">
-      <div class="kv"><b>Full name</b><span id="aboutName">—</span></div>
-      <div class="kv"><b>Email</b><span id="aboutEmail">—</span></div>
-      <div class="kv"><b>Major</b><span id="major">—</span></div>
-      <div class="kv"><b>Student ID</b><span id="studentId">—</span></div>
-    </div>
+    <!-- ABOUT INFO -->
+    <section class="card">
+      <h3>Member Info</h3>
+      <div class="grid">
+        <div class="kv"><b>Full name</b><span id="aboutName"><?php echo htmlspecialchars($student['student_name']); ?></span></div>
+        <div class="kv"><b>Email</b><span id="aboutEmail"><?php echo htmlspecialchars($student['email']); ?></span></div>
+        <div class="kv"><b>Major</b><span id="major"><?php echo htmlspecialchars($student['major'] ?: '—'); ?></span></div>
+        <div class="kv"><b>Student ID</b><span id="studentId"><?php echo htmlspecialchars($student['student_id']); ?></span></div>
+      </div>
 
-    <div class="form-actions">
-      <button type="button" class="btn ghost" onclick="window.location.href='index.php'">Cancel</button>
-      <button type="button" id="saveBtn" class="btn primary">Save Changes</button>
-    </div>
-  </section>
+      <div class="form-actions">
+        <button type="button" class="btn ghost" onclick="window.location.href='index.php'">Cancel</button>
+        <button type="submit" name="save_profile" class="btn primary">Save Changes</button>
+      </div>
+    </section>
+
+  </form>
 
 </div>
 
 <?php include 'footer.php'; ?>
 
 <script>
-const MOCK = Array.from({length:10}).map((_,i)=>({
-  id:i+1,
-  name:['Lina','Omar','Sara','Mustafa','Noor','Jad','Maya','Hiba','Yousef','Rami'][i],
-  email:`member${i+1}@university.edu`,
-  major:['CS','IT','Business','Design'][i%4],
-  studentId:`02257${50 + i}`,
-  role:['President','Member'][i%2],
-  joined:`2025-0${(i%9)+1}-${String(((i*3)%28)+1).padStart(2,'0')}`,
-  avatar:`https://i.pravatar.cc/200?img=${(i%70)+1}`
-}));
+const avatarEl      = document.getElementById('avatar');
+const changeBtn     = document.getElementById('changePhotoBtn');
+const removeBtn     = document.getElementById('removePhotoBtn');
+const fileInput     = document.getElementById('photoInput');
+const removeFlag    = document.getElementById('removePhotoFlag');
+const defaultAvatar = "<?php echo addslashes($defaultAvatarUrl); ?>";
 
-const defaultPlaceholder =
-  'https://images.unsplash.com/photo-1527980965255-d3b416303d12?auto=format&fit=crop&w=600&q=80';
+// افتح اختيار ملف
+changeBtn.addEventListener('click', () => {
+  fileInput.click();
+});
 
-const id = Number(new URLSearchParams(location.search).get('id')) || 1;
-const m = MOCK.find(x=>x.id===id) || MOCK[0];
-
-const avatarEl = document.getElementById('avatar');
-avatarEl.src = m.avatar;
-
-document.getElementById('name').textContent = m.name;
-document.getElementById('email').textContent = m.email;
-document.getElementById('role').textContent = m.role;
-document.getElementById('joined').textContent = 'Joined — ' + m.joined;
-
-document.getElementById('aboutName').textContent = m.name;
-document.getElementById('aboutEmail').textContent = m.email;
-document.getElementById('major').textContent = m.major;
-document.getElementById('studentId').textContent = m.studentId;
-
-// Photo selection logic
-const changeBtn = document.getElementById('changePhotoBtn');
-const removeBtn = document.getElementById('removePhotoBtn');
-const fileInput = document.getElementById('photoInput');
-const saveBtn = document.getElementById('saveBtn');
-
-let pendingPhotoDataUrl = null;
-
-changeBtn.addEventListener('click', () => fileInput.click());
-
+// معاينة الصورة الجديدة
 fileInput.addEventListener('change', () => {
   const file = fileInput.files[0];
   if (!file) return;
 
   const reader = new FileReader();
   reader.onload = e => {
-    pendingPhotoDataUrl = e.target.result;
-    avatarEl.src = pendingPhotoDataUrl;
+    avatarEl.src = e.target.result;
+    removeFlag.value = "0"; // أكيد ما عاد بدنا remove
   };
   reader.readAsDataURL(file);
 });
 
+// إزالة الصورة (يرجع للصورة الافتراضية)
 removeBtn.addEventListener('click', () => {
-  pendingPhotoDataUrl = null;
-  avatarEl.src = defaultPlaceholder;
-  alert('Preview: photo removed. Save changes to confirm.');
-});
-
-saveBtn.addEventListener('click', () => {
-  alert('Front-end demo: here you would save to server.');
+  fileInput.value = "";
+  avatarEl.src = defaultAvatar;
+  removeFlag.value = "1";
 });
 </script>
 
