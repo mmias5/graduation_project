@@ -2,7 +2,6 @@
 session_start();
 
 if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
-    // لو بدك تخلي الـ president يدخل على صفحة مختلفة
     if (isset($_SESSION['role']) && $_SESSION['role'] === 'club_president') {
         header('Location: ../president/index.php');
         exit;
@@ -10,18 +9,61 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
     header('Location: ../login.php');
     exit;
 }
-?>
 
+require_once '../config.php';
+
+$student_id = $_SESSION['student_id'];
+
+// ============================
+// 1) نحضر club_id الخاص بالطالب
+// ============================
+$student_club_id = 1; // default = No Club / Not Assigned
+$stmt = $conn->prepare("SELECT club_id FROM student WHERE student_id = ? LIMIT 1");
+if ($stmt) {
+    $stmt->bind_param("i", $student_id);
+    $stmt->execute();
+    $stmt->bind_result($student_club_id_db);
+    if ($stmt->fetch()) {
+        $student_club_id = (int)$student_club_id_db;
+    }
+    $stmt->close();
+}
+
+// ============================
+// 2) نحضر كل الأندية (active) من جدول club
+// ============================
+$clubs = [];
+$categories_map = [];
+
+$sql = "
+    SELECT club_id, club_name, description, category, logo, member_count, points, status
+    FROM club
+    WHERE status = 'active' AND club_id <> 1
+    ORDER BY club_name
+";
+$res = $conn->query($sql);
+if ($res && $res->num_rows > 0) {
+    while ($row = $res->fetch_assoc()) {
+        $clubs[] = $row;
+        if (!empty($row['category'])) {
+            $categories_map[$row['category']] = true;
+        }
+    }
+}
+
+$categories = array_keys($categories_map);
+sort($categories);
+?>
 <!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>CCH — Header + Sidebar + Hover Dropdowns</title>
+<title>CCH — Discover Clubs</title>
 
 <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;600;700;800&display=swap" rel="stylesheet">
 <?php include 'header.php'; ?>
-<!-- ✅ START — Discover Clubs Section -->
+
 <style>
   :root{
     --c-navy:#2B3751;
@@ -40,12 +82,11 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
     font-display:swap;
   }
 
-  /* removed redundant @import - font already loaded in head */
-
   html,body{
     margin:0;height:100%;
-    background: radial-gradient(1200px 800px at -10% 50%, rgba(168,186,240,.35), transparent 60%),
-    radial-gradient(900px 700px at 110% 60%, rgba(72,113,219,.20), transparent 60%)
+    background:
+      radial-gradient(1200px 800px at -10% 50%, rgba(168,186,240,.35), transparent 60%),
+      radial-gradient(900px 700px at 110% 60%, rgba(72,113,219,.20), transparent 60%);
     background-repeat:no-repeat;
     background-size:cover;
     font-family:"Raleway",sans-serif;
@@ -75,7 +116,6 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
     font-weight:800;
   }
 
-  /* ✅ Toolbar: search + dropdown */
   .clubs-toolbar{
     display:grid;
     grid-template-columns:1fr 210px;
@@ -99,7 +139,6 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
     box-shadow: 0 0 0 3px rgba(72,113,219,.15);
   }
 
-  /* ✅ Custom dropdown */
   .cat-dd{
     position:relative;
     width:210px;
@@ -156,7 +195,6 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
     .cat-dd{ width:100%; }
   }
 
-  /* ✅ Clubs grid */
   .club-grid{
     display:grid;
     gap:16px;
@@ -214,18 +252,15 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
   }
 
   .club-desc{
-  margin:6px 2px 8px;
-  font-size:13px;
-  line-height:1.45;
-  overflow:hidden;
-
-  /* line clamp (standard + webkit) */
-  line-clamp: 2;                 /* ✅ standard */
-  display: -webkit-box;          /* required for webkit */
-  -webkit-line-clamp: 2;         /* ✅ webkit */
-  -webkit-box-orient: vertical;  /* required for webkit */
-}
-
+    margin:6px 2px 8px;
+    font-size:13px;
+    line-height:1.45;
+    overflow:hidden;
+    line-clamp: 2;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
 
   .club-meta{
     margin-top:auto;
@@ -240,11 +275,10 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
 
     <h2 class="clubs-title">Your Next Adventure Starts Here — Join a Club You’ll Love!</h2>
 
-    <!-- ✅ Toolbar -->
+    <!-- Toolbar -->
     <div class="clubs-toolbar">
       <input id="clubSearch" class="input" placeholder="Search clubs…" />
 
-      <!-- ✅ Custom dropdown -->
       <div class="cat-dd">
         <button id="catBtn" class="cat-btn">
           <span id="catLabel">All categories</span>
@@ -253,125 +287,61 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
 
         <div id="catMenu" class="cat-menu">
           <div class="cat-item active" data-value="all">All categories</div>
-          <div class="cat-item" data-value="Technology">Technology</div>
-          <div class="cat-item" data-value="Sports">Sports</div>
-          <div class="cat-item" data-value="Arts">Arts</div>
-          <div class="cat-item" data-value="Community">Community</div>
-          <div class="cat-item" data-value="Science">Science</div>
+          <?php foreach ($categories as $cat): ?>
+            <div class="cat-item" data-value="<?php echo htmlspecialchars($cat); ?>">
+              <?php echo htmlspecialchars($cat); ?>
+            </div>
+          <?php endforeach; ?>
         </div>
       </div>
     </div>
 
-    <!-- ✅ Clubs Grid -->
+    <!-- Clubs Grid -->
     <div class="club-grid" id="clubGrid">
-
-      <a class="club-card-link" href="#" data-category="Technology">
-        <article class="club-card">
-          <div class="club-head">
-            <div class="club-id">
-              <img class="club-logo" src="assets/images/clubs/club1.png">
-              <div class="club-title">
-                <h3>AI & Robotics Club</h3>
-                <small>Sponsored by <span class="sponsor">TechCorp</span></small>
+      <?php if (empty($clubs)): ?>
+        <p>No clubs available yet.</p>
+      <?php else: ?>
+        <?php foreach ($clubs as $club): 
+          $cat = $club['category'] ?: 'Other';
+          $logo = !empty($club['logo']) ? $club['logo'] : 'assets/images/clubs/default.png';
+        ?>
+          <a class="club-card-link"
+             href="clubpage.php?club_id=<?php echo (int)$club['club_id']; ?>"
+             data-category="<?php echo htmlspecialchars($cat); ?>">
+            <article class="club-card">
+              <div class="club-head">
+                <div class="club-id">
+                  <img class="club-logo"
+                       src="<?php echo htmlspecialchars($logo); ?>"
+                       alt="<?php echo htmlspecialchars($club['club_name']); ?>">
+                  <div class="club-title">
+                    <h3><?php echo htmlspecialchars($club['club_name']); ?></h3>
+                    <small><?php echo htmlspecialchars($cat); ?></small>
+                  </div>
+                </div>
+                <span class="category-chip"><?php echo htmlspecialchars($cat); ?></span>
               </div>
-            </div>
-            <span class="category-chip">Technology</span>
-          </div>
-          <p class="club-desc">Build robots, compete in challenges, and learn cutting-edge AI.</p>
-          <div class="club-meta">
-            <span>Member: 120</span><span>Events: 15</span><span>Points: 555</span>
-          </div>
-        </article>
-      </a>
-
-      <a class="club-card-link" href="#" data-category="Sports">
-        <article class="club-card">
-          <div class="club-head">
-            <div class="club-id">
-              <img class="club-logo" src="assets/images/clubs/club2.png">
-              <div class="club-title">
-                <h3>Campus Runners</h3>
-                <small>Sponsored by <span class="sponsor">FitLife</span></small>
+              <p class="club-desc">
+                <?php echo htmlspecialchars($club['description']); ?>
+              </p>
+              <div class="club-meta">
+                <span>Members: <?php echo (int)$club['member_count']; ?></span>
+                <span>Points: <?php echo (int)$club['points']; ?></span>
               </div>
-            </div>
-            <span class="category-chip">Sports</span>
-          </div>
-          <p class="club-desc">Weekly runs, marathon training, and fitness challenges.</p>
-          <div class="club-meta">
-            <span>Member: 98</span><span>Events: 22</span><span>Points: 610</span>
-          </div>
-        </article>
-      </a>
-
-      <a class="club-card-link" href="#" data-category="Arts">
-        <article class="club-card">
-          <div class="club-head">
-            <div class="club-id">
-              <img class="club-logo" src="assets/images/clubs/club3.png">
-              <div class="club-title">
-                <h3>Creative Studio</h3>
-                <small>Sponsored by <span class="sponsor">ArtWorks</span></small>
-              </div>
-            </div>
-            <span class="category-chip">Arts</span>
-          </div>
-          <p class="club-desc">Design, art, illustration and creative collaboration.</p>
-          <div class="club-meta">
-            <span>Member: 140</span><span>Events: 18</span><span>Points: 530</span>
-          </div>
-        </article>
-      </a>
-
-      <a class="club-card-link" href="#" data-category="Community">
-        <article class="club-card">
-          <div class="club-head">
-            <div class="club-id">
-              <img class="club-logo" src="assets/images/clubs/club4.png">
-              <div class="club-title">
-                <h3>Volunteer Circle</h3>
-                <small>Sponsored by <span class="sponsor">CarePlus</span></small>
-              </div>
-            </div>
-            <span class="category-chip">Community</span>
-          </div>
-          <p class="club-desc">Volunteer projects and charity events across campus.</p>
-          <div class="club-meta">
-            <span>Member: 200</span><span>Events: 35</span><span>Points: 890</span>
-          </div>
-        </article>
-      </a>
-
-      <a class="club-card-link" href="#" data-category="Science">
-        <article class="club-card">
-          <div class="club-head">
-            <div class="club-id">
-              <img class="club-logo" src="assets/images/clubs/club5.png">
-              <div class="club-title">
-                <h3>Astronomy Society</h3>
-                <small>Sponsored by <span class="sponsor">StarLab</span></small>
-              </div>
-            </div>
-            <span class="category-chip">Science</span>
-          </div>
-          <p class="club-desc">Stargazing nights, telescopes and science talks.</p>
-          <div class="club-meta">
-            <span>Member: 85</span><span>Events: 12</span><span>Points: 410</span>
-          </div>
-        </article>
-      </a>
-
+            </article>
+          </a>
+        <?php endforeach; ?>
+      <?php endif; ?>
     </div>
   </div>
 </section>
 
-<!-- ✅ JavaScript (search + category dropdown filtering) -->
 <script>
   let selectedCategory = "all";
 
   const searchInput = document.getElementById("clubSearch");
   const clubCards = [...document.querySelectorAll(".club-card-link")];
 
-  // ----- Custom dropdown -----
   const catBtn = document.getElementById("catBtn");
   const catMenu = document.getElementById("catMenu");
   const catLabel = document.getElementById("catLabel");
@@ -400,27 +370,23 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
     });
   });
 
-  // ✅ Filtering
-function applyFilters(){
-  const q = searchInput.value.toLowerCase().trim();
+  function applyFilters(){
+    const q = searchInput.value.toLowerCase().trim();
 
-  clubCards.forEach(card => {
-    const name = card.querySelector("h3").textContent.toLowerCase();
-    const cat = card.dataset.category;
+    clubCards.forEach(card => {
+      const name = card.querySelector("h3").textContent.toLowerCase();
+      const cat = card.dataset.category;
 
-    const matchText = !q || name.includes(q);   // ✅ ONLY checks title
-    const matchCat  = selectedCategory === "all" || selectedCategory === cat;
+      const matchText = !q || name.includes(q);
+      const matchCat  = selectedCategory === "all" || selectedCategory === cat;
 
-    card.style.display = (matchText && matchCat) ? "" : "none";
-  });
-}
-
+      card.style.display = (matchText && matchCat) ? "" : "none";
+    });
+  }
 
   searchInput.addEventListener("input", applyFilters);
 </script>
 
-<!-- ✅ END — Discover Clubs Section -->
 <?php include 'footer.php'; ?>
-<!--end footer-->
 </body>
 </html>
