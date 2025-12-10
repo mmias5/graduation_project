@@ -5,86 +5,110 @@ if (!isset($_SESSION['admin_id'])) {
     exit;
 }
 
+require_once '../config.php';
+
 // ===============================
-// Dummy Data for Edit Requests UI
+// Handle Approve / Reject actions
 // ===============================
-$editRequests = [
-    [
-        "id" => 1,
-        "title" => "Tech Hack Night",
-        "club_name" => "Computer Science Club",
-        "requested_by" => "Ahmad Yousef",
-        "created_at" => "2025-01-08 11:20:00",
-        "original" => [
-            "date" => "2025-01-12",
-            "start_time" => "06:00 PM",
-            "end_time" => "10:00 PM",
-            "location" => "Main Hall / Room 1204",
-            "category" => "Technology",
-            "sponsor" => "TechCorp",
-            "description" => "A night full of coding challenges and teamwork."
-        ],
-        "proposed" => [
-            "date" => "2025-01-13",
-            "start_time" => "05:30 PM",
-            "end_time" => "10:30 PM",
-            "location" => "Innovation Lab / Room 220",
-            "category" => "Technology",
-            "sponsor" => "TechCorp",
-            "description" => "Extended hack night with more teams and a short keynote at the beginning."
-        ]
-    ],
-    [
-        "id" => 2,
-        "title" => "Art & Creativity Day",
-        "club_name" => "Arts Club",
-        "requested_by" => "Dana Khalil",
-        "created_at" => "2025-01-18 15:05:00",
-        "original" => [
-            "date" => "2025-02-02",
-            "start_time" => "02:00 PM",
-            "end_time" => "06:00 PM",
-            "location" => "Art Center - Building B",
-            "category" => "Art",
-            "sponsor" => "",
-            "description" => "Students showcase their drawings and photography."
-        ],
-        "proposed" => [
-            "date" => "2025-02-02",
-            "start_time" => "03:00 PM",
-            "end_time" => "07:00 PM",
-            "location" => "Art Center - Building B",
-            "category" => "Art & Culture",
-            "sponsor" => "Creative Studio",
-            "description" => "Updated agenda with live painting corner and a small sponsorship booth."
-        ]
-    ],
-    [
-        "id" => 3,
-        "title" => "Business Networking Meetup",
-        "club_name" => "Business Club",
-        "requested_by" => "Lana Saadeh",
-        "created_at" => "2025-01-22 10:40:00",
-        "original" => [
-            "date" => "2025-03-14",
-            "start_time" => "11:00 AM",
-            "end_time" => "01:00 PM",
-            "location" => "Auditorium C",
-            "category" => "Business",
-            "sponsor" => "Jordan Bank",
-            "description" => "Students meet business professionals and listen to a panel discussion."
-        ],
-        "proposed" => [
-            "date" => "2025-03-14",
-            "start_time" => "11:00 AM",
-            "end_time" => "02:00 PM",
-            "location" => "Auditorium C",
-            "category" => "Business",
-            "sponsor" => "Jordan Bank",
-            "description" => "Panel discussion plus an extra networking coffee break at the end."
-        ]
-    ],
-];
+if (isset($_GET['action'], $_GET['id'])) {
+    $requestId = (int) $_GET['id'];
+
+    if ($_GET['action'] === 'approve') {
+        // 1) هات سطر الطلب من event_edit_request
+        $sqlReq = "SELECT * FROM event_edit_request WHERE request_id = $requestId";
+        $resReq = $conn->query($sqlReq);
+
+        if ($resReq && $resReq->num_rows === 1) {
+            $req = $resReq->fetch_assoc();
+            $eventId = (int) $req['event_id'];
+
+            $updates = [];
+
+            if (!empty($req['new_event_name'])) {
+                $name = $conn->real_escape_string($req['new_event_name']);
+                $updates[] = "event_name = '$name'";
+            }
+
+            if (!empty($req['new_event_location'])) {
+                $loc = $conn->real_escape_string($req['new_event_location']);
+                $updates[] = "event_location = '$loc'";
+            }
+
+            if ($req['new_max_attendees'] !== null && $req['new_max_attendees'] !== '') {
+                $max = (int) $req['new_max_attendees'];
+                $updates[] = "max_attendees = $max";
+            }
+
+            if (!empty($req['new_starting_date'])) {
+                $start = $conn->real_escape_string($req['new_starting_date']);
+                $updates[] = "starting_date = '$start'";
+            }
+
+            if (!empty($req['new_ending_date'])) {
+                $end = $conn->real_escape_string($req['new_ending_date']);
+                $updates[] = "ending_date = '$end'";
+            }
+
+            if (!empty($req['new_description'])) {
+                $desc = $conn->real_escape_string($req['new_description']);
+                $updates[] = "description = '$desc'";
+            }
+
+            if (!empty($updates)) {
+                $sqlUpdate = "UPDATE event SET " . implode(', ', $updates) . " WHERE event_id = $eventId";
+                $conn->query($sqlUpdate);
+            }
+
+            $adminId = (int) $_SESSION['admin_id'];
+            $conn->query("
+                UPDATE event_edit_request
+                SET reviewed_at = NOW(), review_admin_id = $adminId
+                WHERE request_id = $requestId
+            ");
+        }
+
+        header('Location: ' . basename(__FILE__) . '?msg=approved');
+        exit;
+    }
+
+    if ($_GET['action'] === 'reject') {
+        // رفض = حذف الطلب
+        $conn->query("DELETE FROM event_edit_request WHERE request_id = $requestId");
+        header('Location: ' . basename(__FILE__) . '?msg=rejected');
+        exit;
+    }
+}
+
+// ===============================
+// Fetch pending edit requests
+// ===============================
+$editRequests = [];
+
+$sql = "
+    SELECT
+        eer.*,
+        e.event_name       AS current_event_name,
+        e.description      AS current_description,
+        e.event_location   AS current_location,
+        e.max_attendees    AS current_max_attendees,
+        e.starting_date    AS current_starting_date,
+        e.ending_date      AS current_ending_date,
+        c.club_name,
+        s.student_name     AS requested_by_name
+    FROM event_edit_request eer
+    JOIN event   e ON e.event_id = eer.event_id
+    LEFT JOIN club    c ON c.club_id    = e.club_id
+    LEFT JOIN student s ON s.student_id = eer.requested_by_student_id
+    WHERE eer.reviewed_at IS NULL
+    ORDER BY eer.submitted_at DESC
+";
+
+$res = $conn->query($sql);
+if ($res) {
+    while ($row = $res->fetch_assoc()) {
+        $editRequests[] = $row;
+    }
+}
 ?>
 <!doctype html>
 <html lang="en">
@@ -97,7 +121,7 @@ $editRequests = [
 
   <style>
     :root{
-      --sidebarWidth:240px; /* تأكدي إنها نفس القيمة العامة عندك */
+      --sidebarWidth:240px;
       --navy:#242751;
       --royal:#4871db;
       --coral:#ff5e5e;
@@ -120,7 +144,6 @@ $editRequests = [
       color:var(--ink);
     }
 
-    /* ======= Layout with sidebar ======= */
     .page-shell{
       margin-left:var(--sidebarWidth);
       min-height:100vh;
@@ -167,7 +190,6 @@ $editRequests = [
       background:var(--coral);
     }
 
-    /* Filter/search row */
     .toolbar{
       display:flex;
       justify-content:space-between;
@@ -197,7 +219,6 @@ $editRequests = [
       background:#ffffff;
     }
 
-    /* ======= Cards layout ======= */
     .requests-grid{
       display:flex;
       flex-direction:column;
@@ -305,6 +326,10 @@ $editRequests = [
       cursor:pointer;
       transition:.18s ease all;
       font-family:inherit;
+      text-decoration:none;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
     }
 
     .btn-approve{
@@ -352,7 +377,6 @@ $editRequests = [
 <body>
 
 <?php
-  // استدعي نفس السايدبار تبع admin
   include 'sidebar.php';
 ?>
 
@@ -380,18 +404,59 @@ $editRequests = [
     <?php if (!empty($editRequests)): ?>
       <?php foreach($editRequests as $row): ?>
         <?php
-          $searchText = strtolower(
-            $row['title'].' '.$row['club_name'].' '.$row['requested_by']
-          );
+          $cardTitle   = $row['new_event_name'] ?: $row['current_event_name'];
+          $clubName    = $row['club_name'] ?: '—';
+          $requestedBy = $row['requested_by_name'] ?: ('Student #'.$row['requested_by_student_id']);
+
+          $searchText = strtolower($cardTitle.' '.$clubName.' '.$requestedBy);
+
+          // Original values
+          $origName        = $row['current_event_name'];
+          $origLocation    = $row['current_location'];
+          $origMax         = $row['current_max_attendees'];
+          $origStart       = $row['current_starting_date'];
+          $origEnd         = $row['current_ending_date'];
+          $origDesc        = $row['current_description'];
+
+          // Proposed values (fallback to original لو NULL)
+          $propName     = $row['new_event_name']        ?: $origName;
+          $propLocation = $row['new_event_location']    ?: $origLocation;
+          $propMax      = ($row['new_max_attendees'] !== null && $row['new_max_attendees'] !== '')
+                          ? $row['new_max_attendees'] : $origMax;
+          $propStart    = $row['new_starting_date']     ?: $origStart;
+          $propEnd      = $row['new_ending_date']       ?: $origEnd;
+          $propDesc     = $row['new_description']       ?: $origDesc;
+
+          // Flags: فقط أحمر إذا في قيمة جديدة مش NULL ومختلفة
+          $nameChanged   = (!empty($row['new_event_name']) &&
+                            $row['new_event_name'] !== $origName);
+
+          $locChanged    = (!empty($row['new_event_location']) &&
+                            $row['new_event_location'] !== $origLocation);
+
+          $maxChanged    = ($row['new_max_attendees'] !== null &&
+                            $row['new_max_attendees'] !== '' &&
+                            (int)$row['new_max_attendees'] !== (int)$origMax);
+
+          $dateChanged   = (!empty($row['new_starting_date']) &&
+                            $row['new_starting_date'] !== $origStart);
+
+          $timeChanged   = (!empty($row['new_starting_date']) &&
+                            $row['new_starting_date'] !== $origStart) ||
+                           (!empty($row['new_ending_date']) &&
+                            $row['new_ending_date'] !== $origEnd);
+
+          $descChanged   = (!empty($row['new_description']) &&
+                            $row['new_description'] !== $origDesc);
         ?>
         <article class="request-card" data-search="<?php echo htmlspecialchars($searchText, ENT_QUOTES); ?>">
           <div class="request-header">
             <div>
-              <div class="request-title"><?php echo htmlspecialchars($row['title']); ?></div>
+              <div class="request-title"><?php echo htmlspecialchars($cardTitle); ?></div>
               <div class="request-meta-top">
-                <span>Club: <strong><?php echo htmlspecialchars($row['club_name']); ?></strong></span>
-                <span>Requested by: <?php echo htmlspecialchars($row['requested_by']); ?></span>
-                <span>Requested on: <?php echo htmlspecialchars(date('d M Y', strtotime($row['created_at']))); ?></span>
+                <span>Club: <strong><?php echo htmlspecialchars($clubName); ?></strong></span>
+                <span>Requested by: <?php echo htmlspecialchars($requestedBy); ?></span>
+                <span>Requested on: <?php echo htmlspecialchars(date('d M Y', strtotime($row['submitted_at']))); ?></span>
               </div>
             </div>
           </div>
@@ -401,43 +466,52 @@ $editRequests = [
             <div class="compare-column">
               <div class="column-title">Current Event</div>
 
-              <?php
-                $o = $row['original'];
-                $p = $row['proposed'];
-              ?>
-
-              <div class="field-row <?php echo ($o['date'] !== $p['date']) ? 'changed-field' : ''; ?>">
-                <span class="field-label">Date</span>
-                <span class="field-value"><?php echo htmlspecialchars(date('d M Y', strtotime($o['date']))); ?></span>
+              <div class="field-row <?php echo $nameChanged ? 'changed-field' : ''; ?>">
+                <span class="field-label">Event name</span>
+                <span class="field-value">
+                  <?php echo htmlspecialchars($origName); ?>
+                </span>
               </div>
 
-              <div class="field-row <?php echo ($o['start_time'] !== $p['start_time'] || $o['end_time'] !== $p['end_time']) ? 'changed-field' : ''; ?>">
+              <div class="field-row <?php echo $locChanged ? 'changed-field' : ''; ?>">
+                <span class="field-label">Location</span>
+                <span class="field-value">
+                  <?php echo htmlspecialchars($origLocation); ?>
+                </span>
+              </div>
+
+              <div class="field-row <?php echo $maxChanged ? 'changed-field' : ''; ?>">
+                <span class="field-label">Max attendees</span>
+                <span class="field-value">
+                  <?php echo htmlspecialchars($origMax); ?>
+                </span>
+              </div>
+
+              <div class="field-row <?php echo $dateChanged ? 'changed-field' : ''; ?>">
+                <span class="field-label">Date</span>
+                <span class="field-value">
+                  <?php echo htmlspecialchars(date('d M Y', strtotime($origStart))); ?>
+                </span>
+              </div>
+
+              <div class="field-row <?php echo $timeChanged ? 'changed-field' : ''; ?>">
                 <span class="field-label">Time</span>
                 <span class="field-value">
-                  <?php echo htmlspecialchars($o['start_time'].' – '.$o['end_time']); ?>
+                  <?php
+                    echo htmlspecialchars(
+                      date('h:i A', strtotime($origStart)) .
+                      ' – ' .
+                      date('h:i A', strtotime($origEnd))
+                    );
+                  ?>
                 </span>
               </div>
 
-              <div class="field-row <?php echo ($o['location'] !== $p['location']) ? 'changed-field' : ''; ?>">
-                <span class="field-label">Location</span>
-                <span class="field-value"><?php echo htmlspecialchars($o['location']); ?></span>
-              </div>
-
-              <div class="field-row <?php echo ($o['category'] !== $p['category']) ? 'changed-field' : ''; ?>">
-                <span class="field-label">Category</span>
-                <span class="field-value"><?php echo htmlspecialchars($o['category']); ?></span>
-              </div>
-
-              <div class="field-row <?php echo ($o['sponsor'] !== $p['sponsor']) ? 'changed-field' : ''; ?>">
-                <span class="field-label">Sponsor</span>
-                <span class="field-value">
-                  <?php echo $o['sponsor'] ? htmlspecialchars($o['sponsor']) : '—'; ?>
-                </span>
-              </div>
-
-              <div class="field-row description-block <?php echo ($o['description'] !== $p['description']) ? 'changed-field' : ''; ?>">
+              <div class="field-row description-block <?php echo $descChanged ? 'changed-field' : ''; ?>">
                 <span class="field-label">Description</span>
-                <span class="field-value"><?php echo nl2br(htmlspecialchars($o['description'])); ?></span>
+                <span class="field-value">
+                  <?php echo nl2br(htmlspecialchars($origDesc)); ?>
+                </span>
               </div>
             </div>
 
@@ -445,49 +519,66 @@ $editRequests = [
             <div class="compare-column">
               <div class="column-title">Requested Changes</div>
 
-              <div class="field-row <?php echo ($o['date'] !== $p['date']) ? 'changed-field' : ''; ?>">
-                <span class="field-label">Date</span>
-                <span class="field-value"><?php echo htmlspecialchars(date('d M Y', strtotime($p['date']))); ?></span>
+              <div class="field-row <?php echo $nameChanged ? 'changed-field' : ''; ?>">
+                <span class="field-label">Event name</span>
+                <span class="field-value">
+                  <?php echo htmlspecialchars($propName); ?>
+                </span>
               </div>
 
-              <div class="field-row <?php echo ($o['start_time'] !== $p['start_time'] || $o['end_time'] !== $p['end_time']) ? 'changed-field' : ''; ?>">
+              <div class="field-row <?php echo $locChanged ? 'changed-field' : ''; ?>">
+                <span class="field-label">Location</span>
+                <span class="field-value">
+                  <?php echo htmlspecialchars($propLocation); ?>
+                </span>
+              </div>
+
+              <div class="field-row <?php echo $maxChanged ? 'changed-field' : ''; ?>">
+                <span class="field-label">Max attendees</span>
+                <span class="field-value">
+                  <?php echo htmlspecialchars($propMax); ?>
+                </span>
+              </div>
+
+              <div class="field-row <?php echo $dateChanged ? 'changed-field' : ''; ?>">
+                <span class="field-label">Date</span>
+                <span class="field-value">
+                  <?php echo htmlspecialchars(date('d M Y', strtotime($propStart))); ?>
+                </span>
+              </div>
+
+              <div class="field-row <?php echo $timeChanged ? 'changed-field' : ''; ?>">
                 <span class="field-label">Time</span>
                 <span class="field-value">
-                  <?php echo htmlspecialchars($p['start_time'].' – '.$p['end_time']); ?>
+                  <?php
+                    echo htmlspecialchars(
+                      date('h:i A', strtotime($propStart)) .
+                      ' – ' .
+                      date('h:i A', strtotime($propEnd))
+                    );
+                  ?>
                 </span>
               </div>
 
-              <div class="field-row <?php echo ($o['location'] !== $p['location']) ? 'changed-field' : ''; ?>">
-                <span class="field-label">Location</span>
-                <span class="field-value"><?php echo htmlspecialchars($p['location']); ?></span>
-              </div>
-
-              <div class="field-row <?php echo ($o['category'] !== $p['category']) ? 'changed-field' : ''; ?>">
-                <span class="field-label">Category</span>
-                <span class="field-value"><?php echo htmlspecialchars($p['category']); ?></span>
-              </div>
-
-              <div class="field-row <?php echo ($o['sponsor'] !== $p['sponsor']) ? 'changed-field' : ''; ?>">
-                <span class="field-label">Sponsor</span>
-                <span class="field-value">
-                  <?php echo $p['sponsor'] ? htmlspecialchars($p['sponsor']) : '—'; ?>
-                </span>
-              </div>
-
-              <div class="field-row description-block <?php echo ($o['description'] !== $p['description']) ? 'changed-field' : ''; ?>">
+              <div class="field-row description-block <?php echo $descChanged ? 'changed-field' : ''; ?>">
                 <span class="field-label">Description</span>
-                <span class="field-value"><?php echo nl2br(htmlspecialchars($p['description'])); ?></span>
+                <span class="field-value">
+                  <?php echo nl2br(htmlspecialchars($propDesc)); ?>
+                </span>
               </div>
             </div>
           </div>
 
           <div class="actions-row">
-            <button type="button" class="btn btn-approve">
+            <a href="<?php echo basename(__FILE__); ?>?action=approve&id=<?php echo (int)$row['request_id']; ?>"
+               class="btn btn-approve">
               Approve edit
-            </button>
-            <button type="button" class="btn btn-reject">
+            </a>
+            <a href="<?php echo basename(__FILE__); ?>?action=reject&id=<?php echo (int)$row['request_id']; ?>"
+               class="btn btn-reject"
+               onclick="return confirm('Are you sure you want to reject this edit request?');">
               Reject edit
-            </button>
+            </a>
           </div>
         </article>
       <?php endforeach; ?>

@@ -5,55 +5,43 @@ if (!isset($_SESSION['admin_id'])) {
     exit;
 }
 
-// ===============================
-// Dummy Data for All Events UI
-// ===============================
-$events = [
-    [
-        "id" => 1,
-        "title" => "Tech Hack Night",
-        "club_name" => "Computer Science Club",
-        "date" => "2025-12-20",
-        "start_time" => "06:00 PM",
-        "end_time" => "10:00 PM",
-        "location" => "Main Hall / Room 1204",
-        "category" => "Technology",
-        "status" => "Approved"
-    ],
-    [
-        "id" => 2,
-        "title" => "Art & Creativity Day",
-        "club_name" => "Arts Club",
-        "date" => "2025-10-10",
-        "start_time" => "02:00 PM",
-        "end_time" => "06:00 PM",
-        "location" => "Art Center - Building B",
-        "category" => "Art",
-        "status" => "Completed"
-    ],
-    [
-        "id" => 3,
-        "title" => "Business Networking Meetup",
-        "club_name" => "Business Club",
-        "date" => "2026-01-15",
-        "start_time" => "11:00 AM",
-        "end_time" => "02:00 PM",
-        "location" => "Auditorium C",
-        "category" => "Business",
-        "status" => "Approved"
-    ],
-    [
-        "id" => 4,
-        "title" => "Wellness & Mental Health Talk",
-        "club_name" => "Psychology Club",
-        "date" => "2025-05-01",
-        "start_time" => "01:00 PM",
-        "end_time" => "03:00 PM",
-        "location" => "Conference Room A",
-        "category" => "Wellness",
-        "status" => "Completed"
-    ],
-];
+require_once '../config.php';
+
+// ============= Delete Event (Remove button) =============
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_event_id'])) {
+    $eventId = (int) $_POST['delete_event_id'];
+
+    $stmtDel = $conn->prepare("DELETE FROM event WHERE event_id = ?");
+    $stmtDel->bind_param("i", $eventId);
+    $stmtDel->execute();
+    $stmtDel->close();
+
+    header('Location: events.php'); // غيّري الاسم إذا مختلف
+    exit;
+}
+
+// ============= Fetch Events from DB =============
+$sql = "
+    SELECT
+        e.event_id,
+        e.event_name,
+        e.event_location,
+        e.starting_date,
+        e.ending_date,
+        e.max_attendees,
+        c.club_name
+    FROM event e
+    LEFT JOIN club c ON e.club_id = c.club_id
+    ORDER BY e.starting_date DESC
+";
+$res = $conn->query($sql);
+
+$events = [];
+if ($res && $res->num_rows > 0) {
+    while ($row = $res->fetch_assoc()) {
+        $events[] = $row;
+    }
+}
 
 $today = date('Y-m-d');
 ?>
@@ -68,7 +56,7 @@ $today = date('Y-m-d');
 
   <style>
     :root{
-      --sidebarWidth:240px; /* نفس اللي بالـ sidebar */
+      --sidebarWidth:240px;
       --navy:#242751;
       --royal:#4871db;
       --coral:#ff5e5e;
@@ -118,7 +106,6 @@ $today = date('Y-m-d');
       margin-top:4px;
     }
 
-    /* Toolbar */
     .toolbar{
       display:flex;
       justify-content:space-between;
@@ -179,7 +166,6 @@ $today = date('Y-m-d');
       background:#f9fafb;
     }
 
-    /* Cards */
     .events-grid{
       display:flex;
       flex-direction:column;
@@ -320,10 +306,7 @@ $today = date('Y-m-d');
 </head>
 <body>
 
-<?php
-  // نفس السايدبار تبع الـ admin عندك
-  include 'sidebar.php';
-?>
+<?php include 'sidebar.php'; ?>
 
 <div class="page-shell">
   <header class="page-header">
@@ -351,9 +334,16 @@ $today = date('Y-m-d');
     <?php if (!empty($events)): ?>
       <?php foreach($events as $event): ?>
         <?php
-          $isUpcoming = $event['date'] >= $today;
+          $eventDate = substr($event['starting_date'], 0, 10); // YYYY-mm-dd
+          $isUpcoming = $eventDate >= $today;
           $timeStatus = $isUpcoming ? 'upcoming' : 'past';
-          $searchText = strtolower($event['title'].' '.$event['club_name'].' '.$event['category'].' '.$event['location']);
+
+          $searchText = strtolower(
+            $event['event_name'].' '.($event['club_name'] ?? '').' '.($event['event_location'] ?? '')
+          );
+
+          $startLabel = $event['starting_date'] ? date('d M Y, h:i A', strtotime($event['starting_date'])) : '—';
+          $endLabel   = $event['ending_date']   ? date('d M Y, h:i A', strtotime($event['ending_date']))   : '—';
         ?>
         <article
           class="event-card"
@@ -362,9 +352,12 @@ $today = date('Y-m-d');
         >
           <div class="event-main">
             <div class="event-title-row">
-              <span class="event-title"><?php echo htmlspecialchars($event['title']); ?></span>
-              <span class="event-club">• <?php echo htmlspecialchars($event['club_name']); ?></span>
-              <?php if ($event['status'] === 'Approved'): ?>
+              <span class="event-title"><?php echo htmlspecialchars($event['event_name']); ?></span>
+              <?php if (!empty($event['club_name'])): ?>
+                <span class="event-club">• <?php echo htmlspecialchars($event['club_name']); ?></span>
+              <?php endif; ?>
+
+              <?php if ($isUpcoming): ?>
                 <span class="badge-status badge-approved">
                   <span class="badge-dot"></span> Approved
                 </span>
@@ -376,17 +369,17 @@ $today = date('Y-m-d');
             </div>
 
             <div class="event-meta">
-              <span><span class="meta-label">Date:</span>
-                <?php echo htmlspecialchars(date('d M Y', strtotime($event['date']))); ?>
+              <span><span class="meta-label">Starting:</span>
+                <?php echo htmlspecialchars($startLabel); ?>
               </span>
-              <span><span class="meta-label">Time:</span>
-                <?php echo htmlspecialchars($event['start_time'].' – '.$event['end_time']); ?>
+              <span><span class="meta-label">Ending:</span>
+                <?php echo htmlspecialchars($endLabel); ?>
               </span>
               <span><span class="meta-label">Location:</span>
-                <?php echo htmlspecialchars($event['location']); ?>
+                <?php echo htmlspecialchars($event['event_location']); ?>
               </span>
-              <span><span class="meta-label">Category:</span>
-                <?php echo htmlspecialchars($event['category']); ?>
+              <span><span class="meta-label">Max attendees:</span>
+                <?php echo (int)$event['max_attendees']; ?>
               </span>
             </div>
           </div>
@@ -397,10 +390,12 @@ $today = date('Y-m-d');
             </span>
 
             <?php if ($isUpcoming): ?>
-              <!-- زر الحذف يظهر فقط للأحداث القادمة -->
-              <button type="button" class="btn btn-remove" onclick="removeEventCard(this)">
-                Remove event
-              </button>
+              <form method="post" onsubmit="return confirm('Are you sure you want to remove this event?');">
+                <input type="hidden" name="delete_event_id" value="<?php echo (int)$event['event_id']; ?>">
+                <button type="submit" class="btn btn-remove">
+                  Remove event
+                </button>
+              </form>
             <?php endif; ?>
           </div>
         </article>
@@ -417,7 +412,6 @@ $today = date('Y-m-d');
   function setFilter(filter, btn){
     currentFilter = filter;
 
-    // active state on buttons
     document.querySelectorAll('.filter-pill').forEach(pill => {
       pill.classList.toggle('active', pill.getAttribute('data-filter') === filter);
     });
@@ -437,12 +431,6 @@ $today = date('Y-m-d');
 
       card.style.display = (matchesSearch && matchesFilter) ? 'flex' : 'none';
     });
-  }
-
-  function removeEventCard(button){
-    if (!confirm('Are you sure you want to remove this event?')) return;
-    const card = button.closest('.event-card');
-    if (card) card.remove();
   }
 </script>
 
