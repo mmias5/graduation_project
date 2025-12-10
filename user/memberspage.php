@@ -10,8 +10,55 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
     header('Location: ../login.php');
     exit;
 }
-?>
 
+require_once '../config.php';
+
+$studentId = $_SESSION['student_id'];
+
+// --- Get student's club_id ---
+$clubId = null;
+$stmt = $conn->prepare("SELECT club_id FROM student WHERE student_id = ? LIMIT 1");
+$stmt->bind_param("i", $studentId);
+$stmt->execute();
+$stmt->bind_result($clubId);
+$stmt->fetch();
+$stmt->close();
+
+// Not in a club if club_id is NULL or 1 ("No Club / Not Assigned")
+$inClub = !empty($clubId) && (int)$clubId !== 1;
+
+$members = [];
+
+if ($inClub) {
+    $stmt = $conn->prepare("
+        SELECT student_id, student_name, email, major, role
+        FROM student
+        WHERE club_id = ?
+        ORDER BY (role = 'club_president') DESC, student_name ASC
+    ");
+    $stmt->bind_param("i", $clubId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    while ($row = $result->fetch_assoc()) {
+        $id = (int)$row['student_id'];
+        $members[] = [
+            'id'        => $id,
+            'studentId' => $id,
+            'name'      => $row['student_name'],
+            'email'     => $row['email'],
+            'major'     => $row['major'] ?? '',
+            'role'      => ($row['role'] === 'club_president' ? 'President' : 'Member'),
+            // ما عنا عمود join date حالياً، فبنحط شرطة بس
+            'joined'    => '—',
+            // أفاتار مؤقت من pravatar حسب student_id
+            'avatar'    => 'https://i.pravatar.cc/150?u=student_' . $id,
+        ];
+    }
+    $stmt->close();
+}
+
+?>
 <!doctype html>
 <html lang="en">
 <head>
@@ -82,7 +129,59 @@ footer.cch-footer{ margin-top:auto !important; }
 .btn.ghost{background:#fff;border:1px solid #e6e8f2;color:#1a1f36}
 .btn.ghost:hover{transform:translateY(-1px); box-shadow:0 6px 16px rgba(16,24,40,.12)}
 
-/* empty state */
+/* empty state (no club yet) */
+.empty-wrap{
+  max-width:var(--maxw);
+  margin:40px auto 32px;
+  padding:0 18px;
+}
+.empty-card{
+  background:var(--card);
+  border-radius:20px;
+  border:1px solid #e1e6f0;
+  box-shadow:var(--shadow);
+  padding:28px 22px 26px;
+  text-align:left;
+}
+.empty-eyebrow{
+  display:inline-block;
+  font-size:12px;
+  font-weight:800;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  color:#9ca3af;
+  margin-bottom:6px;
+}
+.empty-title{
+  font-size:24px;
+  margin:0 0 10px;
+  color:var(--navy);
+  font-weight:900;
+}
+.empty-text{
+  margin:0 0 18px;
+  color:#4b5563;
+  font-size:14px;
+}
+.discover-pill{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:8px 18px;
+  border-radius:999px;
+  background:var(--royal);
+  color:#fff;
+  font-weight:800;
+  font-size:14px;
+  text-decoration:none;
+  box-shadow:0 10px 22px rgba(72,113,219,.35);
+}
+.discover-pill:hover{
+  filter:brightness(1.05);
+  transform:translateY(-1px);
+}
+
+/* empty search (when there are no members matching search) */
 .empty{
   text-align:center;background:var(--card);border:1px solid #e6e8f2;border-radius:16px;padding:28px;box-shadow:var(--shadow);color:#596180
 }
@@ -99,101 +198,137 @@ footer.cch-footer{ margin-top:auto !important; }
 
 <?php include 'header.php'; ?>
 
-<div class="wrap">
-  <div class="header-row">
-    <h1 class="title">Club Members</h1>
-    <div class="subtitle"><span id="count"></span> total</div>
+<?php if (!$inClub): ?>
+
+  <!-- ========== EMPTY STATE: NOT IN ANY CLUB ========== -->
+  <main class="empty-wrap" role="main" aria-labelledby="no-club-title">
+    <section class="empty-card">
+      <span class="empty-eyebrow">Heads up</span>
+      <h1 id="no-club-title" class="empty-title">You haven’t joined a club yet</h1>
+      <p class="empty-text">
+        To see <strong>My Club Members</strong> you need to join a club first.
+        Browse the available clubs and pick the one that suits you best.
+      </p>
+
+      <a class="discover-pill" href="discoverclubs.php" title="Go to Discover Clubs">
+        Discover Clubs
+      </a>
+    </section>
+  </main>
+
+<?php else: ?>
+
+  <div class="wrap">
+    <div class="header-row">
+      <h1 class="title">Club Members</h1>
+      <div class="subtitle"><span id="count"></span> total</div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <input id="search" class="input" type="search" placeholder="Search by name…">
+    </div>
+
+    <!-- Members -->
+    <div id="grid" class="grid"></div>
+    <div id="empty" class="empty" style="display:none">No members match your search.</div>
+
+    <!-- Pagination -->
+    <div id="pager" class="pager"></div>
   </div>
 
-  <!-- Toolbar -->
-  <div class="toolbar">
-    <input id="search" class="input" type="search" placeholder="Search by name…">
-  </div>
-
-  <!-- Members -->
-  <div id="grid" class="grid"></div>
-  <div id="empty" class="empty" style="display:none">No members match your search.</div>
-
-  <!-- Pagination -->
-  <div id="pager" class="pager"></div>
-</div>
+<?php endif; ?>
 
 <?php include 'footer.php'; ?>
 
+<?php if ($inClub): ?>
 <script>
-/* ==== Mock data (for demo only) ==== */
-const MOCK = Array.from({length:18}).map((_,i)=>({
-  id:i+1,
-  name:['Lina','Omar','Sara','Mustafa','Noor','Jad','Maya','Hiba','Yousef','Rami','Leen','Tala','Ahmad','Dana','Zain','Farah','Khaled','Aya'][i],
-  email:`member${i+1}@university.edu`,
-  major:['CS','IT','Business','Design'][i%4],
-  role:i===0 ? 'President' : 'Member',
-  joined:`2025-0${(i%9)+1}-${String(((i*3)%28)+1).padStart(2,'0')}`,
-  avatar:`https://i.pravatar.cc/150?img=${(i%70)+1}`
-}));
+// ===== Members data coming from PHP / DB =====
+const MEMBERS = <?php echo json_encode($members, JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_AMP|JSON_HEX_QUOT); ?>;
 
 /* ==== Elements ==== */
-const grid=document.getElementById('grid');
-const empty=document.getElementById('empty');
-const pager=document.getElementById('pager');
-const countEl=document.getElementById('count');
-const searchEl=document.getElementById('search');
+const grid   = document.getElementById('grid');
+const empty  = document.getElementById('empty');
+const pager  = document.getElementById('pager');
+const countEl= document.getElementById('count');
+const searchEl = document.getElementById('search');
 
 /* ==== State ==== */
-let state={q:'',page:1,limit:8,data:[...MOCK]};
-countEl.textContent=state.data.length;
+let state = {
+  q: '',
+  page: 1,
+  limit: 8,
+  data: MEMBERS ? [...MEMBERS] : []
+};
+
+if (countEl) {
+  countEl.textContent = state.data.length;
+}
 
 /* ==== Render ==== */
 function renderGrid(){
-  const {q,page,limit}=state;
-  const ql=q.trim().toLowerCase();
-  const filtered=state.data.filter(m=>!ql || m.name.toLowerCase().includes(ql));
-  const total=filtered.length;
-  const pages=Math.max(1,Math.ceil(total/limit));
-  if(page>pages) state.page=pages;
-  const start=(state.page-1)*limit;
-  const slice=filtered.slice(start,start+limit);
-  grid.innerHTML=slice.map(cardHTML).join('');
-  empty.style.display=slice.length?'none':'block';
+  if (!grid) return;
+  const {q,page,limit} = state;
+  const ql = q.trim().toLowerCase();
+  const filtered = state.data.filter(m => !ql || m.name.toLowerCase().includes(ql));
+  const total = filtered.length;
+  const pages = Math.max(1, Math.ceil(total/limit));
+  if (page > pages) state.page = pages;
+  const start = (state.page - 1) * limit;
+  const slice = filtered.slice(start, start + limit);
+  grid.innerHTML = slice.map(cardHTML).join('');
+  if (empty) empty.style.display = slice.length ? 'none' : 'block';
   renderPager(pages);
 }
 
 function cardHTML(m){
+  const joinedText = m.joined && m.joined !== '—' ? `Joined ${m.joined}` : `ID ${m.studentId}`;
   return `
   <div class="card" data-id="${m.id}" data-name="${m.name}">
     <img class="avatar" src="${m.avatar}" alt="${m.name}">
     <div>
       <div class="name">${m.name}</div>
       <div class="meta">${m.email}</div>
-      <div class="meta">${m.major} • 0225757 • Joined ${m.joined}</div>
+      <div class="meta">${m.major || ''} • ${joinedText}</div>
       <span class="role-badge">${m.role}</span>
     </div>
     <div class="actions">
-      <button class="btn ghost small" onclick="location.href='profile.php'">View</button>
+      <button class="btn ghost small" onclick="location.href='profile.php?id=${encodeURIComponent(m.id)}'">View</button>
     </div>
   </div>`;
 }
 
 function renderPager(pages){
-  if(pages<=1){pager.innerHTML='';return;}
-  pager.innerHTML=Array.from({length:pages},(_,i)=>{
-    const p=i+1;
-    return p===state.page?`<span class="active">${p}</span>`:`<a href="#" onclick="gotoPage(${p});return false;">${p}</a>`;
+  if (!pager) return;
+  if (pages <= 1){
+    pager.innerHTML = '';
+    return;
+  }
+  pager.innerHTML = Array.from({length:pages}, (_,i) => {
+    const p = i + 1;
+    return p === state.page
+      ? `<span class="active">${p}</span>`
+      : `<a href="#" onclick="gotoPage(${p});return false;">${p}</a>`;
   }).join('');
 }
 
-function gotoPage(p){state.page=p;renderGrid();}
-
-/* Live search */
-searchEl.addEventListener('input',()=>{
-  state.q=searchEl.value;
-  state.page=1;
+function gotoPage(p){
+  state.page = p;
   renderGrid();
-});
+}
+
+if (searchEl){
+  searchEl.addEventListener('input', () => {
+    state.q = searchEl.value;
+    state.page = 1;
+    renderGrid();
+  });
+}
 
 /* ==== Init ==== */
 renderGrid();
-window.gotoPage=gotoPage;
+window.gotoPage = gotoPage;
 </script>
+<?php endif; ?>
 </body>
 </html>

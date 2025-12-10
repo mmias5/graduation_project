@@ -10,14 +10,126 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
     header('Location: ../login.php');
     exit;
 }
-?>
 
+require_once '../config.php'; // عدلي المسار إذا ملف config بمكان ثاني
+
+// ---------- 1) Get latest ranking period ----------
+$currentPeriodStart = null;
+$currentPeriodEnd   = null;
+$rankingClubs       = [];
+
+$periodSql = "
+    SELECT period_start, period_end
+    FROM ranking
+    ORDER BY period_end DESC
+    LIMIT 1
+";
+$periodRes = $conn->query($periodSql);
+if ($periodRes && $periodRes->num_rows > 0) {
+    $periodRow = $periodRes->fetch_assoc();
+    $currentPeriodStart = $periodRow['period_start'];
+    $currentPeriodEnd   = $periodRow['period_end'];
+}
+
+// ---------- 2) Get clubs ranking with sponsor + events + members ----------
+if ($currentPeriodEnd !== null) {
+    // نستعمل جدول ranking
+    $stmt = $conn->prepare("
+        SELECT
+            r.club_id,
+            r.total_points,
+            r.rank_position,
+            r.period_start,
+            r.period_end,
+            c.club_name,
+            c.logo AS club_logo,
+            c.member_count,
+            COALESCE(s.company_name, 'Not sponsored yet') AS sponsor_name,
+            s.logo AS sponsor_logo,
+            COUNT(DISTINCT e.event_id) AS events_count
+        FROM ranking r
+        JOIN club c ON c.club_id = r.club_id
+        LEFT JOIN sponsor_club_support scs
+            ON scs.club_id = c.club_id
+           AND (scs.start_date IS NULL OR scs.start_date <= r.period_end)
+           AND (scs.end_date   IS NULL OR scs.end_date   >= r.period_start)
+        LEFT JOIN sponsor s ON s.sponsor_id = scs.sponsor_id
+        LEFT JOIN event e
+            ON e.club_id = c.club_id
+           AND (e.starting_date BETWEEN r.period_start AND r.period_end)
+        WHERE r.period_end = ?
+        GROUP BY
+            r.club_id,
+            r.total_points,
+            r.rank_position,
+            r.period_start,
+            r.period_end,
+            c.club_name,
+            c.logo,
+            c.member_count,
+            sponsor_name,
+            sponsor_logo
+        ORDER BY r.rank_position ASC, r.total_points DESC
+    ");
+    $stmt->bind_param('s', $currentPeriodEnd);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    while ($row = $res->fetch_assoc()) {
+        $rankingClubs[] = $row;
+    }
+    $stmt->close();
+} else {
+    // ما في بيانات بجدول ranking -> fallback: رتب حسب points من جدول club
+    $sql = "
+        SELECT
+            c.club_id,
+            c.points AS total_points,
+            NULL AS rank_position,
+            NULL AS period_start,
+            NULL AS period_end,
+            c.club_name,
+            c.logo AS club_logo,
+            c.member_count,
+            COALESCE(s.company_name, 'Not sponsored yet') AS sponsor_name,
+            s.logo AS sponsor_logo,
+            COUNT(DISTINCT e.event_id) AS events_count
+        FROM club c
+        LEFT JOIN sponsor_club_support scs ON scs.club_id = c.club_id
+        LEFT JOIN sponsor s ON s.sponsor_id = scs.sponsor_id
+        LEFT JOIN event e ON e.club_id = c.club_id
+        WHERE c.club_id <> 1  -- استثنينا No Club / Not Assigned
+        GROUP BY
+            c.club_id,
+            c.points,
+            c.club_name,
+            c.logo,
+            c.member_count,
+            sponsor_name,
+            sponsor_logo
+        ORDER BY total_points DESC
+    ";
+    $res = $conn->query($sql);
+    $rank = 1;
+    if ($res) {
+        while ($row = $res->fetch_assoc()) {
+            $row['rank_position'] = $rank++;
+            $rankingClubs[] = $row;
+        }
+    }
+}
+
+// جهزي عناصر التوب 3
+$top1 = $rankingClubs[0] ?? null;
+$top2 = $rankingClubs[1] ?? null;
+$top3 = $rankingClubs[2] ?? null;
+
+?>
 <!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>CCH — Header + Sidebar + Hover Dropdowns</title>
+<title>CCH — Clubs Ranking</title>
 
 <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;600;700;800&display=swap" rel="stylesheet">
 
@@ -128,43 +240,90 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
       </div>
     </div>
 
-    <!-- Top 3 -->
+    <!-- Top 3 (from DB) -->
     <div class="podium">
       <!-- #2 -->
+      <?php if ($top2): ?>
       <article class="pod s2">
-        <div class="medal s"><img src="pics/club-b.png" alt="Club B"></div>
-        <div class="clubname">Club B</div>
-        <div class="sponsor">
-          <span class="sponsor-logo"><img src="pics/sponsor-b.png" alt=""></span>
-          Sponsored by <strong>TechCorp</strong>
+        <div class="medal s">
+          <?php if (!empty($top2['club_logo'])): ?>
+            <img src="<?php echo htmlspecialchars($top2['club_logo']); ?>" alt="<?php echo htmlspecialchars($top2['club_name']); ?>">
+          <?php else: ?>
+            <span><?php echo htmlspecialchars(substr($top2['club_name'], 0, 1)); ?></span>
+          <?php endif; ?>
         </div>
-        <div class="subpt">1,750 pt</div>
+        <div class="clubname"><?php echo htmlspecialchars($top2['club_name']); ?></div>
+        <div class="sponsor">
+          <?php if (!empty($top2['sponsor_logo'])): ?>
+            <span class="sponsor-logo">
+              <img src="<?php echo htmlspecialchars($top2['sponsor_logo']); ?>" alt="">
+            </span>
+          <?php else: ?>
+            <span class="sponsor-logo"></span>
+          <?php endif; ?>
+          Sponsored by <strong><?php echo htmlspecialchars($top2['sponsor_name']); ?></strong>
+        </div>
+        <div class="subpt"><?php echo (int)$top2['total_points']; ?> pt</div>
         <div class="ped s">2</div>
       </article>
+      <?php endif; ?>
 
       <!-- #1 -->
+      <?php if ($top1): ?>
       <article class="pod">
-        <div class="medal g"><img src="pics/club-a.png" alt="Club A"></div>
-        <div class="clubname">Club A</div>
-        <div class="sponsor">
-          <span class="sponsor-logo"><img src="pics/sponsor-a.png" alt=""></span>
-          Sponsored by <strong>Samsung</strong>
+        <div class="medal g">
+          <?php if (!empty($top1['club_logo'])): ?>
+            <img src="<?php echo htmlspecialchars($top1['club_logo']); ?>" alt="<?php echo htmlspecialchars($top1['club_name']); ?>">
+          <?php else: ?>
+            <span><?php echo htmlspecialchars(substr($top1['club_name'], 0, 1)); ?></span>
+          <?php endif; ?>
         </div>
-        <div class="subpt">1,950 pt</div>
+        <div class="clubname"><?php echo htmlspecialchars($top1['club_name']); ?></div>
+        <div class="sponsor">
+          <?php if (!empty($top1['sponsor_logo'])): ?>
+            <span class="sponsor-logo">
+              <img src="<?php echo htmlspecialchars($top1['sponsor_logo']); ?>" alt="">
+            </span>
+          <?php else: ?>
+            <span class="sponsor-logo"></span>
+          <?php endif; ?>
+          Sponsored by <strong><?php echo htmlspecialchars($top1['sponsor_name']); ?></strong>
+        </div>
+        <div class="subpt"><?php echo (int)$top1['total_points']; ?> pt</div>
         <div class="ped g">1</div>
       </article>
+      <?php else: ?>
+      <!-- في حالة ما في أي بيانات -->
+      <article class="pod">
+        <div class="clubname">No ranking data yet</div>
+      </article>
+      <?php endif; ?>
 
       <!-- #3 -->
+      <?php if ($top3): ?>
       <article class="pod s3">
-        <div class="medal b"><img src="pics/club-c.png" alt="Club C"></div>
-        <div class="clubname">Club C</div>
-        <div class="sponsor">
-          <span class="sponsor-logo"><img src="pics/sponsor-c.png" alt=""></span>
-          Sponsored by <strong>ArtWorks</strong>
+        <div class="medal b">
+          <?php if (!empty($top3['club_logo'])): ?>
+            <img src="<?php echo htmlspecialchars($top3['club_logo']); ?>" alt="<?php echo htmlspecialchars($top3['club_name']); ?>">
+          <?php else: ?>
+            <span><?php echo htmlspecialchars(substr($top3['club_name'], 0, 1)); ?></span>
+          <?php endif; ?>
         </div>
-        <div class="subpt">1,700 pt</div>
+        <div class="clubname"><?php echo htmlspecialchars($top3['club_name']); ?></div>
+        <div class="sponsor">
+          <?php if (!empty($top3['sponsor_logo'])): ?>
+            <span class="sponsor-logo">
+              <img src="<?php echo htmlspecialchars($top3['sponsor_logo']); ?>" alt="">
+            </span>
+          <?php else: ?>
+            <span class="sponsor-logo"></span>
+          <?php endif; ?>
+          Sponsored by <strong><?php echo htmlspecialchars($top3['sponsor_name']); ?></strong>
+        </div>
+        <div class="subpt"><?php echo (int)$top3['total_points']; ?> pt</div>
         <div class="ped b">3</div>
       </article>
+      <?php endif; ?>
     </div>
 
     <!-- Table -->
@@ -180,90 +339,55 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
         </tr>
         </thead>
         <tbody>
-          <tr data-name="club d">
-            <td class="col-rank">1</td>
-            <td class="clubcell">
-              <span class="avatar"><img src="pics/club-d.png" alt=""></span>
-              <div>
-                <span>Club D</span>
-                <div class="sponsor small">
-                  <span class="sponsor-logo small"><img src="pics/sponsor-d.png" alt=""></span>
-                  Sponsored by <strong>Nike</strong>
+        <?php if (!empty($rankingClubs)): ?>
+          <?php foreach ($rankingClubs as $row): ?>
+            <?php
+              $rankPos = $row['rank_position'] ?? null;
+              if ($rankPos === null) {
+                  $rankPos = '?';
+              }
+            ?>
+            <tr data-name="<?php echo htmlspecialchars(strtolower($row['club_name'])); ?>">
+              <td class="col-rank"><?php echo (int)$rankPos; ?></td>
+              <td class="clubcell">
+                <span class="avatar">
+                  <?php if (!empty($row['club_logo'])): ?>
+                    <img src="<?php echo htmlspecialchars($row['club_logo']); ?>" alt="">
+                  <?php else: ?>
+                    <span><?php echo htmlspecialchars(substr($row['club_name'], 0, 1)); ?></span>
+                  <?php endif; ?>
+                </span>
+                <div>
+                  <span><?php echo htmlspecialchars($row['club_name']); ?></span>
+                  <div class="sponsor small">
+                    <?php if (!empty($row['sponsor_logo'])): ?>
+                      <span class="sponsor-logo small">
+                        <img src="<?php echo htmlspecialchars($row['sponsor_logo']); ?>" alt="">
+                      </span>
+                    <?php else: ?>
+                      <span class="sponsor-logo small"></span>
+                    <?php endif; ?>
+                    Sponsored by <strong><?php echo htmlspecialchars($row['sponsor_name']); ?></strong>
+                  </div>
                 </div>
-              </div>
-            </td>
-            <td><span class="points"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.9 6.2 6.7.6-5 4.5 1.5 6.6L12 16.9 5.9 20l1.5-6.6-5-4.5 6.7-.6L12 2z"/></svg>1950</span></td>
-            <td><span class="pill">22</span></td>
-            <td><span class="pill">85</span></td>
+              </td>
+              <td>
+                <span class="points">
+                  <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2l2.9 6.2 6.7.6-5 4.5 1.5 6.6L12 16.9 5.9 20l1.5-6.6-5-4.5 6.7-.6L12 2z"/>
+                  </svg>
+                  <?php echo (int)$row['total_points']; ?>
+                </span>
+              </td>
+              <td><span class="pill"><?php echo (int)$row['events_count']; ?></span></td>
+              <td><span class="pill"><?php echo (int)$row['member_count']; ?></span></td>
+            </tr>
+          <?php endforeach; ?>
+        <?php else: ?>
+          <tr>
+            <td colspan="5" style="text-align:center; padding:20px;">No clubs ranking data available yet.</td>
           </tr>
-
-          <tr data-name="club b">
-            <td class="col-rank">2</td>
-            <td class="clubcell">
-              <span class="avatar"><img src="pics/club-b.png" alt=""></span>
-              <div>
-                <span>Club B</span>
-                <div class="sponsor small">
-                  <span class="sponsor-logo small"><img src="pics/sponsor-b.png" alt=""></span>
-                  Sponsored by <strong>Puma</strong>
-                </div>
-              </div>
-            </td>
-            <td><span class="points"><svg viewBox="0 0 24 24"><path d="M12 2l2.9 6.2 6.7.6-5 4.5 1.5 6.6L12 16.9 5.9 20l1.5-6.6-5-4.5 6.7-.6L12 2z"/></svg>1750</span></td>
-            <td><span class="pill">20</span></td>
-            <td><span class="pill">88</span></td>
-          </tr>
-
-          <tr data-name="club c">
-            <td class="col-rank">3</td>
-            <td class="clubcell">
-              <span class="avatar"><img src="pics/club-c.png" alt=""></span>
-              <div>
-                <span>Club C</span>
-                <div class="sponsor small">
-                  <span class="sponsor-logo small"><img src="pics/sponsor-c.png" alt=""></span>
-                  Sponsored by <strong>Pepsi</strong>
-                </div>
-              </div>
-            </td>
-            <td><span class="points"><svg viewBox="0 0 24 24"><path d="M12 2l2.9 6.2 6.7.6-5 4.5 1.5 6.6L12 16.9 5.9 20l1.5-6.6-5-4.5 6.7-.6L12 2z"/></svg>1700</span></td>
-            <td><span class="pill">13</span></td>
-            <td><span class="pill">72</span></td>
-          </tr>
-
-          <tr data-name="club a2">
-            <td class="col-rank">4</td>
-            <td class="clubcell">
-              <span class="avatar"><img src="pics/club-a2.png" alt=""></span>
-              <div>
-                <span>Club A2</span>
-                <div class="sponsor small">
-                  <span class="sponsor-logo small"><img src="pics/sponsor-a2.png" alt=""></span>
-                  Sponsored by <strong>CarePlus</strong>
-                </div>
-              </div>
-            </td>
-            <td><span class="points"><svg viewBox="0 0 24 24"><path d="M12 2l2.9 6.2 6.7.6-5 4.5 1.5 6.6L12 16.9 5.9 20l1.5-6.6-5-4.5 6.7-.6L12 2z"/></svg>1580</span></td>
-            <td><span class="pill">19</span></td>
-            <td><span class="pill">88</span></td>
-          </tr>
-
-          <tr data-name="club e">
-            <td class="col-rank">5</td>
-            <td class="clubcell">
-              <span class="avatar"><img src="pics/club-e.png" alt=""></span>
-              <div>
-                <span>Club E</span>
-                <div class="sponsor small">
-                  <span class="sponsor-logo small"><img src="pics/sponsor-e.png" alt=""></span>
-                  Sponsored by <strong>ArtWorks</strong>
-                </div>
-              </div>
-            </td>
-            <td><span class="points"><svg viewBox="0 0 24 24"><path d="M12 2l2.9 6.2 6.7.6-5 4.5 1.5 6.6L12 16.9 5.9 20l1.5-6.6-5-4.5 6.7-.6L12 2z"/></svg>1530</span></td>
-            <td><span class="pill">22</span></td>
-            <td><span class="pill">67</span></td>
-          </tr>
+        <?php endif; ?>
         </tbody>
       </table>
     </div>

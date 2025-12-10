@@ -10,8 +10,43 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
     header('Location: ../login.php');
     exit;
 }
-?>
 
+require_once '../config.php';
+
+$currentStudentId = $_SESSION['student_id'];
+$profileId = isset($_GET['id']) ? (int)$_GET['id'] : (int)$currentStudentId;
+
+// Fetch member info from DB
+$stmt = $conn->prepare("
+    SELECT s.student_id,
+           s.student_name,
+           s.email,
+           s.major,
+           s.role,
+           s.total_points,
+           s.club_id,
+           c.club_name
+    FROM student s
+    LEFT JOIN club c ON s.club_id = c.club_id
+    WHERE s.student_id = ?
+    LIMIT 1
+");
+$stmt->bind_param("i", $profileId);
+$stmt->execute();
+$result = $stmt->get_result();
+$member = $result->fetch_assoc();
+$stmt->close();
+
+if (!$member) {
+    // لو ID مش موجود، برجعه على members page
+    header('Location: memberspage.php');
+    exit;
+}
+
+$avatarUrl = 'https://i.pravatar.cc/200?u=student_' . (int)$member['student_id'];
+$roleLabel = ($member['role'] === 'club_president') ? 'President' : 'Member';
+$clubName  = $member['club_name'] ?? 'No Club';
+?>
 <!doctype html>
 <html lang="en">
 <head>
@@ -55,7 +90,7 @@ body{
 /* UPDATED: Perfectly balanced image + spacing */
 .hero-inner{
   position:relative;z-index:1;width:100%;
-  display:grid;grid-template-columns:170px 1fr; /* updated */
+  display:grid;grid-template-columns:170px 1fr;
   gap:18px;align-items:flex-end;padding:24px 22px 26px;
 }
 @media (max-width:720px){
@@ -130,13 +165,13 @@ body{
   <!-- HERO -->
   <section class="hero">
     <div class="hero-inner">
-      <img id="avatar" class="avatar" src="" alt="Member avatar">
+      <img class="avatar" src="<?php echo htmlspecialchars($avatarUrl); ?>" alt="Member avatar">
       <div>
-        <h2 id="name" class="name">Member Name</h2>
-        <div id="email" class="sub">email@university.edu</div>
+        <h2 class="name"><?php echo htmlspecialchars($member['student_name']); ?></h2>
+        <div class="sub"><?php echo htmlspecialchars($member['email']); ?></div>
         <div class="badges">
-          <span id="role" class="role">President</span>
-          <span id="joined" class="joined">Joined — 2025-01-01</span>
+          <span class="role"><?php echo htmlspecialchars($roleLabel); ?></span>
+          <span class="joined">Club — <?php echo htmlspecialchars($clubName); ?></span>
         </div>
       </div>
     </div>
@@ -146,44 +181,28 @@ body{
   <section class="card">
     <h3>Member Info</h3>
     <div class="grid">
-      <div class="kv"><b>Full name</b><span id="aboutName">—</span></div>
-      <div class="kv"><b>Email</b><span id="aboutEmail">—</span></div>
-      <div class="kv"><b>Major</b><span id="major">—</span></div>
-      <div class="kv"><b>Student ID</b><span id="studentId">—</span></div>
+      <div class="kv">
+        <b>Full name</b>
+        <span><?php echo htmlspecialchars($member['student_name']); ?></span>
+      </div>
+      <div class="kv">
+        <b>Email</b>
+        <span><?php echo htmlspecialchars($member['email']); ?></span>
+      </div>
+      <div class="kv">
+        <b>Major</b>
+        <span><?php echo htmlspecialchars($member['major'] ?? '—'); ?></span>
+      </div>
+      <div class="kv">
+        <b>Student ID</b>
+        <span><?php echo htmlspecialchars($member['student_id']); ?></span>
+      </div>
     </div>
   </section>
 
 </div>
 
 <?php include 'footer.php'; ?>
-
-<script>
-/* demo data */
-const MOCK = Array.from({length:10}).map((_,i)=>({
-  id:i+1,
-  name:['Lina','Omar','Sara','Mustafa','Noor','Jad','Maya','Hiba','Yousef','Rami'][i],
-  email:`member${i+1}@university.edu`,
-  major:['CS','IT','Business','Design'][i%4],
-  studentId:`02257${50 + i}`,
-  role:['President','Member'][i%2],
-  joined:`2025-0${(i%9)+1}-${String(((i*3)%28)+1).padStart(2,'0')}`,
-  avatar:`https://i.pravatar.cc/200?img=${(i%70)+1}`
-}));
-
-const id = Number(new URLSearchParams(location.search).get('id')) || 1;
-const m = MOCK.find(x=>x.id===id) || MOCK[0];
-
-document.getElementById('avatar').src = m.avatar;
-document.getElementById('name').textContent = m.name;
-document.getElementById('email').textContent = m.email;
-document.getElementById('role').textContent = m.role;
-document.getElementById('joined').textContent = 'Joined — ' + m.joined;
-
-document.getElementById('aboutName').textContent = m.name;
-document.getElementById('aboutEmail').textContent = m.email;
-document.getElementById('major').textContent = m.major;
-document.getElementById('studentId').textContent = m.studentId;
-</script>
 
 </body>
 </html>
