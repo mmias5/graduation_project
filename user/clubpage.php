@@ -10,8 +10,205 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
     header('Location: ../login.php');
     exit;
 }
-?>
 
+require_once '../config.php'; // الاتصال مع الداتابيس
+
+$studentId = (int)$_SESSION['student_id'];
+
+// ===== 1) جلب بيانات الطالب =====
+$sqlStudent = "SELECT * FROM student WHERE student_id = ?";
+$stmtStu = $conn->prepare($sqlStudent);
+$stmtStu->bind_param("i", $studentId);
+$stmtStu->execute();
+$resultStu = $stmtStu->get_result();
+$student = $resultStu->fetch_assoc();
+$stmtStu->close();
+
+if (!$student) {
+    // لو صار إشي غريب
+    die("Student not found.");
+}
+
+$studentClubId = (int)$student['club_id'];
+
+// من وين جاي على الصفحة؟ (Discover ولا My Club)
+$isFromDiscover = isset($_GET['club_id']);
+
+// club_id المعروض في الصفحة
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['club_id'])) {
+    $clubId = (int)$_POST['club_id'];
+} elseif (isset($_GET['club_id'])) {
+    $clubId = (int)$_GET['club_id'];
+} else {
+    // من My Club → نستخدم club_id تبع الطالب (ممكن يكون 1 = No Club)
+    $clubId = $studentClubId ?: 1;
+}
+
+// ما منسمح بـ club_id أقل من 1
+if ($clubId < 1) {
+    $clubId = 1;
+}
+
+// ===== 2) معالجة أزرار JOIN / LEAVE (POST) =====
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    $action   = $_POST['action'];
+    $postedClubId = (int)($_POST['club_id'] ?? 0);
+
+    // أمان: ما نشتغل لو الـ club مش مضبوط
+    if ($postedClubId > 0) {
+        if ($action === 'join' && $postedClubId !== $studentClubId && $postedClubId !== 1) {
+            // هل في طلب سابق لنفس النادي؟
+            $sqlLastReq = "
+                SELECT request_id, status 
+                FROM club_membership_request
+                WHERE club_id = ? AND student_id = ?
+                ORDER BY submitted_at DESC, request_id DESC
+                LIMIT 1
+            ";
+            $stmtLast = $conn->prepare($sqlLastReq);
+            $stmtLast->bind_param("ii", $postedClubId, $studentId);
+            $stmtLast->execute();
+            $resLast = $stmtLast->get_result();
+            $lastReq = $resLast->fetch_assoc();
+            $stmtLast->close();
+
+            if ($lastReq && $lastReq['status'] === 'pending') {
+                // في طلب معلق بالفعل → ما نضيف كمان واحد
+                // بس عادي نرجع لنفس الصفحة
+            } else {
+                // إدخال طلب عضوية جديد بحالة pending
+                $reason = "Join request submitted from student portal.";
+                $sqlIns = "
+                    INSERT INTO club_membership_request (club_id, student_id, reason, status, submitted_at)
+                    VALUES (?, ?, ?, 'pending', NOW())
+                ";
+                $stmtIns = $conn->prepare($sqlIns);
+                $stmtIns->bind_param("iis", $postedClubId, $studentId, $reason);
+                $stmtIns->execute();
+                $stmtIns->close();
+            }
+        } elseif ($action === 'leave' && $postedClubId === $studentClubId && $postedClubId !== 1) {
+            // 1) تحديث الطالب → يرجع على No Club
+            $sqlUpdateStu = "UPDATE student SET club_id = 1 WHERE student_id = ?";
+            $stmtUpdateStu = $conn->prepare($sqlUpdateStu);
+            $stmtUpdateStu->bind_param("i", $studentId);
+            $stmtUpdateStu->execute();
+            $stmtUpdateStu->close();
+
+            // 2) (اختياري) تحديث آخر طلب approved → نخليه left
+            $sqlFindApproved = "
+                SELECT request_id 
+                FROM club_membership_request
+                WHERE club_id = ? AND student_id = ? AND status = 'approved'
+                ORDER BY submitted_at DESC, request_id DESC
+                LIMIT 1
+            ";
+            $stmtFA = $conn->prepare($sqlFindApproved);
+            $stmtFA->bind_param("ii", $postedClubId, $studentId);
+            $stmtFA->execute();
+            $resFA = $stmtFA->get_result();
+            $approvedReq = $resFA->fetch_assoc();
+            $stmtFA->close();
+
+            if ($approvedReq) {
+                $reqId = (int)$approvedReq['request_id'];
+                $sqlUpdReq = "
+                    UPDATE club_membership_request
+                    SET status = 'left',
+                        decided_at = NOW(),
+                        decided_by_student_id = ?
+                    WHERE request_id = ?
+                ";
+                $stmtUpdReq = $conn->prepare($sqlUpdReq);
+                $stmtUpdReq->bind_param("ii", $studentId, $reqId);
+                $stmtUpdReq->execute();
+                $stmtUpdReq->close();
+            }
+
+            // بعد الـ leave نحدّث قيمة club_id في المتغير المحلي كمان
+            $studentClubId = 1;
+            if (!$isFromDiscover) {
+                $clubId = 1;
+            }
+        }
+    }
+
+    // منع إعادة إرسال الفورم لو عمل refresh
+    header("Location: " . $_SERVER['REQUEST_URI']);
+    exit;
+}
+
+// ===== 3) جلب بيانات النادي =====
+$sqlClub = "SELECT * FROM club WHERE club_id = ?";
+$stmtClub = $conn->prepare($sqlClub);
+$stmtClub->bind_param("i", $clubId);
+$stmtClub->execute();
+$resClub = $stmtClub->get_result();
+$club = $resClub->fetch_assoc();
+$stmtClub->close();
+
+// لو club مش موجود
+if (!$club) {
+    $clubName        = "Club Not Found";
+    $clubDescription = "This club does not exist.";
+    $clubLogo        = "tools/pics/social_life.png";
+    $contactEmail    = "";
+    $facebookUrl     = "#";
+    $instagramUrl    = "#";
+    $linkedinUrl     = "#";
+    $memberCount     = 0;
+    $clubPoints      = 0;
+} else {
+    $clubName        = $club['club_name'];
+    $clubDescription = $club['description'];
+    $clubLogo        = !empty($club['logo']) ? $club['logo'] : "tools/pics/social_life.png";
+    $contactEmail    = $club['contact_email'];
+    $facebookUrl     = !empty($club['facebook_url']) ? $club['facebook_url'] : "#";
+    $instagramUrl    = !empty($club['instagram_url']) ? $club['instagram_url'] : "#";
+    $linkedinUrl     = !empty($club['linkedin_url']) ? $club['linkedin_url'] : "#";
+    $memberCount     = (int)$club['member_count'];
+    $clubPoints      = (int)$club['points'];
+}
+
+// ===== 4) جلب آخر طلب عضوية لهذا الطالب مع هذا النادي (لو موجود) =====
+$sqlLastReq = "
+    SELECT request_id, status
+    FROM club_membership_request
+    WHERE club_id = ? AND student_id = ?
+    ORDER BY submitted_at DESC, request_id DESC
+    LIMIT 1
+";
+$stmtLast = $conn->prepare($sqlLastReq);
+$stmtLast->bind_param("ii", $clubId, $studentId);
+$stmtLast->execute();
+$resLast = $stmtLast->get_result();
+$lastReq = $resLast->fetch_assoc();
+$stmtLast->close();
+
+$lastReqStatus = $lastReq['status'] ?? null;
+
+// هل الطالب عضو حاليًا في هذا النادي؟
+$isCurrentMember = ($studentClubId === $clubId && $clubId !== 1);
+
+// ===== 5) جلب الفعاليات الخاصة بهذا النادي =====
+$events = [];
+$sqlEvents = "
+    SELECT * 
+    FROM event
+    WHERE club_id = ?
+    ORDER BY starting_date ASC
+";
+$stmtEv = $conn->prepare($sqlEvents);
+$stmtEv->bind_param("i", $clubId);
+$stmtEv->execute();
+$resEv = $stmtEv->get_result();
+while ($row = $resEv->fetch_assoc()) {
+    $events[] = $row;
+}
+$stmtEv->close();
+
+$eventsDone = count($events);
+?>
 <!doctype html>
 <html lang="en">
 <head>
@@ -355,31 +552,35 @@ body{ color:var(--ink); background:var(--paper); }
   <!-- ========== HERO ========== -->
   <section class="section hero">
     <div class="wrap">
-      <div class="hero-card" style="--hero-bg: url('tools/pics/social_life.png');">
+      <div class="hero-card" style="--hero-bg: url('<?php echo htmlspecialchars($clubLogo); ?>');">
 
         <div class="hero-top">
           <h1>YOUR CLUB</h1>
-          <div class="tag">1st in clubs</div>
+          <div class="tag">
+            <?php echo htmlspecialchars($club['category'] ?? 'Club'); ?>
+          </div>
         </div>
 
         <div class="hero-pillrow">
+          <!-- Club pill -->
           <div class="pill">
-            <img src="https://img.freepik.com/free-vector/bird-colorful-gradient-design-vector_343694-2506.jpg?semt=ais_hybrid&w=740&q=80"
+            <img src="<?php echo htmlspecialchars($clubLogo); ?>"
                 alt="Club Logo"
                 style="width:42px; height:42px; border-radius:50%; object-fit:cover; border:2px solid rgba(255,255,255,.8)" />
             <div>
               <div style="font-size:12px;opacity:.8">club name</div>
-              <strong id="clubs">Birds</strong>
+              <strong id="clubs"><?php echo htmlspecialchars($clubName); ?></strong>
             </div>
           </div>
 
+          <!-- بسيط: خلي Pill الثاني general عن النادي -->
           <div class="pill">
-            <img src="https://img.freepik.com/free-vector/bird-colorful-gradient-design-vector_343694-2506.jpg?semt=ais_hybrid&w=740&q=80"
-                alt="Sponsor Logo"
-                style="width:42px; height:42px; border-radius:50%; object-fit:cover; border:2px solid rgba(255,255,255,.8)" />
+            <div class="circle">
+              <?php echo $memberCount > 0 ? (int)$memberCount : 0; ?>
+            </div>
             <div>
-              <div style="font-size:12px;opacity:.8">sponsor name</div>
-              <strong>Amazone</strong>
+              <div style="font-size:12px;opacity:.8">active members</div>
+              <strong><?php echo htmlspecialchars($clubName); ?> Community</strong>
             </div>
           </div>
         </div>
@@ -396,11 +597,10 @@ body{ color:var(--ink); background:var(--paper); }
 
       <div class="about">
         <p>
-          Description about the club goes here. It can be two to three sentences long.
-          Share your mission, activities, and what makes your club special for students.
+          <?php echo nl2br(htmlspecialchars($clubDescription)); ?>
         </p>
 
-        <!-- 🔹 Club President Contact -->
+        <!-- 🔹 Club President / Contact -->
         <div style="
           background: rgba(255,255,255,0.12);
           border: 1px solid rgba(255,255,255,0.25);
@@ -418,18 +618,24 @@ body{ color:var(--ink); background:var(--paper); }
             <path d='M4 4l8 8l8-8'/>
           </svg>
           <div>
-            <div style="font-size:12px;opacity:.85;">President Contact</div>
-            <strong><a href="mailto:president@campusclub.com" style="color:#f4df6d; text-decoration:none;">president@campusclub.com</a></strong>
+            <div style="font-size:12px;opacity:.85;">President / Club Contact</div>
+            <?php if (!empty($contactEmail)): ?>
+              <strong><a href="mailto:<?php echo htmlspecialchars($contactEmail); ?>" style="color:#f4df6d; text-decoration:none;">
+                <?php echo htmlspecialchars($contactEmail); ?>
+              </a></strong>
+            <?php else: ?>
+              <strong>No contact email added yet.</strong>
+            <?php endif; ?>
           </div>
         </div>
 
         <h4 style="letter-spacing:.4em; text-transform:uppercase; margin:16px 0 8px; color: #f4df6d">Links</h4>
         <div class="link-grid">
-          <a class="link-tile" href="https://www.linkedin.com/" target="_blank" rel="noreferrer">
+          <a class="link-tile" href="<?php echo htmlspecialchars($linkedinUrl ?: '#'); ?>" target="_blank" rel="noreferrer">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="#0a66c2" aria-hidden="true"><path d="M20.447 20.452h-3.555V14.86c0-1.333-.027-3.045-1.856-3.045-1.858 0-2.142 1.45-2.142 2.95v5.688H9.338V9h3.414v1.561h.048c.476-.9 1.637-1.85 3.369-1.85 3.602 0 4.268 2.371 4.268 5.455v6.286zM5.337 7.433a2.062 2.062 0 1 1 0-4.124 2.062 2.062 0 0 1 0 4.124zM6.99 20.452H3.68V9h3.31v11.452z"/></svg>
             <span class="links">LinkedIn</span>
           </a>
-          <a class="link-tile" href="https://www.instagram.com/" target="_blank" rel="noreferrer">
+          <a class="link-tile" href="<?php echo htmlspecialchars($instagramUrl ?: '#'); ?>" target="_blank" rel="noreferrer">
             <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" style="color:#E4405F">
               <rect x="2" y="2" width="20" height="20" rx="5" ry="5" fill="none" stroke="currentColor" stroke-width="2"/>
               <circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="2"/>
@@ -437,7 +643,7 @@ body{ color:var(--ink); background:var(--paper); }
             </svg>
             <span class="links">Instagram</span>
           </a>
-          <a class="link-tile" href="https://www.facebook.com/" target="_blank" rel="noreferrer">
+          <a class="link-tile" href="<?php echo htmlspecialchars($facebookUrl ?: '#'); ?>" target="_blank" rel="noreferrer">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="#1877f2" aria-hidden="true"><path d="M22 12.06C22 6.5 17.52 2 12 2S2 6.5 2 12.06C2 17.08 5.66 21.2 10.44 22v-7.02H7.9v-2.92h2.54v-2.2c0-2.5 1.5-3.89 3.78-3.89 1.1 0 2.24.2 2.24.2v2.46h-1.26c-1.24 0-1.63.77-1.63 1.56v1.87h2.78l-.44 2.92h-2.34V22C18.34 21.2 22 17.08 22 12.06z"/></svg>
             <span class="links">Facebook</span>
           </a>
@@ -450,48 +656,89 @@ body{ color:var(--ink); background:var(--paper); }
   <section class="section">
     <div class="wrap">
       <h2>Upcoming Events</h2>
+
       <div class="grid">
-        <!-- Event 1 -->
-        <article class="card">
-          <div class="date"><div class="day">10</div><div class="mon">SEP</div><div class="sep">Tue</div></div>
-          <div>
-            <div class="topline"><span class="badge">+30 pt</span><span class="chip sponsor">Sponsor: TechCorp</span></div>
-            <div class="title">Club B — Hack Night</div>
-            <div class="mini"><span>📍 Location</span></div>
-            <div class="footer"><span class="mini">🕒 6:00 PM</span></div>
-          </div>
-        </article>
-        <!-- Event 2 -->
-        <article class="card">
-          <div class="date"><div class="day">15</div><div class="mon">SEP</div><div class="sep">Sun</div></div>
-          <div>
-            <div class="topline"><span class="badge">+30 pt</span><span class="chip sponsor">Sponsor: BlueBank</span></div>
-            <div class="title">Club B — Finance 101</div>
-            <div class="mini"><span>📍 Main Hall</span></div>
-            <div class="footer"><span class="mini">🕒 4:30 PM</span></div>
-          </div>
-        </article>
+        <?php if (count($events) === 0): ?>
+          <p style="color:#6b7280; font-size:14px; grid-column:1/-1;">
+            No upcoming events have been added for this club yet.
+          </p>
+        <?php else: ?>
+          <?php foreach ($events as $ev): ?>
+            <?php
+              $start = new DateTime($ev['starting_date']);
+              $day  = $start->format('d');
+              $mon  = strtoupper($start->format('M'));
+              $dow  = $start->format('D');
+              $time = $start->format('g:i A');
+              $location = $ev['event_location'];
+              $maxAtt  = (int)$ev['max_attendees'];
+            ?>
+            <article class="card">
+              <div class="date">
+                <div class="day"><?php echo $day; ?></div>
+                <div class="mon"><?php echo $mon; ?></div>
+                <div class="sep"><?php echo $dow; ?></div>
+              </div>
+              <div>
+                <div class="topline">
+                  <span class="badge">Max <?php echo $maxAtt; ?> seats</span>
+                  <span class="chip sponsor">Club Event</span>
+                </div>
+                <div class="title"><?php echo htmlspecialchars($ev['event_name']); ?></div>
+                <div class="mini"><span>📍 <?php echo htmlspecialchars($location); ?></span></div>
+                <div class="footer"><span class="mini">🕒 <?php echo $time; ?></span></div>
+              </div>
+            </article>
+          <?php endforeach; ?>
+        <?php endif; ?>
       </div>
 
       <!-- Stats -->
       <div class="stats">
         <div class="stat">
           <h5>Events done</h5>
-          <div class="kpi">125</div>
+          <div class="kpi"><?php echo str_pad($eventsDone, 3, "0", STR_PAD_LEFT); ?></div>
         </div>
         <div class="stat">
           <h5>Member</h5>
-          <div class="kpi">200</div>
+          <div class="kpi"><?php echo str_pad($memberCount, 3, "0", STR_PAD_LEFT); ?></div>
         </div>
         <div class="stat">
           <h5>Earned points</h5>
-          <div class="kpi">5000</div>
+          <div class="kpi"><?php echo str_pad($clubPoints, 4, "0", STR_PAD_LEFT); ?></div>
         </div>
       </div>
 
-      <!-- Join CTA -->
-      <button id="joinBtn" class="join" type="button">Join us!</button>
-      <button id="leaveBtn" class="leave" type="button">Leave</button>
+      <!-- Join / Leave CTA -->
+      <?php if ($clubId !== 1): ?>
+        <?php if ($isCurrentMember): ?>
+          <!-- الطالب عضو في هذا النادي → يظهر Leave فقط -->
+          <form method="post" style="margin-top:26px;">
+            <input type="hidden" name="club_id" value="<?php echo (int)$clubId; ?>">
+            <button id="leaveBtn" class="leave" type="submit" name="action" value="leave" href="discover.php">
+              Leave
+            </button>
+          </form>
+        <?php else: ?>
+          <!-- الطالب مش عضو → يظهر زر Join -->
+          <form method="post" style="margin-top:26px;">
+            <input type="hidden" name="club_id" value="<?php echo (int)$clubId; ?>">
+            <button id="joinBtn" class="join" type="submit" name="action" value="join" href="discover.php">
+              <?php
+                if ($lastReqStatus === 'pending') {
+                    echo "Request pending…";
+                } elseif ($lastReqStatus === 'approved') {
+                    echo "You are approved for this club";
+                } elseif ($lastReqStatus === 'rejected') {
+                    echo "Join us again?";
+                } else {
+                    echo "Join us!";
+                }
+              ?>
+            </button>
+          </form>
+        <?php endif; ?>
+      <?php endif; ?>
     </div>
   </section>
 
@@ -511,8 +758,8 @@ body{ color:var(--ink); background:var(--paper); }
         <p>Thanks! You’ll get an update soon.</p>
       </div>
       <div class="modal-actions">
-  <button class="btn primary" id="okModalBtn" type="button" autofocus>OK</button>
-</div>
+        <button class="btn primary" id="okModalBtn" type="button" autofocus>OK</button>
+      </div>
 
     </div>
   </div>
@@ -529,8 +776,12 @@ body{ color:var(--ink); background:var(--paper); }
       const modalIcon = document.getElementById('modalIcon');
       const modalTitle= document.getElementById('modalTitle');
       const modalBody = document.getElementById('modalBody');
-      const btnClose  = document.getElementById('closeModalBtn');
       const btnOk     = document.getElementById('okModalBtn');
+
+      // لو ما في زر join (مثلاً الطالب عضو) ما نكمّل الجافاسكربت
+      if (!joinBtn) {
+        return;
+      }
 
       let lastFocusedEl = null;
 
@@ -582,10 +833,10 @@ body{ color:var(--ink); background:var(--paper); }
           localStorage.setItem(JOIN_KEY, '1');
         }
         openModal();
+        // ما منمنع submit → الفورم رح ينرسل عادي
       });
 
       // close actions
-      //btnClose.addEventListener('click', closeModal);
       btnOk.addEventListener('click', closeModal);
       modalWrap.addEventListener('click', (e) => {
         if (e.target === modalWrap) closeModal();
