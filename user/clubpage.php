@@ -555,7 +555,6 @@ body{ color:var(--ink); background:var(--paper); }
       <div class="hero-card" style="--hero-bg: url('<?php echo htmlspecialchars($clubLogo); ?>');">
 
         <div class="hero-top">
-          <h1>YOUR CLUB</h1>
           <div class="tag">
             <?php echo htmlspecialchars($club['category'] ?? 'Club'); ?>
           </div>
