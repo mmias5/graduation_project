@@ -5,8 +5,82 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
     header('Location: ../login.php');
     exit;
 }
-?>
 
+require_once '../config.php';
+
+$president_id = (int)$_SESSION['student_id'];
+
+/* get president club_id safely */
+$stmt = $conn->prepare("SELECT club_id FROM student WHERE student_id=? AND role='club_president' LIMIT 1");
+$stmt->bind_param("i", $president_id);
+$stmt->execute();
+$res = $stmt->get_result();
+$pres = $res->fetch_assoc();
+$stmt->close();
+
+$club_id = isset($pres['club_id']) ? (int)$pres['club_id'] : 1;
+
+/* if no club / default club => show empty state */
+$members = [];
+if ($club_id > 1) {
+    // joined date: from Approved request (decided_at) if exists
+    $sql = "
+        SELECT
+            s.student_id,
+            s.student_name,
+            s.email,
+            s.major,
+            s.profile_photo,
+            (
+                SELECT MAX(COALESCE(r.decided_at, r.submitted_at))
+                FROM club_membership_request r
+                WHERE r.student_id = s.student_id
+                  AND r.club_id = ?
+                  AND r.status = 'Approved'
+            ) AS joined_at
+        FROM student s
+        WHERE s.club_id = ?
+        ORDER BY s.student_name ASC
+    ";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("ii", $club_id, $club_id);
+    $stmt->execute();
+    $r = $stmt->get_result();
+    while ($row = $r->fetch_assoc()) {
+        $id = (int)$row['student_id'];
+
+        $avatar = $row['profile_photo'];
+        if (!$avatar) {
+            // fallback avatar (deterministic)
+            $avatar = "https://i.pravatar.cc/150?u=" . urlencode("student_" . $id);
+        } else {
+            // if you store relative paths like "uploads/.."
+            // keep as is; adjust if needed
+            $avatar = $avatar;
+        }
+
+        $joined = $row['joined_at'] ? date('Y-m-d', strtotime($row['joined_at'])) : '—';
+
+        $members[] = [
+            "id"    => $id,
+            "name"  => $row['student_name'],
+            "email" => $row['email'],
+            "major" => $row['major'] ?: '—',
+            "role"  => ($id === $president_id ? 'President' : 'Member'),
+            "joined"=> $joined,
+            "studentId" => (string)$id,
+            "avatar"=> $avatar
+        ];
+    }
+    $stmt->close();
+}
+
+/* CSRF token */
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(16));
+}
+$csrf = $_SESSION['csrf_token'];
+?>
 <!doctype html>
 <html lang="en">
 <head>
@@ -157,17 +231,11 @@ footer.cch-footer{ margin-top:auto !important; }   /* don’t edit footer.php; j
 </div>
 
 <script>
-/* ==== Mock data (for demo only) ==== */
-const MOCK = Array.from({length:18}).map((_,i)=>({
-  id:i+1,
-  name:['Lina','Omar','Sara','Mustafa','Noor','Jad','Maya','Hiba','Yousef','Rami','Leen','Tala','Ahmad','Dana','Zain','Farah','Khaled','Aya'][i],
-  email:`member${i+1}@university.edu`,
-  major:['CS','IT','Business','Design'][i%4],
-  year:['1st','2nd','3rd','4th'][i%4],          // not displayed
-  role:i===0 ? 'President' : 'Member',
-  joined:`2025-0${(i%9)+1}-${String(((i*3)%28)+1).padStart(2,'0')}`,
-  avatar:`https://i.pravatar.cc/150?img=${(i%70)+1}`
-}));
+/* ==== DB Data injected from PHP ==== */
+const CSRF = <?php echo json_encode($csrf); ?>;
+const MY_ID = <?php echo (int)$president_id; ?>;
+const CLUB_ID = <?php echo (int)$club_id; ?>;
+const MEMBERS = <?php echo json_encode($members, JSON_UNESCAPED_SLASHES); ?>;
 
 /* ==== Elements ==== */
 const grid=document.getElementById('grid');
@@ -177,39 +245,41 @@ const countEl=document.getElementById('count');
 const searchEl=document.getElementById('search');
 
 /* ==== State ==== */
-let state={q:'',page:1,limit:8,data:[...MOCK]};
+let state={q:'',page:1,limit:8,data:[...MEMBERS]};
 countEl.textContent=state.data.length;
 
 /* ==== Render ==== */
 function renderGrid(){
   const {q,page,limit}=state;
   const ql=q.trim().toLowerCase();
-  // Filter by NAME only
-  const filtered=state.data.filter(m=>!ql || m.name.toLowerCase().includes(ql));
+  const filtered=state.data.filter(m=>!ql || (m.name||'').toLowerCase().includes(ql));
   const total=filtered.length;
   const pages=Math.max(1,Math.ceil(total/limit));
-  if(page>pages) state.page=pages;
+  if(state.page>pages) state.page=pages;
+
   const start=(state.page-1)*limit;
   const slice=filtered.slice(start,start+limit);
+
   grid.innerHTML=slice.map(cardHTML).join('');
   empty.style.display=slice.length?'none':'block';
   renderPager(pages);
 }
 
 function cardHTML(m){
-  // Hide Kick for the President
-  const kickBtn = m.role === 'President' ? '' : `<button class="btn kick small" onclick="openKick(${m.id})">Kick</button>`;
+  const kickBtn = (m.role === 'President' || m.id === MY_ID) ? '' :
+    `<button class="btn kick small" onclick="openKick(${m.id})">Kick</button>`;
+
   return `
-  <div class="card" data-id="${m.id}" data-name="${m.name}">
-    <img class="avatar" src="${m.avatar}" alt="${m.name}">
+  <div class="card" data-id="${m.id}" data-name="${escapeHtml(m.name)}">
+    <img class="avatar" src="${m.avatar}" alt="${escapeHtml(m.name)}">
     <div>
-      <div class="name">${m.name}</div>
-      <div class="meta">${m.email}</div>
-      <div class="meta">${m.major} • 0225757 • Joined ${m.joined}</div>
-      <span class="role-badge">${m.role}</span>
+      <div class="name">${escapeHtml(m.name)}</div>
+      <div class="meta">${escapeHtml(m.email)}</div>
+      <div class="meta">${escapeHtml(m.major)} • ${escapeHtml(m.studentId)} • Joined ${escapeHtml(m.joined)}</div>
+      <span class="role-badge">${escapeHtml(m.role)}</span>
     </div>
     <div class="actions">
-      <button class="btn ghost small" onclick="location.href='profile.php'">View</button>
+      <button class="btn ghost small" onclick="location.href='profile.php?id=${m.id}'">View</button>
       ${kickBtn}
     </div>
   </div>`;
@@ -219,7 +289,9 @@ function renderPager(pages){
   if(pages<=1){pager.innerHTML='';return;}
   pager.innerHTML=Array.from({length:pages},(_,i)=>{
     const p=i+1;
-    return p===state.page?`<span class="active">${p}</span>`:`<a href="#" onclick="gotoPage(${p});return false;">${p}</a>`;
+    return p===state.page
+      ? `<span class="active">${p}</span>`
+      : `<a href="#" onclick="gotoPage(${p});return false;">${p}</a>`;
   }).join('');
 }
 
@@ -233,12 +305,19 @@ searchEl.addEventListener('input',()=>{
   renderGrid();
 });
 
+function escapeHtml(str){
+  return String(str ?? '').replace(/[&<>"']/g, s => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[s]));
+}
+
 /* ==== Kick modal ==== */
 const kickModal=document.getElementById('kickModal');
 const kickName=document.getElementById('kickName');
 const kickCancel=document.getElementById('kickCancel');
 const kickConfirm=document.getElementById('kickConfirm');
 let pendingKickId=null;
+
 function openKick(id){
   const card=document.querySelector(`.card[data-id="${id}"]`);
   pendingKickId=id;
@@ -249,17 +328,38 @@ function openKick(id){
 function closeKick(){kickModal.classList.remove('open');document.body.style.overflow='';pendingKickId=null;}
 kickCancel.addEventListener('click',closeKick);
 kickModal.addEventListener('click',e=>{if(e.target===kickModal)closeKick();});
-kickConfirm.addEventListener('click',()=>{
-  if(pendingKickId!=null){
-    state.data=state.data.filter(m=>m.id!==pendingKickId);
-    countEl.textContent=state.data.length;
-    closeKick();renderGrid();
+
+kickConfirm.addEventListener('click', async ()=>{
+  if(pendingKickId==null) return;
+
+  try{
+    const fd = new FormData();
+    fd.append('action','kick');
+    fd.append('student_id', String(pendingKickId));
+    fd.append('csrf_token', CSRF);
+
+    const res = await fetch('president_member_actions.php', { method:'POST', body: fd });
+    const data = await res.json();
+
+    if(!data.ok){
+      alert(data.error || 'Failed to kick member');
+      return;
+    }
+
+    // remove from UI
+    state.data = state.data.filter(m => m.id !== pendingKickId);
+    countEl.textContent = state.data.length;
+    closeKick();
+    renderGrid();
+  }catch(e){
+    alert('Network error');
   }
 });
 
 /* ==== Init ==== */
 renderGrid();
-window.gotoPage=gotoPage;window.openKick=openKick;
+window.gotoPage=gotoPage;
+window.openKick=openKick;
 </script>
 </body>
 </html>

@@ -1,10 +1,67 @@
 <?php
 session_start();
 
-if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
+if (!isset($_SESSION['student_id']) || ($_SESSION['role'] !== 'student' && $_SESSION['role'] !== 'club_president')) {
     header('Location: ../login.php');
     exit;
 }
+
+require_once '../config.php';
+
+// ===== Fetch ALL events with club + sponsor (company_name) =====
+$sql = "
+    SELECT
+        e.event_id,
+        e.event_name,
+        e.event_location,
+        e.starting_date,
+        e.ending_date,
+        e.banner_image,
+        c.club_name,
+        s.company_name AS sponsor_name
+    FROM event e
+    INNER JOIN club c
+        ON e.club_id = c.club_id
+    LEFT JOIN sponsor_club_support scs
+        ON scs.club_id = c.club_id
+    LEFT JOIN sponsor s
+        ON scs.sponsor_id = s.sponsor_id
+    ORDER BY e.starting_date DESC
+";
+
+$result = $conn->query($sql);
+
+$upcoming = [];
+$past     = [];
+$now      = new DateTime();
+
+if ($result && $result->num_rows > 0) {
+    while ($row = $result->fetch_assoc()) {
+        $start = $row['starting_date'] ? new DateTime($row['starting_date']) : null;
+        if ($start && $start >= $now) {
+            $upcoming[] = $row;
+        } else {
+            $past[] = $row;
+        }
+    }
+}
+
+function formatEventDateParts(?string $dtStr): array {
+    if (!$dtStr) return ['--','---',''];
+    $dt = new DateTime($dtStr);
+    return [
+        $dt->format('d'),            // day
+        strtoupper($dt->format('M')),// month
+        $dt->format('D')             // weekday
+    ];
+}
+
+function formatEventTime(?string $dtStr): string {
+    if (!$dtStr) return '';
+    $dt = new DateTime($dtStr);
+    return $dt->format('g:i A');
+}
+
 ?>
 <!doctype html>
 <html lang="en">
@@ -16,7 +73,6 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
 <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;600;700;800&display=swap" rel="stylesheet">
 
 <style>
-  /* ===== Brand Tokens (global) ===== */
   :root{
     --navy:#242751; --royal:#4871db; --lightBlue:#a9bff8;
     --gold:#e5b758; --sun:#f4df6d; --coral:#ff5e5e;
@@ -31,7 +87,6 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
     background:linear-gradient(180deg,#f7f9ff 0%, var(--paper) 100%);
   }
 
-  /* ===== Events page ===== */
   .wrapper{max-width:1100px;margin:20px auto 40px;padding:0 18px}
   .page-title{font-size:30px;font-weight:800;color:var(--navy);margin:10px 0 4px}
   .subtle{color:#6b7280;margin:0 0 15px;font-size:15px}
@@ -79,87 +134,99 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
 
 <?php include 'header.php'; ?>
 
-<!-- ===== Events Content ===== -->
 <div class="wrapper">
   <h1 class="page-title">All Events</h1>
   <p class="subtle">Discover upcoming campus activities and revisit completed ones.</p>
 
+  <!-- UPCOMING -->
   <section class="section">
     <h2>Upcoming Events</h2>
     <div class="grid">
-
-      <!-- ===== EVENT 1 ===== -->
-      <article
-        class="card"
-        data-href="eventpage.php"
-        role="link"
-        tabindex="0"
-        aria-label="Open event: Club B — Hack Night">
-        <div class="date"><div class="day">10</div><div class="mon">SEP</div><div class="sep">Tue</div></div>
-        <div>
-          <div class="topline"><span class="badge">+30 pt</span><span class="chip sponsor">Sponsor: TechCorp</span></div>
-          <div class="title">Club B — Hack Night</div>
-          <div class="mini"><span>📍 Location</span></div>
-          <div class="footer"><span class="mini">🕒 6:00 PM</span></div>
-        </div>
-      </article>
-
-      <!-- ===== EVENT 2 ===== -->
-      <article
-        class="card"
-        data-href="eventpage.php"
-        role="link"
-        tabindex="0"
-        aria-label="Open event: Club B — Finance 101">
-        <div class="date"><div class="day">15</div><div class="mon">SEP</div><div class="sep">Sun</div></div>
-        <div>
-          <div class="topline"><span class="badge">+30 pt</span><span class="chip sponsor">Sponsor: BlueBank</span></div>
-          <div class="title">Club B — Finance 101</div>
-          <div class="mini"><span>📍 Main Hall</span></div>
-          <div class="footer"><span class="mini">🕒 4:30 PM</span></div>
-        </div>
-      </article>
-
+      <?php if (empty($upcoming)): ?>
+        <p style="grid-column:1/-1;color:#6b7280;">No upcoming events yet.</p>
+      <?php else: ?>
+        <?php foreach ($upcoming as $ev): 
+          [$day,$mon,$dow] = formatEventDateParts($ev['starting_date']);
+          $time = formatEventTime($ev['starting_date']);
+          $sponsor = $ev['sponsor_name'] ? 'Sponsor: '.$ev['sponsor_name'] : 'No sponsor listed';
+        ?>
+        <article
+          class="card"
+          data-href="eventpage.php?event_id=<?php echo (int)$ev['event_id']; ?>"
+          role="link"
+          tabindex="0"
+          aria-label="Open event: <?php echo htmlspecialchars($ev['event_name']); ?>">
+          <div class="date">
+            <div class="day"><?php echo $day; ?></div>
+            <div class="mon"><?php echo $mon; ?></div>
+            <div class="sep"><?php echo $dow; ?></div>
+          </div>
+          <div>
+            <div class="topline">
+              <span class="badge">+30 pt</span>
+              <span class="chip sponsor"><?php echo htmlspecialchars($sponsor); ?></span>
+            </div>
+            <div class="title"><?php echo htmlspecialchars($ev['event_name']); ?></div>
+            <div class="mini">
+              <?php if (!empty($ev['event_location'])): ?>
+                <span>📍 <?php echo htmlspecialchars($ev['event_location']); ?></span>
+              <?php endif; ?>
+            </div>
+            <div class="footer">
+              <?php if ($time): ?>
+                <span class="mini">🕒 <?php echo $time; ?></span>
+              <?php endif; ?>
+            </div>
+          </div>
+        </article>
+        <?php endforeach; ?>
+      <?php endif; ?>
     </div>
   </section>
 
   <div class="sepbar"></div>
 
-  <!-- ===== PAST EVENTS ===== -->
+  <!-- PAST -->
   <section class="section">
     <h2>Past Events</h2>
     <div class="grid">
-
-      <article
-        class="card"
-        data-href="eventpage.php"
-        role="link"
-        tabindex="0"
-        aria-label="Open event: Club D — Bake-Off Charity (past)">
-        <div class="date"><div class="day">06</div><div class="mon">SEP</div><div class="sep">Fri</div></div>
-        <div>
-          <div class="topline"><span class="state completed">Completed</span><span class="chip sponsor">Sponsor: StarFoods</span></div>
-          <div class="title">Club D — Bake-Off Charity</div>
-          <div class="mini"><span>📍 Cafeteria</span></div>
-          <div class="footer"><span class="review"><span class="stars" style="--rating:4.5"></span>4.5</span></div>
-        </div>
-      </article>
-
-      <article
-        class="card"
-        data-href="eventpage.php"
-        role="link"
-        tabindex="0"
-        aria-label="Open event: Club A — Sustainability Talk (past)">
-        <div class="date"><div class="day">28</div><div class="mon">AUG</div><div class="sep">Thu</div></div>
-        <div>
-          <div class="topline"><span class="state completed">Completed</span><span class="chip sponsor">Sponsor: GreenLabs</span></div>
-          <div class="title">Club A — Sustainability Talk</div>
-          <div class="mini"><span>📍 Auditorium</span></div>
-          <div class="footer"><span class="review"><span class="stars" style="--rating:3.8"></span>3.8</span></div>
-        </div>
-      </article>
-
+      <?php if (empty($past)): ?>
+        <p style="grid-column:1/-1;color:#6b7280;">No past events yet.</p>
+      <?php else: ?>
+        <?php foreach ($past as $ev): 
+          [$day,$mon,$dow] = formatEventDateParts($ev['starting_date']);
+          $sponsor = $ev['sponsor_name'] ? 'Sponsor: '.$ev['sponsor_name'] : 'No sponsor listed';
+        ?>
+        <article
+          class="card"
+          data-href="eventpage.php?event_id=<?php echo (int)$ev['event_id']; ?>"
+          role="link"
+          tabindex="0"
+          aria-label="Open past event: <?php echo htmlspecialchars($ev['event_name']); ?>">
+          <div class="date">
+            <div class="day"><?php echo $day; ?></div>
+            <div class="mon"><?php echo $mon; ?></div>
+            <div class="sep"><?php echo $dow; ?></div>
+          </div>
+          <div>
+            <div class="topline">
+              <span class="state completed">Completed</span>
+              <span class="chip sponsor"><?php echo htmlspecialchars($sponsor); ?></span>
+            </div>
+            <div class="title"><?php echo htmlspecialchars($ev['event_name']); ?></div>
+            <div class="mini">
+              <?php if (!empty($ev['event_location'])): ?>
+                <span>📍 <?php echo htmlspecialchars($ev['event_location']); ?></span>
+              <?php endif; ?>
+            </div>
+            <div class="footer">
+              <!-- static demo rating, can be replaced later -->
+              <span class="review"><span class="stars" style="--rating:4.3"></span>4.3</span>
+            </div>
+          </div>
+        </article>
+        <?php endforeach; ?>
+      <?php endif; ?>
     </div>
   </section>
 </div>
@@ -167,18 +234,15 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
 <?php include 'footer.php'; ?>
 
 <script>
-/* Make any .card with data-href clickable + keyboard accessible */
 (function(){
   function shouldIgnore(target){
-    // don’t hijack clicks on interactive elements inside the card
     const interactive = ['A','BUTTON','INPUT','SELECT','TEXTAREA','LABEL','SVG','PATH'];
     return interactive.includes(target.tagName);
   }
 
   document.addEventListener('click', (e) => {
     const card = e.target.closest('.card[data-href]');
-    if(!card) return;
-    if(shouldIgnore(e.target)) return;
+    if(!card || shouldIgnore(e.target)) return;
     const url = card.getAttribute('data-href');
     if(url) window.location.href = url;
   });

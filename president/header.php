@@ -2,7 +2,42 @@
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
+
+/* ✅ President-only access (header for president panel) */
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'club_president') {
+    header('Location: ../login.php');
+    exit;
+}
+
+require_once '../config.php';
+
 $currentPage = basename($_SERVER['PHP_SELF']);
+
+/* ✅ Get president info from DB (your presidents are stored in `student` table with role=club_president) */
+$presidentId = $_SESSION['president_id'] ?? $_SESSION['student_id'] ?? null;
+
+$displayName = "President";
+$points      = 0;
+$clubId      = null;
+
+if ($presidentId) {
+    $stmt = $conn->prepare("
+        SELECT student_name, total_points, club_id
+        FROM student
+        WHERE student_id = ?
+        LIMIT 1
+    ");
+    $stmt->bind_param("i", $presidentId);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    if ($res && $res->num_rows > 0) {
+        $row = $res->fetch_assoc();
+        $displayName = $row['student_name'] ?? $displayName;
+        $points      = (int)($row['total_points'] ?? 0);
+        $clubId      = $row['club_id'] ?? null;
+    }
+    $stmt->close();
+}
 ?>
 <!doctype html>
 <html lang="en">
@@ -305,7 +340,7 @@ body.menu-open .backdrop{ opacity:1; pointer-events:auto }
             <circle cx="12" cy="7" r="4"></circle>
           </svg>
         </span>
-        <span id="activeUser" class="display">User</span>
+        <span id="activeUser" class="display"><?= htmlspecialchars($displayName) ?></span>
       </div>
       <button id="menuToggle" class="menu-btn" aria-label="Open menu">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
@@ -337,7 +372,7 @@ body.menu-open .backdrop{ opacity:1; pointer-events:auto }
 
       <div style="display:flex; flex-direction:column;">
         <div style="display:flex; align-items:center; gap:8px;">
-          <div id="sideTitle" class="user-name display">User</div>
+          <div id="sideTitle" class="user-name display"><?= htmlspecialchars($displayName) ?></div>
 
           <!-- Edit profile button -->
           <a href="editprofile.php"
@@ -355,7 +390,7 @@ body.menu-open .backdrop{ opacity:1; pointer-events:auto }
 
         <div class="points" id="points">
           <span aria-hidden="true">⭐</span>
-          <span><strong>120</strong> pts</span>
+          <span><strong><?= (int)$points ?></strong> pts</span>
         </div>
       </div>
     </div>

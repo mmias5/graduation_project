@@ -5,8 +5,64 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
     header('Location: ../login.php');
     exit;
 }
-?>
 
+require_once '../config.php';
+
+$president_id = (int)$_SESSION['student_id'];
+
+/* get president club_id */
+$stmt = $conn->prepare("SELECT club_id FROM student WHERE student_id=? AND role='club_president' LIMIT 1");
+$stmt->bind_param("i", $president_id);
+$stmt->execute();
+$res = $stmt->get_result();
+$pres = $res->fetch_assoc();
+$stmt->close();
+
+$club_id = isset($pres['club_id']) ? (int)$pres['club_id'] : 1;
+
+$requests = [];
+if ($club_id > 1) {
+    $sql = "
+      SELECT r.request_id, r.student_id, r.reason, r.submitted_at,
+             s.student_name, s.email, s.major, s.profile_photo
+      FROM club_membership_request r
+      JOIN student s ON s.student_id = r.student_id
+      WHERE r.club_id = ?
+        AND r.status = 'Pending'
+      ORDER BY r.submitted_at DESC
+    ";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("i", $club_id);
+    $stmt->execute();
+    $rr = $stmt->get_result();
+    while ($row = $rr->fetch_assoc()) {
+        $avatar = $row['profile_photo'];
+        if (!$avatar) {
+            $avatar = "https://i.pravatar.cc/150?u=" . urlencode("req_" . $row['student_id']);
+        }
+
+        $submitted = $row['submitted_at'] ? date('Y-m-d', strtotime($row['submitted_at'])) : '—';
+
+        $requests[] = [
+            "request_id" => (int)$row['request_id'],
+            "student_id" => (int)$row['student_id'],
+            "name" => $row['student_name'],
+            "email" => $row['email'],
+            "major" => $row['major'] ?: '—',
+            "reason" => $row['reason'] ?: '',
+            "submitted" => $submitted,
+            "avatar" => $avatar
+        ];
+    }
+    $stmt->close();
+}
+
+/* CSRF token */
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(16));
+}
+$csrf = $_SESSION['csrf_token'];
+?>
 <!doctype html>
 <html lang="en">
 <head>
@@ -120,16 +176,9 @@ footer.cch-footer{ margin-top:auto !important; }
 <?php include 'footer.php'; ?>
 
 <script>
-/* ==== Mock data for requests (demo only) ==== */
-const REQUESTS = Array.from({length:10}).map((_,i)=>({
-  id:i+1,
-  name:['Lina','Omar','Sara','Mustafa','Noor','Jad','Maya','Hiba','Yousef','Rami'][i],
-  email:`request${i+1}@university.edu`,
-  major:['CS','IT','Business','Design'][i%4],
-  reason:['Wants to join for tech events','Interested in business community','Active in design projects','Looking to network'][i%4],
-  submitted:`2025-0${(i%9)+1}-${String(((i*2)%28)+1).padStart(2,'0')}`,
-  avatar:`https://i.pravatar.cc/150?img=${(i%70)+21}`
-}));
+const CSRF = <?php echo json_encode($csrf); ?>;
+const CLUB_ID = <?php echo (int)$club_id; ?>;
+const REQUESTS = <?php echo json_encode($requests, JSON_UNESCAPED_SLASHES); ?>;
 
 /* ==== Elements ==== */
 const grid=document.getElementById('grid');
@@ -144,14 +193,15 @@ countEl.textContent=state.data.length;
 
 /* ==== Render ==== */
 function renderGrid(){
-  const {q,page,limit}=state;
-  const ql=q.trim().toLowerCase();
-  const filtered=state.data.filter(m=>!ql || m.name.toLowerCase().includes(ql));
-  const total=filtered.length;
-  const pages=Math.max(1,Math.ceil(total/limit));
-  if(page>pages) state.page=pages;
-  const start=(state.page-1)*limit;
-  const slice=filtered.slice(start,start+limit);
+  const ql = state.q.trim().toLowerCase();
+  const filtered = state.data.filter(m => !ql || (m.name||'').toLowerCase().includes(ql));
+  const total = filtered.length;
+  const pages = Math.max(1, Math.ceil(total/state.limit));
+  if(state.page>pages) state.page=pages;
+
+  const start=(state.page-1)*state.limit;
+  const slice=filtered.slice(start,start+state.limit);
+
   grid.innerHTML=slice.map(cardHTML).join('');
   empty.style.display=slice.length?'none':'block';
   renderPager(pages);
@@ -160,18 +210,18 @@ function renderGrid(){
 
 function cardHTML(m){
   return `
-  <div class="card" data-id="${m.id}" data-name="${m.name}">
-    <img class="avatar" src="${m.avatar}" alt="${m.name}">
+  <div class="card" data-request="${m.request_id}">
+    <img class="avatar" src="${m.avatar}" alt="${escapeHtml(m.name)}">
     <div>
-      <div class="name">${m.name}</div>
-      <div class="meta">${m.email}</div>
-      <div class="meta">${m.major} • Request sent ${m.submitted}</div>
+      <div class="name">${escapeHtml(m.name)}</div>
+      <div class="meta">${escapeHtml(m.email)}</div>
+      <div class="meta">${escapeHtml(m.major)} • Request sent ${escapeHtml(m.submitted)}</div>
       <span class="role-badge">Pending request</span>
     </div>
     <div class="actions">
-      <button class="btn ghost small" type="button" onclick="location.href='profile.php'">View</button>
-      <button class="btn accept small" type="button" onclick="acceptRequest(${m.id})">Accept</button>
-      <button class="btn reject small" type="button" onclick="rejectRequest(${m.id})">Reject</button>
+      <button class="btn ghost small" type="button" onclick="location.href='profile.php?id=${m.student_id}'">View</button>
+      <button class="btn accept small" type="button" onclick="acceptRequest(${m.request_id})">Accept</button>
+      <button class="btn reject small" type="button" onclick="rejectRequest(${m.request_id})">Reject</button>
     </div>
   </div>`;
 }
@@ -180,35 +230,53 @@ function renderPager(pages){
   if(pages<=1){pager.innerHTML='';return;}
   pager.innerHTML=Array.from({length:pages},(_,i)=>{
     const p=i+1;
-    return p===state.page?`<span class="active">${p}</span>`:`<a href="#" onclick="gotoPage(${p});return false;">${p}</a>`;
+    return p===state.page
+      ? `<span class="active">${p}</span>`
+      : `<a href="#" onclick="gotoPage(${p});return false;">${p}</a>`;
   }).join('');
 }
-
-/* ==== Actions ==== */
 function gotoPage(p){state.page=p;renderGrid();}
 
-/* Live search */
 searchEl.addEventListener('input',()=>{
   state.q=searchEl.value;
   state.page=1;
   renderGrid();
 });
 
-/* Accept / Reject — front-end demo only */
-function acceptRequest(id){
-  const req = state.data.find(r=>r.id===id);
-  if(!req) return;
-  // here later you can call PHP / AJAX to approve in DB
-  state.data = state.data.filter(r=>r.id!==id);
-  renderGrid();
+function escapeHtml(str){
+  return String(str ?? '').replace(/[&<>"']/g, s => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[s]));
 }
 
-function rejectRequest(id){
-  const req = state.data.find(r=>r.id===id);
-  if(!req) return;
-  // here later you can call PHP / AJAX to reject in DB
-  state.data = state.data.filter(r=>r.id!==id);
-  renderGrid();
+/* Accept / Reject -> DB */
+async function acceptRequest(requestId){
+  await decide(requestId, 'accept');
+}
+async function rejectRequest(requestId){
+  await decide(requestId, 'reject');
+}
+
+async function decide(requestId, action){
+  try{
+    const fd = new FormData();
+    fd.append('action', action);
+    fd.append('request_id', String(requestId));
+    fd.append('csrf_token', CSRF);
+
+    const res = await fetch('president_member_actions.php', { method:'POST', body: fd });
+    const data = await res.json();
+
+    if(!data.ok){
+      alert(data.error || 'Operation failed');
+      return;
+    }
+
+    state.data = state.data.filter(r => r.request_id !== requestId);
+    renderGrid();
+  }catch(e){
+    alert('Network error');
+  }
 }
 
 /* ==== Init ==== */

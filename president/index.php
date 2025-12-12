@@ -1,12 +1,161 @@
 <?php
 session_start();
 
+// بس الطالب العادي يدخل هون
 if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
+    if (isset($_SESSION['role']) && $_SESSION['role'] === 'student') {
+        header('Location: ../president/index.php');
+        exit;
+    }
     header('Location: ../login.php');
     exit;
 }
-?>
 
+require_once __DIR__ . '/../config.php';
+
+/* =======================
+   COUNTERS (students / clubs / sponsors)
+   ======================= */
+$totalStudents = 0;
+$totalClubs    = 0;
+$totalSponsors = 0;
+
+if (isset($conn) && $conn instanceof mysqli) {
+    // طلاب
+    if ($res = $conn->query("SELECT COUNT(*) AS c FROM student")) {
+        if ($row = $res->fetch_assoc()) $totalStudents = (int)$row['c'];
+    }
+    // أندية
+    if ($res = $conn->query("SELECT COUNT(*) AS c FROM club")) {
+        if ($row = $res->fetch_assoc()) $totalClubs = (int)$row['c'];
+    }
+    // رعاة
+    if ($res = $conn->query("SELECT COUNT(*) AS c FROM sponsor")) {
+        if ($row = $res->fetch_assoc()) $totalSponsors = (int)$row['c'];
+    }
+}
+
+/* =======================
+   TOP CLUBS RANKING
+   ======================= */
+$topClubs = [];
+if (isset($conn) && $conn instanceof mysqli) {
+    $sql = "
+        SELECT club_id, club_name, logo, points
+        FROM club
+        WHERE status IS NULL OR status = 'Active'
+        ORDER BY points DESC, club_name ASC
+        LIMIT 4
+    ";
+    if ($res = $conn->query($sql)) {
+        while ($row = $res->fetch_assoc()) {
+            $topClubs[] = $row;
+        }
+    }
+}
+if (empty($topClubs)) {
+    $topClubs = [
+        ['club_id'=>1, 'club_name'=>'AI Innovators', 'logo'=>null, 'points'=>9800],
+        ['club_id'=>2, 'club_name'=>'Business Leaders', 'logo'=>null, 'points'=>8800],
+        ['club_id'=>3, 'club_name'=>'Art & Media', 'logo'=>null, 'points'=>8400],
+        ['club_id'=>4, 'club_name'=>'Green Campus', 'logo'=>null, 'points'=>7900],
+    ];
+}
+
+/* =======================
+   LATEST NEWS (للـ CAROUSEL)
+   ======================= */
+$newsItems = [];
+if (isset($conn) && $conn instanceof mysqli) {
+    $sql = "
+        SELECT news_id, title, category, image
+        FROM news
+        ORDER BY created_at DESC
+        LIMIT 5
+    ";
+    if ($res = $conn->query($sql)) {
+        while ($row = $res->fetch_assoc()) {
+            $newsItems[] = $row;
+        }
+    }
+}
+// fallback لو فاضية
+if (empty($newsItems)) {
+    $newsItems = [
+        [
+            'news_id'  => 0,
+            'title'    => 'Top performing clubs',
+            'category' => 'Ranking',
+            'image'    => 'https://images.unsplash.com/photo-1519389950473-47ba0277781c?q=80&w=1200&auto=format&fit=crop',
+        ],
+        [
+            'news_id'  => 0,
+            'title'    => 'Join a new club',
+            'category' => 'Clubs',
+            'image'    => 'https://images.unsplash.com/photo-1556761175-5973dc0f32e7?q=80&w=1200&auto=format&fit=crop',
+        ],
+        [
+            'news_id'  => 0,
+            'title'    => 'Redeem your points',
+            'category' => 'Rewards',
+            'image'    => 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?q=80&w=1200&auto=format&fit=crop',
+        ],
+    ];
+}
+
+/* =======================
+   SPONSORS DOTS (3 sponsors من DB)
+   ======================= */
+$sponsors = [];
+if (isset($conn) && $conn instanceof mysqli) {
+    $sql = "
+        SELECT sponsor_id, company_name, logo
+        FROM sponsor
+        ORDER BY sponsor_id ASC
+        LIMIT 3
+    ";
+    if ($res = $conn->query($sql)) {
+        while ($row = $res->fetch_assoc()) {
+            $sponsors[] = $row;
+        }
+    }
+}
+// نكمّل 3 عناصر لو أقل من 3
+while (count($sponsors) < 3) {
+    $sponsors[] = [
+        'sponsor_id'   => 0,
+        'company_name' => 'Sponsor',
+        'logo'         => null,
+    ];
+}
+
+/* =======================
+   HELPERS
+   ======================= */
+function club_logo_url(?string $logo): string {
+    if ($logo && $logo !== '') {
+        // عندك بالـ SQL قيم زي: assets/sponsor_coffee.png
+        // فبنستخدمها زي ما هي، والمجلد يكون موجود نسبي لملف index.php
+        return htmlspecialchars($logo, ENT_QUOTES, 'UTF-8');
+    }
+    return 'https://dummyimage.com/120x120/a9bff8/242751.png&text=CL';
+}
+
+function sponsor_logo_url(?string $logo): string {
+    if ($logo && $logo !== '') {
+        return htmlspecialchars($logo, ENT_QUOTES, 'UTF-8');
+    }
+    return 'https://dummyimage.com/200x200/a9bff8/242751.png&text=S';
+}
+
+function news_image_url(?string $image): string {
+    if ($image && $image !== '') {
+        // نفس الفكرة، لو القيمة assets/news_xxx.png خليها موجودة في نفس المسار
+        return htmlspecialchars($image, ENT_QUOTES, 'UTF-8');
+    }
+    return 'https://images.unsplash.com/photo-1519389950473-47ba0277781c?q=80&w=1200&auto=format&fit=crop';
+}
+?>
 <!doctype html>
 <html lang="en">
 <head>
@@ -36,18 +185,8 @@ body{
 .between{ justify-content:space-between; align-items:center }
 .mt-16{ margin-top:16px }
 
-/* ========= Top Bar ========= (kept in header.php) */
-.topbar{ background:#121740; color:#fff; position:sticky; top:0; z-index:50 }
-.topbar .container{ padding:12px 0 }
-.brand img.logo{ height:36px }
-.nav a{ color:#fff; text-decoration:none; font-weight:700; margin:0 12px; opacity:.95 }
-.nav a:hover{ opacity:1; text-decoration:underline }
-.user{ color:#fff; text-decoration:none; font-weight:700; display:flex; gap:8px; align-items:center }
-
 /* keep distance from topbar */
-.safe-space{
-  margin-top:1px;
-}
+.safe-space{ margin-top:1px; }
 
 /* hero container */
 .hero-card{
@@ -55,24 +194,23 @@ body{
   display:flex;
   justify-content:center;
   align-items:center;
-  padding:20px 0;   /* smaller top/bottom spacing */
+  padding:20px 0;
   z-index:1;
 }
 
-/* ✅ SMALLER stars */
+/* stars */
 .hero-card .star{
   position:absolute;
   top:50%;
   transform:translateY(-50%);
-  width:clamp(220px, 28vw, 300px);   /* ✅ smaller size */
+  width:clamp(220px, 28vw, 300px);
   height:auto;
   opacity:1;
   pointer-events:none;
   z-index:0;
 }
-
 .hero-card .star-left{
-  left:90px;                       /* closer to card */
+  left:90px;
   transform:translateY(-50%) rotate(-4deg);
 }
 .hero-card .star-right{
@@ -80,24 +218,21 @@ body{
   transform:translateY(-50%) rotate(4deg);
 }
 
-/* ✅ SMALLER video card */
-/* ✅ video card in ROYAL color + glow */
+/* video card */
 .video-card{
   position:relative;
   z-index:2;
-  width:94%;                /* wider */
-  max-width:1150px;         /* wider on desktop */
-  aspect-ratio: 16 / 6;     /* thinner height */
+  width:94%;
+  max-width:1150px;
+  aspect-ratio: 16 / 6;
   border-radius:20px;
   overflow:hidden;
   margin:auto;
-  background: var(--royal); /* 🔹 royal background behind video */
+  background: var(--royal);
   box-shadow:
-    0 0 0 2px rgba(72,113,219,.85),    /* royal outline */
-    0 18px 40px rgba(10,23,60,.45);    /* soft dark shadow under it */
+    0 0 0 2px rgba(72,113,219,.85),
+    0 18px 40px rgba(10,23,60,.45);
 }
-
-.video-card img,
 .video-card video{
   position:absolute;
   inset:0;
@@ -105,24 +240,17 @@ body{
   height:100%;
   object-fit:cover;
   display:block;
+  filter:saturate(1.02) contrast(1.02);
 }
 
 /* responsive */
 @media(max-width:900px){
   .safe-space{ margin-top:40px; }
-
-  .hero-card .star{
-    width:clamp(160px, 40vw, 240px);  /* smaller on mobile */
-  }
+  .hero-card .star{ width:clamp(160px, 40vw, 240px); }
   .hero-card .star-left{ left:-20px; }
   .hero-card .star-right{ right:-20px; }
-
-  .video-card{
-    max-width:90vw;
-  }
+  .video-card{ max-width:90vw; }
 }
-
-/* tighten on small screens */
 @media (max-width: 900px){
   .safe-space{ margin-top:70px; }
   .hero-card .star{ width:clamp(110px, 26vw, 200px); }
@@ -131,58 +259,31 @@ body{
   .video-card{ max-width:92vw; }
 }
 
-
-/* fallback for browsers without aspect-ratio support */
-@supports not (aspect-ratio: 1 / 1) {
-  .hero::before{
-    content:"";
-    display:block;
-    padding-top: 62.5%;      /* 10/16 = 0.625 (i.e., 62.5%) */
-  }
-}
-
-.hero > video{
-  position: absolute;
-  inset: 0;                  /* top:0; right:0; bottom:0; left:0 */
-  width: 100%;
-  height: 100%;
-  object-fit: cover;         /* fill without bars */
-  display: block;
-  filter: saturate(1.02) contrast(1.02);
-}
-
-/* ========= Cards Carousel (1-by-1 slide, center scaling) ========= */
+/* ========= Cards Carousel ========= */
 .cards-wrap{ margin:28px auto }
 
 .carousel{
   position: relative;
   overflow-x: hidden;
-  overflow-y: visible; /* allow vertical growth of center card */
+  overflow-y: visible;
 }
 .carousel-track{
   display:flex; gap:24px;
   will-change:transform;
   transform:translateX(0);
 }
-
-/* The anchor keeps layout size and provides vertical padding so the scaled
-   inner card never gets clipped. */
 .carousel .card{
-  min-width: calc((100% - 48px) / 3); /* 3 visible on desktop */
+  min-width: calc((100% - 48px) / 3);
   position:relative;
   text-decoration:none;
   color:inherit;
   overflow:visible;
-
-  /* Extra room so the center card can grow without clipping */
   padding-top:60px;
   padding-bottom:60px;
 }
-
-/* We scale the INNER wrapper, not the anchor */
 .card-inner{
   position:relative;
-  border-radius:var(--radius);
+  border-radius:26px;
   background:var(--card);
   box-shadow:var(--shadow);
   overflow:hidden;
@@ -196,24 +297,19 @@ body{
   box-shadow: 0 22px 60px rgba(10,20,40,.22);
 }
 .carousel .card:active .card-inner{ transform: scale(.98) }
-
-/* Card media & text */
-.card-inner img{ width:100%; height:220px; object-fit:cover; display:block }
+.card-inner img{ width:100%; height:260px; object-fit:cover; display:block }
 .card-inner h3{
   margin:0; padding:14px 16px 18px; font-size:18px; font-weight:800; color:#fff;
   position:absolute; bottom:0; left:0; right:0;
   background:linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(10,20,40,.65) 60%, rgba(10,20,40,.88) 100%);
 }
 .pill{
-  position:absolute; top:10px; left:12px; z-index:2;
-  background:rgba(255,255,255,.9); color:var(--ink); font-weight:800; font-size:12px;
-  padding:6px 10px; border-radius:999px; box-shadow:0 6px 16px rgba(0,0,0,.1);
+  position:absolute; top:12px; left:16px; z-index:2;
+  background:#ffffff; color:#000; font-weight:800; font-size:12px;
+  padding:6px 12px; border-radius:999px;
 }
 
-/* Pause auto-slide on hover */
-.carousel:hover .carousel-track{ transition-duration:0s !important }
-
-/* === Carousel arrows === */
+/* arrows */
 .carousel-arrow{
   position:absolute;
   top:50%;
@@ -233,7 +329,7 @@ body{
 .carousel-arrow.next{ right:-12px; }
 
 @media (max-width:900px){
-  .carousel .card{ min-width: 86% }  /* one big card on mobile */
+  .carousel .card{ min-width: 86% }
   .carousel-arrow{ width:40px; height:40px; font-size:22px; }
   .carousel-arrow.prev{ left:6px; }
   .carousel-arrow.next{ right:6px; }
@@ -243,18 +339,20 @@ body{
 .ranking{ margin:30px auto 0 }
 .ranking-wrap{ background:#f3f6ff; border-radius:24px; padding:28px; box-shadow:var(--shadow) }
 .title{ margin:0 0 18px; font-size:32px; font-weight:800; text-align:center; color:var(--navy); }
-
 .ranking-list{ display:grid; gap:14px }
 .rank-item{
-  display:grid; grid-template-columns:56px 1fr 40px; align-items:center;
+  display:grid; grid-template-columns:56px 1fr 80px; align-items:center;
   background:#fff; border-radius:14px; padding:12px 14px; box-shadow:var(--shadow);
 }
-.rank-item.accent{ background:linear-gradient(90deg, #f9d778 0%, #efc25a 100%); color:#4b3205 }
+.rank-item.accent{
+  background:linear-gradient(90deg, #f9d778 0%, #efc25a 100%);
+  color:#4b3205;
+}
 .rank-item .avatar{ width:44px; height:44px; border-radius:12px; overflow:hidden; display:grid; place-items:center; background:#e9eefb }
 .rank-item .avatar img{ width:100%; height:100%; object-fit:cover }
-.rank-item .meta{ display:flex; flex-direction:column; gap:6px }
+.rank-item .meta{ display:flex; flex-direction:column; gap:2px }
 .rank-item .meta .name{ font-weight:800; font-size:18px }
-.rank-item .meta .sponsor{ font-size:12px; opacity:.8 }
+.rank-item .meta .points{ font-size:13px; opacity:.85 }
 .rank-item .trophy{ font-size:20px; text-align:right }
 
 /* ========= Button ========= */
@@ -268,163 +366,164 @@ body{
 .sponsors{ margin:34px auto 40px; text-align:center }
 .sponsors-title{ font-size:42px; letter-spacing:2px; color:var(--navy); margin:4px 0 16px; font-weight:800 }
 .sponsor-panel{
-  border:2px solid #efd679; border-radius:22px; padding:26px; display:flex; gap:26px; justify-content:center; align-items:center; background:#fff; box-shadow:var(--shadow)
+  border:2px solid #efd679; border-radius:22px; padding:26px;
+  display:flex; gap:26px; justify-content:center; align-items:center;
+  background:#fff; box-shadow:var(--shadow)
 }
-.sponsor-dot{ width:94px; height:94px; border-radius:50%; background:#f1f4ff; display:grid; place-items:center; overflow:hidden }
-.sponsor-dot.large{ width:152px; height:152px }
+.sponsor-dot{
+  width:94px; height:94px; border-radius:50%;
+  background:#f1f4ff;
+  display:grid; place-items:center; overflow:hidden;
+}
+.sponsor-dot.large{
+  width:152px; height:152px;
+}
 .sponsor-dot img{ width:90%; height:90%; object-fit:contain }
 
-/* ========= Footer Stats with rolling numbers ========= */
+/* ========= Footer Stats ========= */
 .stats{ position:relative; background:#4871db; color:#fff; margin-top:40px }
 .stats-overlay{ position:relative; z-index:1; padding:26px 0 38px }
 .stats-grid{ display:grid; grid-template-columns: repeat(3, 1fr); gap:26px; align-items:center }
 .stat{ display:flex; flex-direction:column; gap:10px }
 .stat-top{ display:flex; justify-content:space-between; align-items:center; font-weight:700 }
-.circle-btn{ width:36px; height:36px; border-radius:50%; border:none; background:#f4df6d; color:#0e1228; font-weight:900; cursor:pointer; display:grid; place-items:center }
 .bar{ height:8px; background: white; border-radius:999px; overflow:hidden }
 .bar span{ display:block; height:100%; width:0; background:#f4df6d; border-radius:999px; transition:width 1.2s ease }
 .stat-num{ font-size:18px; font-weight:800; text-align:center }
-/* Disable arrows while animating to prevent double transitions */
+
 .carousel.is-animating .carousel-arrow{
-  pointer-events: none;
-  opacity: .6;
+  pointer-events:none;
+  opacity:.6;
 }
-
-
 </style>
 </head>
 <body>
 
-<?php include_once("header.php"); ?>
-<!-- ===== Hero Card with side stars ===== -->
+<?php include_once "header.php"; ?>
+
+<!-- ===== HERO ===== -->
 <section class="hero-card safe-space">
-  <!-- decorative stars (behind the card) -->
   <img class="star star-left"  src="tools/pics/bg.png" alt="" aria-hidden="true">
   <img class="star star-right" src="tools/pics/bg.png" alt="" aria-hidden="true">
 
-  <!-- video card -->
   <div class="video-card">
-  <video autoplay muted loop playsinline preload="auto">
-    <source src="tools/video/indexvideo.mp4" type="video/mp4">
-  </video>
-</div>
+    <video autoplay muted loop playsinline preload="auto">
+      <source src="tools/video/indexvideo.mp4" type="video/mp4">
+    </video>
+  </div>
 </section>
 
-
-<!-- ===== Cards Carousel ===== -->
+<!-- ===== NEWS CAROUSEL (من جدول news) ===== -->
 <section class="cards-wrap container">
   <div class="carousel" id="cards-carousel" aria-roledescription="carousel">
     <div class="carousel-track" id="cards-track">
-      <!-- Each card is a button (link) -->
-      <a class="card" href="news.php">
-        <div class="card-inner">
-          <span class="pill">Events</span>
-          <img src="https://images.unsplash.com/photo-1523580846011-d3a5bc25702b?q=80&w=1200&auto=format&fit=crop" alt="">
-          <h3>Event Name</h3>
-        </div>
-      </a>
-
-      <a class="card" href="news2.html">
-        <div class="card-inner">
-          <span class="pill">News</span>
-          <img src="https://images.unsplash.com/photo-1519389950473-47ba0277781c?q=80&w=1200&auto=format&fit=crop" alt="">
-          <h3>New sponsor with us now!</h3>
-        </div>
-      </a>
-
-      <a class="card" href="news3.html">
-        <div class="card-inner">
-          <span class="pill">Events</span>
-          <img src="https://images.unsplash.com/photo-1556761175-5973dc0f32e7?q=80&w=1200&auto=format&fit=crop" alt="">
-          <h3>Event Name</h3>
-        </div>
-      </a>
-
-      <!-- Extra cards for seamless loop -->
-      <a class="card" href="news4.html">
-        <div class="card-inner">
-          <span class="pill">News</span>
-          <img src="https://images.unsplash.com/photo-1522071820081-009f0129c71c?q=80&w=1200&auto=format&fit=crop" alt="">
-          <h3>Campus hackathon announced</h3>
-        </div>
-      </a>
-
-      <a class="card" href="news5.html">
-        <div class="card-inner">
-          <span class="pill">Events</span>
-          <img src="https://images.unsplash.com/photo-1496307042754-b4aa456c4a2d?q=80&w=1200&auto=format&fit=crop" alt="">
-          <h3>Photography walk</h3>
-        </div>
-      </a>
+      <?php foreach ($newsItems as $item): ?>
+        <?php
+          $href     = $item['news_id'] ? 'news.php?id='.(int)$item['news_id'] : '#';
+          $pillText = $item['category'] ? $item['category'] : 'News';
+        ?>
+        <a class="card" href="<?php echo $href; ?>">
+          <div class="card-inner">
+            <span class="pill"><?php echo htmlspecialchars($pillText); ?></span>
+            <img src="<?php echo news_image_url($item['image']); ?>" alt="">
+            <h3><?php echo htmlspecialchars($item['title']); ?></h3>
+          </div>
+        </a>
+      <?php endforeach; ?>
     </div>
 
-    <!-- ⇦ ARROWS ⇨ -->
     <button class="carousel-arrow prev" aria-label="Previous slide">‹</button>
     <button class="carousel-arrow next" aria-label="Next slide">›</button>
   </div>
 </section>
 
-<!-- ===== Best Of Ranking ===== -->
+<!-- ===== BEST OF RANKING ===== -->
 <section class="ranking container" id="ranking">
   <div class="ranking-wrap">
     <h2 class="title">Best Of Ranking</h2>
-    <div id="ranking-list" class="ranking-list" aria-live="polite"></div>
+    <div class="ranking-list" id="ranking-list">
+      <?php
+      $i = 0;
+      foreach ($topClubs as $club):
+          $i++;
+          $accent = ($i === 1) ? ' accent' : '';
+          $trophy = ($i === 1) ? '🏆' : (($i === 2) ? '🥈' : (($i === 3) ? '🥉' : '🎖️'));
+      ?>
+        <div class="rank-item<?php echo $accent; ?>">
+          <div class="avatar">
+            <img src="<?php echo club_logo_url($club['logo']); ?>" alt="">
+          </div>
+          <div class="meta">
+            <div class="name"><?php echo htmlspecialchars($club['club_name']); ?></div>
+            <div class="points"><?php echo number_format((int)$club['points']); ?> pts</div>
+          </div>
+          <div class="trophy"><?php echo $trophy; ?></div>
+        </div>
+      <?php endforeach; ?>
+    </div>
     <div class="center mt-16"><a class="btn" href="clubsranking.php">View More</a></div>
   </div>
 </section>
 
-<!-- ===== Sponsors ===== -->
+<!-- ===== SPONSORS FROM DB ===== -->
 <section class="sponsors container">
   <h2 class="sponsors-title">SPONSORS</h2>
   <div class="sponsor-panel">
-    <div class="sponsor-dot"><img src="https://dummyimage.com/200x200/a9bff8/242751.png&text=S1" alt="Sponsor"></div>
-    <div class="sponsor-dot large"><img src="https://dummyimage.com/300x300/4871db/ffffff.png&text=S2" alt="Sponsor"></div>
-    <div class="sponsor-dot"><img src="https://dummyimage.com/200x200/a9bff8/242751.png&text=S3" alt="Sponsor"></div>
+    <?php
+      // small – large – small زي الصورة
+      $left  = $sponsors[0];
+      $mid   = $sponsors[1];
+      $right = $sponsors[2];
+    ?>
+    <div class="sponsor-dot">
+      <img src="<?php echo sponsor_logo_url($left['logo']); ?>" alt="<?php echo htmlspecialchars($left['company_name']); ?>">
+    </div>
+    <div class="sponsor-dot large">
+      <img src="<?php echo sponsor_logo_url($mid['logo']); ?>" alt="<?php echo htmlspecialchars($mid['company_name']); ?>">
+    </div>
+    <div class="sponsor-dot">
+      <img src="<?php echo sponsor_logo_url($right['logo']); ?>" alt="<?php echo htmlspecialchars($right['company_name']); ?>">
+    </div>
   </div>
 </section>
 
-<!-- ===== Footer Stats (rolling counters) ===== -->
+<!-- ===== FOOTER STATS ===== -->
 <footer class="stats" id="stats">
   <div class="stats-overlay">
     <div class="stats-grid container">
       <div class="stat">
         <div class="stat-top"><span>Students</span></div>
         <div class="bar"><span data-bar></span></div>
-        <div class="stat-num" data-counter data-target="55000">0</div>
+        <div class="stat-num" data-counter data-target="<?php echo max(0,$totalStudents); ?>">0</div>
       </div>
       <div class="stat">
         <div class="stat-top"><span>Clubs</span></div>
         <div class="bar"><span data-bar></span></div>
-        <div class="stat-num" data-counter data-target="100">0</div>
+        <div class="stat-num" data-counter data-target="<?php echo max(0,$totalClubs); ?>">0</div>
       </div>
       <div class="stat">
         <div class="stat-top"><span>Sponsors</span></div>
         <div class="bar"><span data-bar></span></div>
-        <div class="stat-num" data-counter data-target="50">0</div>
+        <div class="stat-num" data-counter data-target="<?php echo max(0,$totalSponsors); ?>">0</div>
       </div>
     </div>
   </div>
 </footer>
 
 <script>
-
-/* ===== CAROUSEL — 1-by-1 + center scale + arrows + keys + swipe (robust) ===== */
+/* ===== CAROUSEL (نفس الأنيميشن القديم) ===== */
 (function cardsCarousel(){
   const track    = document.getElementById('cards-track');
   const carousel = document.getElementById('cards-carousel');
   const btnPrev  = carousel ? carousel.querySelector('.carousel-arrow.prev') : null;
   const btnNext  = carousel ? carousel.querySelector('.carousel-arrow.next') : null;
 
-  if(!track || !carousel || !btnPrev || !btnNext){
-    console.warn('[carousel] missing required elements or duplicate IDs.');
-    return;
-  }
+  if(!track || !carousel || !btnPrev || !btnNext){ return; }
 
   let isAnimating = false;
   let timer;
   const EASE = 'cubic-bezier(.22,.61,.36,1)';
-  const DURATION = 700;  // ms
-  const INTERVAL = 3200; // ms
+  const DURATION = 700;
+  const INTERVAL = 3200;
 
   function getCards(){ return Array.from(track.querySelectorAll('.card')); }
 
@@ -458,7 +557,6 @@ body{
     }
     track.style.transition = 'none';
     track.style.transform  = 'translateX(0)';
-    // reflow
     void track.offsetWidth;
     isAnimating = false;
     carousel.classList.remove('is-animating');
@@ -471,7 +569,7 @@ body{
     carousel.classList.add('is-animating');
 
     const dist = stepWidth();
-    if(!dist){ // safety
+    if(!dist){
       isAnimating = false;
       carousel.classList.remove('is-animating');
       return;
@@ -480,7 +578,6 @@ body{
     track.style.transition = `transform ${DURATION}ms ${EASE}`;
     track.style.transform  = `translateX(${dir>0 ? -dist : dist}px)`;
 
-    // Robust end: listen for transitionend + setTimeout fallback
     let ended = false;
     const onEnd = () => {
       if(ended) return;
@@ -489,29 +586,23 @@ body{
       cleanupAfter(dir);
     };
     track.addEventListener('transitionend', onEnd, {once:true});
-
-    // Fallback in case transitionend doesn't fire (browser quirk / tab switch)
     setTimeout(onEnd, DURATION + 120);
   }
 
   function start(){ stop(); timer = setInterval(()=>slideOnce(1), INTERVAL); }
   function stop(){ if(timer) clearInterval(timer); }
 
-  // arrows
   btnPrev.addEventListener('click', ()=>{ stop(); slideOnce(-1); start(); });
   btnNext.addEventListener('click', ()=>{ stop(); slideOnce(1);  start(); });
 
-  // pause on hover
   carousel.addEventListener('mouseenter', stop);
   carousel.addEventListener('mouseleave', start);
 
-  // keyboard
   window.addEventListener('keydown', (e)=>{
     if(e.key==='ArrowLeft'){ stop(); slideOnce(-1); start(); }
     if(e.key==='ArrowRight'){ stop(); slideOnce(1);  start(); }
   });
 
-  // touch swipe
   let touchX=null, touchTime=0;
   carousel.addEventListener('touchstart', (e)=>{ touchX=e.touches[0].clientX; touchTime=Date.now(); stop(); }, {passive:true});
   carousel.addEventListener('touchend', (e)=>{
@@ -527,55 +618,8 @@ body{
   updateActive();
   start();
 })();
-/* =========================
-   RANKING AUTOFILL (hooks)
-   ========================= */
-async function loadRankingTop(limit = 4){
-  if (Array.isArray(window.__RANKING_DATA__) && window.__RANKING_DATA__.length){
-    return topSorted(window.__RANKING_DATA__, limit);
-  }
-  try{
-    const r = await fetch('/api/rankings/top?limit=' + limit, {credentials:'same-origin'});
-    if(r.ok){ const data = await r.json(); if(Array.isArray(data) && data.length) return topSorted(data, limit); }
-  }catch(e){}
-  try{
-    const r = await fetch('/rankings.json', {credentials:'same-origin'});
-    if(r.ok){ const data = await r.json(); if(Array.isArray(data) && data.length) return topSorted(data, limit); }
-  }catch(e){}
-  try{
-    const raw = localStorage.getItem('cch_ranking');
-    if(raw){ const data = JSON.parse(raw); if(Array.isArray(data) && data.length) return topSorted(data, limit); }
-  }catch(e){}
-  const demo = [
-    { club_id: 1, club_name:'AI Innovators', sponsor_name:"Tech Bee", logo_url:'https://dummyimage.com/120x120/1d2a6b/ffffff.png&text=AI', total_points: 9820 },
-    { club_id: 2, club_name:'Business Leaders', sponsor_name:"FinCorp", logo_url:'https://dummyimage.com/120x120/2b3a84/ffffff.png&text=BL', total_points: 8815 },
-    { club_id: 3, club_name:'Art & Media', sponsor_name:"CreatiCo", logo_url:'https://dummyimage.com/120x120/3e4fb1/ffffff.png&text=AM', total_points: 8420 },
-    { club_id: 4, club_name:'Green Campus', sponsor_name:"Eco+ Labs", logo_url:'https://dummyimage.com/120x120/4b64e3/ffffff.png&text=GC', total_points: 7905 },
-    { club_id: 5, club_name:'Robotics', sponsor_name:"MechaQ", logo_url:'https://dummyimage.com/120x120/6a7cf0/ffffff.png&text=R', total_points: 7020 },
-  ];
-  return topSorted(demo, limit);
-}
-function topSorted(arr, limit){ return [...arr].sort((a,b)=>(b.total_points||0)-(a.total_points||0)).slice(0, limit); }
-function renderRanking(items){
-  const list = document.getElementById('ranking-list'); list.innerHTML = '';
-  items.forEach((item, idx)=>{
-    const div = document.createElement('div');
-    div.className = 'rank-item' + (idx===0 ? ' accent':'');
-    div.innerHTML = `
-      <div class="avatar"><img src="${(item.logo_url||'https://dummyimage.com/120x120/a9bff8/242751.png&text=CL')}" alt=""></div>
-      <div class="meta">
-        <div class="name">${escapeHTML(item.club_name||'Club Name')}</div>
-        <div class="sponsor">Sponsored by ${escapeHTML(item.sponsor_name||"company’s name")}</div>
-      </div>
-      <div class="trophy">${ idx===0 ? '🏆' : idx===1 ? '🥈' : idx===2 ? '🥉' : '🎖️' }</div>`;
-    list.appendChild(div);
-  });
-}
-function escapeHTML(s){ return String(s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 
-/* =========================
-   Rolling counters — animate when stats visible
-   ========================= */
+/* ===== ROLLING COUNTERS ===== */
 function setupCounters(){
   const counters = [...document.querySelectorAll('[data-counter]')];
   const bars = [...document.querySelectorAll('.stat .bar span[data-bar]')];
@@ -588,7 +632,8 @@ function setupCounters(){
           if (!bar.dataset.filled){
             let parent = bar.closest('.stat').querySelector('[data-counter]');
             const tgt = parent ? (parseInt(parent.dataset.target,10)||0) : 100;
-            const pct = Math.max(8, Math.min(100, Math.round((tgt / (tgt>1000?55000:100)) * 100)));
+            const base = tgt > 1000 ? 55000 : 100;
+            const pct = Math.max(8, Math.min(100, Math.round((tgt / base) * 100)));
             requestAnimationFrame(()=>{ bar.style.width = pct + '%'; bar.dataset.filled = '1'; });
           }
         });
@@ -609,17 +654,9 @@ function animateCounter(el, target, duration){
   }
   requestAnimationFrame(tick);
 }
-
-/* =========================
-   INIT
-   ========================= */
-(async function init(){
-  const top = await loadRankingTop(4);
-  renderRanking(top);
-  setupCounters();
-})();
+document.addEventListener('DOMContentLoaded', setupCounters);
 </script>
 
-<?php include("footer.php"); ?>
+<?php include "footer.php"; ?>
 </body>
 </html>

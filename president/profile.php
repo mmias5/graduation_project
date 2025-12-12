@@ -5,6 +5,102 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
     header('Location: ../login.php');
     exit;
 }
+
+require_once '../config.php';
+
+$president_id = (int)$_SESSION['student_id'];
+$member_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+if ($member_id <= 0) {
+    header('Location: memberspage.php');
+    exit;
+}
+
+/* get president club_id */
+$stmt = $conn->prepare("SELECT club_id FROM student WHERE student_id=? AND role='club_president' LIMIT 1");
+$stmt->bind_param("i", $president_id);
+$stmt->execute();
+$res = $stmt->get_result();
+$pres = $res->fetch_assoc();
+$stmt->close();
+$club_id = isset($pres['club_id']) ? (int)$pres['club_id'] : 1;
+
+if ($club_id <= 1) {
+    header('Location: memberspage.php');
+    exit;
+}
+
+/* check permission:
+   - member is in same club OR
+   - member has Pending request to same club
+*/
+$allowed = false;
+
+$stmt = $conn->prepare("SELECT club_id FROM student WHERE student_id=? LIMIT 1");
+$stmt->bind_param("i", $member_id);
+$stmt->execute();
+$r = $stmt->get_result();
+$memClub = $r->fetch_assoc();
+$stmt->close();
+
+if ($memClub && (int)$memClub['club_id'] === $club_id) {
+    $allowed = true;
+} else {
+    $stmt = $conn->prepare("
+        SELECT 1
+        FROM club_membership_request
+        WHERE student_id=? AND club_id=? AND status='Pending'
+        LIMIT 1
+    ");
+    $stmt->bind_param("ii", $member_id, $club_id);
+    $stmt->execute();
+    $rr = $stmt->get_result();
+    $allowed = (bool)$rr->fetch_row();
+    $stmt->close();
+}
+
+if (!$allowed) {
+    header('Location: memberspage.php');
+    exit;
+}
+
+/* get member info */
+$stmt = $conn->prepare("
+    SELECT student_id, student_name, email, major, profile_photo, club_id
+    FROM student
+    WHERE student_id=?
+    LIMIT 1
+");
+$stmt->bind_param("i", $member_id);
+$stmt->execute();
+$res = $stmt->get_result();
+$m = $res->fetch_assoc();
+$stmt->close();
+
+if (!$m) {
+    header('Location: memberspage.php');
+    exit;
+}
+
+$avatar = $m['profile_photo'];
+if (!$avatar) $avatar = "https://i.pravatar.cc/200?u=" . urlencode("profile_" . $member_id);
+
+/* role badge */
+$role = ($member_id === $president_id) ? 'President' : 'Member';
+
+/* joined date from approved request */
+$joined = '—';
+$stmt = $conn->prepare("
+    SELECT MAX(COALESCE(decided_at, submitted_at)) AS joined_at
+    FROM club_membership_request
+    WHERE student_id=? AND club_id=? AND status='Approved'
+");
+$stmt->bind_param("ii", $member_id, $club_id);
+$stmt->execute();
+$res = $stmt->get_result();
+$j = $res->fetch_assoc();
+$stmt->close();
+
+if ($j && $j['joined_at']) $joined = date('Y-m-d', strtotime($j['joined_at']));
 ?>
 <!doctype html>
 <html lang="en">
@@ -49,14 +145,14 @@ body{
 /* UPDATED: Perfectly balanced image + spacing */
 .hero-inner{
   position:relative;z-index:1;width:100%;
-  display:grid;grid-template-columns:170px 1fr; /* updated */
+  display:grid;grid-template-columns:170px 1fr;
   gap:18px;align-items:flex-end;padding:24px 22px 26px;
 }
 @media (max-width:720px){
   .hero-inner{grid-template-columns:1fr;justify-items:center;text-align:center}
 }
 
-/* UPDATED: Balanced avatar size (not big, not small) */
+/* UPDATED: Balanced avatar size */
 .avatar{
   width:160px;
   height:160px;
@@ -124,13 +220,13 @@ body{
   <!-- HERO -->
   <section class="hero">
     <div class="hero-inner">
-      <img id="avatar" class="avatar" src="" alt="Member avatar">
+      <img class="avatar" src="<?php echo htmlspecialchars($avatar); ?>" alt="Member avatar">
       <div>
-        <h2 id="name" class="name">Member Name</h2>
-        <div id="email" class="sub">email@university.edu</div>
+        <h2 class="name"><?php echo htmlspecialchars($m['student_name']); ?></h2>
+        <div class="sub"><?php echo htmlspecialchars($m['email']); ?></div>
         <div class="badges">
-          <span id="role" class="role">President</span>
-          <span id="joined" class="joined">Joined — 2025-01-01</span>
+          <span class="role"><?php echo htmlspecialchars($role); ?></span>
+          <span class="joined">Joined — <?php echo htmlspecialchars($joined); ?></span>
         </div>
       </div>
     </div>
@@ -140,44 +236,15 @@ body{
   <section class="card">
     <h3>Member Info</h3>
     <div class="grid">
-      <div class="kv"><b>Full name</b><span id="aboutName">—</span></div>
-      <div class="kv"><b>Email</b><span id="aboutEmail">—</span></div>
-      <div class="kv"><b>Major</b><span id="major">—</span></div>
-      <div class="kv"><b>Student ID</b><span id="studentId">—</span></div>
+      <div class="kv"><b>Full name</b><span><?php echo htmlspecialchars($m['student_name']); ?></span></div>
+      <div class="kv"><b>Email</b><span><?php echo htmlspecialchars($m['email']); ?></span></div>
+      <div class="kv"><b>Major</b><span><?php echo htmlspecialchars($m['major'] ?: '—'); ?></span></div>
+      <div class="kv"><b>Student ID</b><span><?php echo (int)$m['student_id']; ?></span></div>
     </div>
   </section>
 
 </div>
 
 <?php include 'footer.php'; ?>
-
-<script>
-/* demo data */
-const MOCK = Array.from({length:10}).map((_,i)=>({
-  id:i+1,
-  name:['Lina','Omar','Sara','Mustafa','Noor','Jad','Maya','Hiba','Yousef','Rami'][i],
-  email:`member${i+1}@university.edu`,
-  major:['CS','IT','Business','Design'][i%4],
-  studentId:`02257${50 + i}`,
-  role:['President','Member'][i%2],
-  joined:`2025-0${(i%9)+1}-${String(((i*3)%28)+1).padStart(2,'0')}`,
-  avatar:`https://i.pravatar.cc/200?img=${(i%70)+1}`
-}));
-
-const id = Number(new URLSearchParams(location.search).get('id')) || 1;
-const m = MOCK.find(x=>x.id===id) || MOCK[0];
-
-document.getElementById('avatar').src = m.avatar;
-document.getElementById('name').textContent = m.name;
-document.getElementById('email').textContent = m.email;
-document.getElementById('role').textContent = m.role;
-document.getElementById('joined').textContent = 'Joined — ' + m.joined;
-
-document.getElementById('aboutName').textContent = m.name;
-document.getElementById('aboutEmail').textContent = m.email;
-document.getElementById('major').textContent = m.major;
-document.getElementById('studentId').textContent = m.studentId;
-</script>
-
 </body>
 </html>

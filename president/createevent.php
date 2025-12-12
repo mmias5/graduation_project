@@ -5,11 +5,40 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
     header('Location: ../login.php');
     exit;
 }
-// event_create.php
-// session_start();
-// Optional: $club_id = $_GET['club_id'] ?? ($_SESSION['club_id'] ?? 1);
-// Optional leader check here before showing the form.
-$club_id = 1;
+
+require_once '../config.php';
+
+$presidentId = (int)$_SESSION['student_id'];
+
+/* ✅ Get president club_id from DB (no hardcoded 1) */
+$club_id = null;
+$stmt = $conn->prepare("SELECT club_id FROM student WHERE student_id = ? LIMIT 1");
+$stmt->bind_param("i", $presidentId);
+$stmt->execute();
+$res = $stmt->get_result();
+if ($res && $res->num_rows > 0) {
+    $club_id = $res->fetch_assoc()['club_id'];
+}
+$stmt->close();
+
+/* If president has no club, block create event */
+if (empty($club_id)) {
+    echo "<script>alert('You are not assigned to any club yet.'); location.href='index.php';</script>";
+    exit;
+}
+
+/* Old values (when redirected back with error) */
+$old = [
+  'title' => $_GET['title'] ?? '',
+  'location' => $_GET['location'] ?? '',
+  'date' => $_GET['date'] ?? '',
+  'start_time' => $_GET['start_time'] ?? '',
+  'end_time' => $_GET['end_time'] ?? '',
+  'category' => $_GET['category'] ?? '',
+  'sponsor' => $_GET['sponsor'] ?? '',
+  'description' => $_GET['description'] ?? '',
+];
+$err = $_GET['err'] ?? '';
 ?>
 <!doctype html>
 <html lang="en">
@@ -36,8 +65,6 @@ body{
     radial-gradient(900px 700px at 110% 60%, rgba(72,113,219,.20), transparent 60%),
     var(--paper);
 }
-
-/* layout */
 .wrapper{max-width:980px;margin:24px auto 80px;padding:0 16px}
 .card{
   background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow);
@@ -46,8 +73,6 @@ body{
 .header-row{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}
 .title{font-size:28px;font-weight:900;letter-spacing:.02em;margin:0}
 .subtle{color:#6b7280;margin:0 0 16px}
-
-/* hero preview banner */
 .banner{
   position:relative; border-radius:18px; overflow:hidden; height:180px;
   background: #dfe7ff; margin-bottom:18px; border:1px solid #e6e8f2;
@@ -62,40 +87,32 @@ body{
 }
 .banner .name{font-size:18px;font-weight:800}
 .banner .when{font-size:13px;opacity:.95}
-
-/* form grid */
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-.form-grid.full{grid-template-columns:1fr}
 @media (max-width:800px){ .form-grid{grid-template-columns:1fr} }
-
 .field{display:flex;flex-direction:column;gap:8px}
 .label{font-weight:800;color:var(--navy);font-size:14px}
-.input,.select,.textarea{
+.input,.textarea{
   width:100%;border:1px solid #d5dbea;border-radius:14px;padding:12px 14px;font-size:15px;background:#fff;outline:none;
   transition:border-color .12s ease, box-shadow .12s ease;
 }
 .textarea{min-height:120px;resize:vertical}
-.input:focus,.select:focus,.textarea:focus{border-color:var(--royal); box-shadow:0 0 0 4px rgba(72,113,219,.12)}
+.input:focus,.textarea:focus{border-color:var(--royal); box-shadow:0 0 0 4px rgba(72,113,219,.12)}
 .hint{font-size:12px;color:#6b7280}
-
-/* uploader */
 .uploader{display:flex;align-items:center;gap:14px;flex-wrap:wrap;border:1px dashed #cad2e3;border-radius:14px;padding:12px}
 .thumb{width:140px;height:80px;border-radius:12px;background:#f2f5ff;overflow:hidden;display:grid;place-items:center;border:1px solid #e5e7eb}
 .thumb img{width:100%;height:100%;object-fit:cover}
 .uploader input[type=file]{display:none}
 .pick{display:inline-block;padding:10px 12px;border-radius:10px;background:#f3f4ff;color:#1f2a6b;font-weight:800;cursor:pointer}
-
-/* actions */
 .actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;flex-wrap:wrap}
 .btn{appearance:none;border:0;border-radius:12px;padding:12px 16px;font-weight:800;cursor:pointer}
-.btn.ghost{background:#eef2ff;color:#1f2a6b}
+.btn.ghost{background:#eef2ff;color:#1f2a6b; text-decoration:none; display:inline-flex; align-items:center}
 .btn.primary{background:linear-gradient(135deg,#5d7ff2,#3664e9);color:#fff;box-shadow:0 8px 20px rgba(54,100,233,.22)}
 .btn.primary:hover{background:linear-gradient(135deg,#4d70ee,#2958e0)}
-
-/* toast */
 .toast{position:fixed;right:16px;bottom:16px;background:#10b981;color:#fff;padding:12px 14px;border-radius:12px;box-shadow:var(--shadow);font-weight:800;display:none;z-index:999}
 .toast.show{display:block;animation:fadein .18s ease}
 @keyframes fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+/* simple error box */
+.errbox{background:#fff5f5;border:1px solid #ffd5d5;color:#7f1d1d;border-radius:14px;padding:12px 14px;margin:0 0 14px;font-weight:800}
 </style>
 </head>
 <body>
@@ -109,6 +126,10 @@ body{
       <a class="btn ghost" href="index.php">Back to home page</a>
     </div>
     <p class="subtle">Add a new event for your club. You can edit it later from the events list.</p>
+
+    <?php if(!empty($err)): ?>
+      <div class="errbox"><?= htmlspecialchars($err) ?></div>
+    <?php endif; ?>
 
     <!-- Preview banner -->
     <div class="banner" id="banner">
@@ -127,47 +148,52 @@ body{
       <div class="form-grid">
         <div class="field">
           <label class="label" for="title">Title</label>
-          <input class="input" id="title" name="title" maxlength="255" placeholder="e.g., Hack Night" required>
+          <input class="input" id="title" name="title" maxlength="255" placeholder="e.g., Hack Night" required
+                 value="<?= htmlspecialchars($old['title']) ?>">
           <span class="hint">Short, clear name students will recognize.</span>
         </div>
 
         <div class="field">
           <label class="label" for="location">Location</label>
-          <input class="input" id="location" name="location" maxlength="255" placeholder="e.g., Main Hall / Room B204" required>
+          <input class="input" id="location" name="location" maxlength="255" placeholder="e.g., Main Hall / Room B204" required
+                 value="<?= htmlspecialchars($old['location']) ?>">
         </div>
 
         <div class="field">
           <label class="label" for="date">Date</label>
-          <input class="input" id="date" name="date" type="date" required>
+          <input class="input" id="date" name="date" type="date" required
+                 value="<?= htmlspecialchars($old['date']) ?>">
         </div>
 
         <div class="field">
           <label class="label" for="start_time">Start time</label>
-          <input class="input" id="start_time" name="start_time" type="time" required>
+          <input class="input" id="start_time" name="start_time" type="time" required
+                 value="<?= htmlspecialchars($old['start_time']) ?>">
         </div>
 
         <div class="field">
           <label class="label" for="end_time">End time</label>
-          <input class="input" id="end_time" name="end_time" type="time" required>
+          <input class="input" id="end_time" name="end_time" type="time" required
+                 value="<?= htmlspecialchars($old['end_time']) ?>">
           <span class="hint">End must be after start.</span>
         </div>
 
-       <?php $oldCategory = $_POST['category'] ?? ''; ?>
-<div class="field">
-  <label class="label" for="category">Category</label>
-  <input class="input" id="category" name="category"
-         value="<?= htmlspecialchars($oldCategory) ?>" placeholder="e.g., Technology">
-</div>
-
+        <div class="field">
+          <label class="label" for="category">Category</label>
+          <input class="input" id="category" name="category" placeholder="e.g., Technology"
+                 value="<?= htmlspecialchars($old['category']) ?>">
+        </div>
 
         <div class="field">
           <label class="label" for="sponsor">Sponsor (optional)</label>
-          <input class="input" id="sponsor" name="sponsor" maxlength="255" placeholder="e.g., TechCorp">
+          <input class="input" id="sponsor" name="sponsor" maxlength="255" placeholder="e.g., TechCorp"
+                 value="<?= htmlspecialchars($old['sponsor']) ?>">
         </div>
 
         <div class="field" style="grid-column:1 / -1">
           <label class="label" for="description">Description</label>
-          <textarea class="textarea" id="description" name="description" maxlength="1000" placeholder="Describe what will happen, agenda, speakers, and who should join..." required></textarea>
+          <textarea class="textarea" id="description" name="description" maxlength="1000"
+                    placeholder="Describe what will happen, agenda, speakers, and who should join..." required><?= htmlspecialchars($old['description']) ?></textarea>
         </div>
 
         <!-- cover upload -->
@@ -193,7 +219,7 @@ body{
 
 <?php include 'footer.php'; ?>
 
-<div class="toast" id="toast">Event created ✓</div>
+<div class="toast" id="toast">Event requested ✓</div>
 
 <script>
 // banner live preview
@@ -229,6 +255,8 @@ function updateWhen(){
   startEl.addEventListener(ev, updateWhen);
   endEl.addEventListener(ev, updateWhen);
 });
+updateWhen();
+titleOut.textContent = titleEl.value || 'Event title';
 
 // image preview + banner background
 const coverInput = document.getElementById('cover');
@@ -245,7 +273,6 @@ coverInput.addEventListener('change', ()=>{
 const form = document.getElementById('createEventForm');
 const submitBtn = document.getElementById('submitBtn');
 form.addEventListener('submit', (e)=>{
-  // end after start check
   const s = startEl.value, nd = endEl.value;
   if(s && nd && s >= nd){
     e.preventDefault();
