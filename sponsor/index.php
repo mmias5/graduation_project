@@ -243,100 +243,106 @@ if (empty($topClubs)) {
       text-align:center;
       padding:0 24px;
     }
+/* ===== Sponsor Ranking (User Layout) ===== */
+.sponsor-ranking{
+  margin: 60px auto;
+  max-width: 1200px;
+}
 
-    /* ===== Best Of Ranking Section ===== */
-    .ranking-section{
-      padding:0 6vw 80px;
-    }
-    .ranking-card{
-      max-width:1200px;
-      margin:0 auto;
-      background:linear-gradient(145deg,#f4f6ff,#eef2f9);
-      border-radius:32px;
-      box-shadow:0 30px 60px rgba(12,22,60,.20);
-      padding:30px 34px 32px;
-    }
-    .ranking-header{
-      font-size:2.0rem;
-      font-weight:800;
-      color:var(--navy);
-      text-align:center;
-      margin-bottom:26px;
-    }
-    .ranking-list{
-      display:flex;
-      flex-direction:column;
-      gap:14px;
-      margin-bottom:24px;
-    }
-    .ranking-row{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      background:var(--card);
-      border-radius:22px;
-      padding:16px 22px;
-      box-shadow:0 12px 26px rgba(12,22,60,.08);
-    }
-    .ranking-row.top{
-      background:linear-gradient(90deg,#e5c768,#e5b758);
-    }
-    .ranking-row.left{
-      display:flex;
-      align-items:center;
-      gap:16px;
-    }
-    .club-badge{
-      width:56px;
-      height:56px;
-      border-radius:19px;
-      background:var(--navy);
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      color:#fff;
-      font-weight:800;
-      font-size:1.2rem;
-      border:3px solid #f7e7ac;
-      box-shadow:0 10px 22px rgba(14,18,40,.35);
-      flex-shrink:0;
-    }
-    .ranking-row.top .club-badge{
-      background:#fff;
-      color:var(--navy);
-      border-color:#f4df6d;
-    }
+.sponsor-ranking .ranking-wrap{
+  background:#ffffff;
+  border-radius:28px;
+  padding:32px;
+  box-shadow:0 24px 48px rgba(10,23,60,.18);
+}
 
-    /* FIX: Top row text colors */
-    .ranking-row.top .club-text-main{
-      color:#fff;
-    }
-    .ranking-row.top .club-text-sub{
-      color:var(--navy);
-      opacity:.95;
-    }
+.sponsor-ranking .ranking-title{
+  text-align:center;
+  font-size:2rem;
+  font-weight:800;
+  color:var(--navy);
+  margin-bottom:26px;
+}
 
-    .club-text-main{
-      font-size:1.05rem;
-      font-weight:800;
-      color:var(--navy);
-    }
-    .club-text-sub{
-      font-size:.85rem;
-      color:#6b7280;
-      margin-top:2px;
-    }
+.sponsor-ranking .ranking-list{
+  display:grid;
+  gap:14px;
+}
 
-    .ranking-medal{
-      font-size:1.6rem;
-      flex-shrink:0;
-    }
+.sponsor-ranking .rank-item{
+  display:grid;
+  grid-template-columns:56px 1fr 70px;
+  align-items:center;
+  background:#fff;
+  border-radius:16px;
+  padding:14px 18px;
+  border:1px solid rgba(36,39,81,.08);
+  box-shadow:0 12px 26px rgba(12,22,60,.08);
+}
 
-    .ranking-footer{
-      display:flex;
-      justify-content:flex-start;
-      margin-top:6px;
-    }
+.sponsor-ranking .rank-item.top{
+  background:linear-gradient(90deg,#e5c768,#e5b758);
+}
+
+.sponsor-ranking .rank-avatar{
+  width:44px;
+  height:44px;
+  border-radius:12px;
+  overflow:hidden;
+  background:#eef2ff;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.sponsor-ranking .rank-avatar img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+
+.sponsor-ranking .rank-meta{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+
+.sponsor-ranking .rank-name{
+  font-size:18px;
+  font-weight:800;
+  color:var(--navy);
+}
+
+.sponsor-ranking .rank-points{
+  font-size:13px;
+  color:#6b7280;
+}
+
+.sponsor-ranking .rank-item.top .rank-name,
+.sponsor-ranking .rank-item.top .rank-points{
+  color:var(--navy);
+}
+
+.sponsor-ranking .rank-trophy{
+  text-align:right;
+  font-size:20px;
+}
+
+.sponsor-ranking .ranking-footer{
+  margin-top:20px;
+  display:flex;
+  justify-content:flex-start;
+}
+
+.sponsor-ranking .ranking-btn{
+  padding:10px 26px;
+  border-radius:999px;
+  background:var(--navy);
+  color:#fff;
+  font-weight:700;
+  text-decoration:none;
+  box-shadow:0 14px 28px rgba(36,39,81,.35);
+}
 
     /* Updated Navy Button */
     .view-more-btn{
@@ -472,56 +478,45 @@ if (empty($topClubs)) {
     </div>
   </section>
   
-  <!-- ===== Best Of Ranking Section ===== -->
-  <section class="ranking-section">
-    <div class="ranking-card">
-      <div class="ranking-header">Best Of Ranking</div>
+ <!-- ===== BEST OF RANKING (User Layout / Sponsor Colors) ===== -->
+<section class="ranking sponsor-ranking">
+  <div class="ranking-wrap">
+    <h2 class="ranking-title">Best Of Ranking</h2>
 
-      <div class="ranking-list">
-        <?php foreach ($topClubs as $index => $clubRow): ?>
-          <?php
-            // أول واحد Top (Trophy)
-            $rowClass = ($index === 0) ? 'ranking-row top' : 'ranking-row';
-            // الأيموجي
-            $medal = '🎖️';
-            if     ($index === 0) $medal = '🏆';
-            elseif ($index === 1) $medal = '🥈';  
-            elseif ($index === 2) $medal = '🥉';
-
-            $clubName    = $clubRow['club_name'];
-            $badge       = $clubRow['badge'];
-            $sponsorName = $clubRow['sponsor_name'] ?? null;
-          ?>
-          <div class="<?php echo $rowClass; ?>">
-            <div class="ranking-row left">
-              <div class="club-badge">
-                <?php echo htmlspecialchars($badge, ENT_QUOTES, 'UTF-8'); ?>
-              </div>
-              <div>
-                <div class="club-text-main">
-                  <?php echo htmlspecialchars($clubName, ENT_QUOTES, 'UTF-8'); ?>
-                </div>
-                <div class="club-text-sub">
-                  <?php
-                    if ($sponsorName) {
-                      echo 'Sponsored by ' . htmlspecialchars($sponsorName, ENT_QUOTES, 'UTF-8');
-                    } else {
-                      echo 'No sponsor linked yet';
-                    }
-                  ?>
-                </div>
-              </div>
-            </div>
-            <div class="ranking-medal"><?php echo $medal; ?></div>
+    <div class="ranking-list">
+      <?php
+      $i = 0;
+      foreach ($topClubs as $club):
+        $i++;
+        $trophy = ($i === 1) ? '🏆' : (($i === 2) ? '🥈' : (($i === 3) ? '🥉' : '🎖️'));
+      ?>
+        <div class="rank-item <?php echo $i === 1 ? 'top' : ''; ?>">
+          <div class="rank-avatar">
+            <?php if (!empty($club['club_logo'])): ?>
+              <img src="<?php echo htmlspecialchars($club['club_logo']); ?>">
+            <?php else: ?>
+              <img src="https://dummyimage.com/120x120/a9bff8/242751.png&text=CL">
+            <?php endif; ?>
           </div>
-        <?php endforeach; ?>
-      </div>
 
-      <div class="ranking-footer">
-        <a href="clubsranking.php" class="view-more-btn">View More</a>
-      </div>
+          <div class="rank-meta">
+            <div class="rank-name"><?php echo htmlspecialchars($club['club_name']); ?></div>
+            <div class="rank-points">
+              <?php echo $club['total_points'] !== null ? number_format($club['total_points']).' pts' : '—'; ?>
+            </div>
+          </div>
+
+          <div class="rank-trophy"><?php echo $trophy; ?></div>
+        </div>
+      <?php endforeach; ?>
     </div>
-  </section>
+
+    <div class="ranking-footer">
+      <a href="clubsranking.php" class="ranking-btn">View More</a>
+    </div>
+  </div>
+</section>
+
 
 </main>
 
