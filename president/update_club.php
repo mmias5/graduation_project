@@ -82,7 +82,7 @@ try {
     $stmt->close();
 
     if ($pending) {
-        echo "<script>alert('You already have a pending edit request. Wait for admin review.'); location.href='editclub.php';</script>";
+        echo "<script>alert('You already have a pending edit request. Wait for admin review.'); location.href='index.php';</script>";
         exit;
     }
 } catch (Throwable $e) {
@@ -132,5 +132,5 @@ if (!$stmt->execute()) {
 
 $stmt->close();
 
-echo "<script>alert('✅ Edit request submitted successfully! Waiting for admin approval.'); location.href='editclub.php';</script>";
+echo "<script>alert('✅ Edit request submitted successfully! Waiting for admin approval.'); location.href='index.php';</script>";
 exit;
