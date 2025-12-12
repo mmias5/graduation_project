@@ -18,8 +18,8 @@ $myClubId = (int)($stmt->get_result()->fetch_assoc()['club_id'] ?? 0);
 $stmt->close();
 
 if ($myClubId <= 1) {
-    echo "<script>alert('You are not assigned to any club yet.'); location.href='index.php';</script>";
-    exit;
+    echo "<script>alert('✅ Edit request submitted successfully! Waiting for admin approval.'); location.href='index.php';</script>";
+exit;
 }
 
 // ===== Fetch club (ONLY his club) =====
@@ -47,6 +47,21 @@ $sponsor_name   = '—';
 $sponsor_logo   = 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Amazon_logo.svg/1200px-Amazon_logo.svg.png';
 
 if (!$logo_url) $logo_url = 'tools/pics/social_life.png';
+
+// (اختياري) فحص إذا في طلب تعديل Pending
+$pendingMsg = '';
+$hasStatusCol = true;
+try {
+    $stmt = $conn->prepare("SELECT request_id FROM club_edit_request WHERE club_id=? AND status='Pending' ORDER BY submitted_at DESC LIMIT 1");
+    $stmt->bind_param("i", $club_id);
+    $stmt->execute();
+    $r = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    if ($r) $pendingMsg = "You already have a pending edit request (Request #".$r['request_id']."). Wait for admin review.";
+} catch (Throwable $e) {
+    // إذا ما أضفت عمود status بعد، الكود ما يوقف
+    $hasStatusCol = false;
+}
 ?>
 <!doctype html>
 <html lang="en">
@@ -171,6 +186,12 @@ body{
 .cch-select__option[aria-selected="true"]{
   background:linear-gradient(180deg,#f5f8ff,#eef3ff);color:#1a2a5a;
 }
+
+/* ====== pending alert ====== */
+.notice{
+  background:#fff7d6;border:1px solid #f1dc92;color:#604d11;
+  padding:12px 14px;border-radius:14px;margin:10px 0 18px;font-weight:700;
+}
 </style>
 </head>
 
@@ -214,8 +235,11 @@ body{
       <h3 class="h-title">Club Details</h3>
       <div class="hr"></div>
 
+      <?php if ($pendingMsg): ?>
+        <div class="notice"><?php echo htmlspecialchars($pendingMsg); ?></div>
+      <?php endif; ?>
+
       <form class="card" id="editClubForm" action="update_club.php" method="POST" enctype="multipart/form-data" novalidate>
-        <!-- مهم: حتى لو انبعت، update_club.php رح يتجاهله ويستخدم club_id تبع الرئيس -->
         <input type="hidden" name="club_id" value="<?php echo (int)$club_id; ?>">
 
         <div class="form-grid">
@@ -331,7 +355,9 @@ body{
 
         <div class="actions">
           <a class="btn ghost" href="clubpage.php">Cancel</a>
-          <button class="btn primary" type="submit" id="saveBtn">Save changes</button>
+          <button class="btn primary" type="submit" id="saveBtn">
+            Request change
+          </button>
         </div>
       </form>
     </div>
