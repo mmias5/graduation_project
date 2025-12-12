@@ -42,6 +42,7 @@ if ($currentPeriodEnd !== null) {
             r.period_start,
             r.period_end,
             c.club_name,
+            c.status AS club_status,
             c.logo AS club_logo,
             c.member_count,
             COALESCE(s.company_name, 'Not sponsored yet') AS sponsor_name,
@@ -90,6 +91,7 @@ if ($currentPeriodEnd !== null) {
             c.club_name,
             c.logo AS club_logo,
             c.member_count,
+            c.status AS club_status,
             COALESCE(s.company_name, 'Not sponsored yet') AS sponsor_name,
             s.logo AS sponsor_logo,
             COUNT(DISTINCT e.event_id) AS events_count
@@ -136,6 +138,45 @@ $top3 = $rankingClubs[2] ?? null;
 <?php include 'header.php'; ?>
 <!-- ===== CCH • Clubs Ranking (final, with gradient background & sponsor logos) ===== -->
 <style>
+  /* ---------- Status Badge (Active / Inactive) ---------- */
+.cch-ranking .status-badge{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  height:22px;
+  padding:0 10px;
+  border-radius:999px;
+  font-weight:800;
+  font-size:12px;
+  border:1px solid rgba(0,0,0,.06);
+  background:#F3F6FF;  /* قريب من pill */
+  color:#3556D4;        /* royal vibe */
+  margin-top:6px;
+  width:fit-content;
+}
+
+.cch-ranking .status-badge::before{
+  content:"";
+  width:8px;
+  height:8px;
+  border-radius:50%;
+  background:#9aa3b2;
+}
+
+.cch-ranking .status-badge.active{
+  background:#EEFDF3;
+  color:#147a3d;
+}
+
+.cch-ranking .status-badge.active::before{ background:#22c55e; }
+
+.cch-ranking .status-badge.inactive{
+  background:#FFF1F2;
+  color:#b42318;
+}
+
+.cch-ranking .status-badge.inactive::before{ background:#ff5e5e; }
+
 /* ---------- Scoped theme ---------- */
 .cch-ranking{
   --navy: #212153;
@@ -358,8 +399,20 @@ $top3 = $rankingClubs[2] ?? null;
                   <?php endif; ?>
                 </span>
                 <div>
-                  <span><?php echo htmlspecialchars($row['club_name']); ?></span>
-                  <div class="sponsor small">
+                  <div>
+  <span><?php echo htmlspecialchars($row['club_name']); ?></span>
+
+  <?php
+    $st = strtolower(trim($row['club_status'] ?? 'inactive'));
+    $stClass = ($st === 'active') ? 'active' : 'inactive';
+    $stLabel = ($st === 'active') ? 'Active' : 'Inactive';
+  ?>
+  <div class="status-badge <?php echo $stClass; ?>">
+    <?php echo $stLabel; ?>
+  </div>
+
+  <div class="sponsor small">
+
                     <?php if (!empty($row['sponsor_logo'])): ?>
                       <span class="sponsor-logo small">
                         <img src="<?php echo htmlspecialchars($row['sponsor_logo']); ?>" alt="">
