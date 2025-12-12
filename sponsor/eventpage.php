@@ -1,67 +1,77 @@
 <?php
 session_start();
 
+
 if (!isset($_SESSION['sponsor_id']) || $_SESSION['role'] !== 'sponsor') {
     header('Location: ../login.php');
     exit;
 }
-
 require_once '../config.php';
 
-// --------- Get event_id from URL ---------
 $eventId = isset($_GET['event_id']) ? (int)$_GET['event_id'] : 0;
-if ($eventId <= 0) {
-    die('Invalid event ID.');
-}
 
-// --------- Fetch event from DB ---------
-$stmt = $conn->prepare("
-    SELECT event_id, event_name, description, event_location,
-           max_attendees, starting_date, ending_date,
-           attendees_count, banner_image
-    FROM event
-    WHERE event_id = ?
-");
-$stmt->bind_param("i", $eventId);
-$stmt->execute();
-$result = $stmt->get_result();
-$event = $result->fetch_assoc();
-$stmt->close();
+$event = null;
+
+if ($eventId > 0) {
+    $sql = "
+        SELECT
+            e.*,
+            c.club_name,
+            sp.company_name AS sponsor_name
+        FROM event e
+        INNER JOIN club c
+            ON e.club_id = c.club_id
+        LEFT JOIN sponsor sp
+            ON sp.sponsor_id = e.sponsor_id
+        WHERE e.event_id = ?
+        LIMIT 1
+    ";
+
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("i", $eventId);
+    $stmt->execute();
+    $res  = $stmt->get_result();
+    $event = $res->fetch_assoc();
+    $stmt->close();
+}
 
 if (!$event) {
-    die('Event not found.');
+    http_response_code(404);
+    $title = "Event not found";
+} else {
+    $title = $event['event_name'];
 }
 
-// --------- Format dates for display + calendar ---------
-date_default_timezone_set('Asia/Amman');
-
-$startDt = new DateTime($event['starting_date']);
-$endDt   = new DateTime($event['ending_date']);
-
-// Example: Thursday • Dec 10, 2025 • 4:00 PM–6:00 PM
-$whenText = $startDt->format('l • M d, Y • g:i A') . '–' . $endDt->format('g:i A');
-
-// ICS format: 20251210T160000
-$icsStart = $startDt->format('Ymd\THis');
-$icsEnd   = $endDt->format('Ymd\THis');
+function formatWhenFull($startStr, $endStr): string {
+    if (!$startStr) return 'Date to be announced';
+    $start = new DateTime($startStr);
+    if ($endStr) {
+        $end = new DateTime($endStr);
+        if ($start->format('Y-m-d') === $end->format('Y-m-d')) {
+            return $start->format('l • M d, Y • g:i A') . ' – ' . $end->format('g:i A');
+        }
+        return $start->format('M d, Y g:i A') . ' – ' . $end->format('M d, Y g:i A');
+    }
+    return $start->format('l • M d, Y • g:i A');
+}
 ?>
 <!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>UniHive — <?php echo htmlspecialchars($event['event_name']); ?></title>
+<title>CCH — Event Details</title>
 
 <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;600;700;800&display=swap" rel="stylesheet">
 
 <style>
-  /* ===== Sponsor Brand Tokens ===== */
+  /* ===== Sponsor Theme Tokens (Warm / Gold) ===== */
   :root{
-    --navy:#242751;        /* deep navy used for text & icons */
-    --royal:#e5b758;       /* sponsor gold used as primary accent */
-    --lightBlue:#ffe9a8;   /* soft warm highlight */
+    --navy:#242751;
+    --royal:#e5b758;        /* gold accent */
+    --lightBlue:#ffe9a8;    /* warm highlight */
     --gold:#e5b758;
-    --paper:#fff7e3;       /* warm background */
+    --paper:#fff7e3;
     --ink:#1e1a16;
     --card:#ffffff;
     --shadow:0 18px 38px rgba(77,54,16,.16);
@@ -78,11 +88,9 @@ $icsEnd   = $endDt->format('Ymd\THis');
     color:var(--ink);
   }
 
-  /* MAIN WRAPPER */
   .wrap{ max-width:var(--maxw); margin:40px auto 0; padding:0 20px; }
   .content{ max-width:var(--maxw); margin:40px auto 60px; padding:0 20px; }
 
-  /* ===== HEADLINE ===== */
   .headline{
     margin:10px 0 16px;
     font-weight:800; line-height:1.1;
@@ -95,15 +103,21 @@ $icsEnd   = $endDt->format('Ymd\THis');
     margin-bottom:22px; color:#7c6122; font-weight:700;
   }
   .badge{
-    background:var(--gold); color:#fff; padding:6px 12px;
-    border-radius:999px; font-size:13px;
+    background:var(--gold);
+    color:#242751;
+    padding:6px 12px;
+    border-radius:999px;
+    font-size:13px;
+    font-weight:900;
+    box-shadow:0 10px 22px rgba(77,54,16,.10);
   }
   .dot{ width:6px;height:6px;border-radius:50%;background:#d9c38e; }
 
-  /* ===== HERO IMAGE ===== */
   .hero{
     position:relative; border-radius:var(--radius); overflow:hidden;
-    box-shadow:var(--shadow); background:#f4d15b; aspect-ratio:16 / 9;
+    box-shadow:var(--shadow);
+    background:#f4d15b;
+    aspect-ratio:16 / 9;
   }
   .hero img{ width:100%; height:100%; object-fit:cover; display:block; }
   .credit{
@@ -112,7 +126,6 @@ $icsEnd   = $endDt->format('Ymd\THis');
     padding:6px 10px; border-radius:999px;
   }
 
-  /* ===== ARTICLE ===== */
   article{
     margin-top:28px; background:var(--card);
     border-radius:var(--radius); box-shadow:var(--shadow); padding:30px;
@@ -120,7 +133,6 @@ $icsEnd   = $endDt->format('Ymd\THis');
   article p{ margin:0 0 18px; line-height:1.75; font-size:18px; }
   article p.lead{ font-size:19px; font-weight:600; }
 
-  /* ===== EVENT EXTRAS ===== */
   .summary{
     display:grid; gap:18px; margin-top:22px;
     grid-template-columns: 1.2fr .8fr;
@@ -128,35 +140,70 @@ $icsEnd   = $endDt->format('Ymd\THis');
   @media (max-width: 880px){ .summary{ grid-template-columns:1fr; } }
 
   .info{
-    background:var(--card); border-radius:var(--radius);
-    box-shadow:var(--shadow); padding:22px;
+    background:var(--card);
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+    padding:22px;
   }
   .info-grid{
-    display:grid; gap:14px; grid-template-columns:1fr 1fr;
+    display:grid;
+    gap:14px;
+    grid-template-columns:1fr 1fr;
   }
   @media (max-width:700px){ .info-grid{ grid-template-columns:1fr; } }
+
   .info-item{
-    display:flex; gap:12px; align-items:flex-start;
-    background:#fff5d1; padding:14px 16px; border-radius:14px;
+    display:flex;
+    gap:12px;
+    align-items:flex-start;
+    background:#fff5d1;
+    padding:14px 16px;
+    border-radius:14px;
+    border:1px solid rgba(229,183,88,.35);
   }
   .info-item .icon{
-    width:28px; height:28px; display:grid; place-items:center;
-    border-radius:10px; background:#ffe8a4;
-    font-weight:800; color:var(--navy);
+    width:28px;
+    height:28px;
+    display:grid;
+    place-items:center;
+    border-radius:10px;
+    background:#ffe8a4;
+    font-weight:900;
+    color:var(--navy);
     flex:0 0 28px;
   }
-  .info-item b{ display:block; font-size:14px; color:#5b4215; margin-bottom:4px; }
-  .info-item span{ display:block; font-size:15px; color:#302319; }
+  .info-item b{
+    display:block;
+    font-size:14px;
+    color:#5b4215;
+    margin-bottom:4px;
+  }
+  .info-item span{
+    display:block;
+    font-size:15px;
+    color:#302319;
+  }
 
   .cta{
-    display:flex; flex-wrap:wrap; gap:12px; margin-top:16px;
+    display:flex;
+    flex-wrap:wrap;
+    gap:12px;
+    margin-top:16px;
   }
   .btn{
-    border:0; border-radius:12px; padding:12px 16px; font-weight:800;
-    cursor:pointer; box-shadow:0 8px 18px rgba(77,54,16,.18);
-    background:#fff3c2; color:#5a4613;
+    border:0;
+    border-radius:12px;
+    padding:12px 16px;
+    font-weight:900;
+    cursor:pointer;
+    box-shadow:0 8px 18px rgba(77,54,16,.18);
+    background:#fff3c2;
+    color:#5a4613;
   }
-  .btn.primary{ background:var(--gold); color:var(--navy); }
+  .btn.primary{
+    background:var(--gold);
+    color:var(--navy);
+  }
   .btn.ghost{
     background:#fff;
     border:2px solid #f3d47a;
@@ -164,167 +211,173 @@ $icsEnd   = $endDt->format('Ymd\THis');
   }
 
   .side-card{
-    background:var(--card); border-radius:var(--radius);
-    box-shadow:var(--shadow); padding:22px;
+    background:var(--card);
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+    padding:22px;
   }
-  .side-card h3{ margin:0 0 10px; font-size:18px; color:var(--navy); }
+  .side-card h3{
+    margin:0 0 10px;
+    font-size:18px;
+    color:var(--navy);
+  }
   .tagline{ color:#7e6a3d; font-weight:600; }
 
-  /* Map */
   .map-wrap{ margin-top:26px; }
   .map{
-    border:0; width:100%; height:320px;
-    border-radius:16px; box-shadow:var(--shadow);
+    border:0;
+    width:100%;
+    height:320px;
+    border-radius:16px;
+    box-shadow:var(--shadow);
   }
 
-  /* Remove extra space bottom from global footer include */
   footer{ margin-top:0 !important; }
 </style>
 </head>
 
 <body>
 
-<?php include 'header.php'; ?>
+<?php include('header.php'); ?>
 
 <main class="wrap">
+  <?php if (!$event): ?>
+    <h1 class="headline">Event not found</h1>
+    <p style="font-size:18px;color:#7e6a3d;">This event does not exist or was removed.</p>
+  <?php else: ?>
 
-  <h1 class="headline">
-    <?php echo htmlspecialchars($event['event_name']); ?>
-  </h1>
+    <?php
+      $categoryShow = trim((string)($event['category'] ?? '')) === '' ? '—' : $event['category'];
+      $sponsorShow  = trim((string)($event['sponsor_name'] ?? '')) === '' ? 'No sponsor listed' : $event['sponsor_name'];
+    ?>
 
-  <figure class="hero">
-    <img src="<?php echo htmlspecialchars($event['banner_image']); ?>"
-         alt="<?php echo htmlspecialchars($event['event_name']); ?>">
-    <figcaption class="credit">Event Banner</figcaption>
-  </figure>
+    <h1 class="headline"><?php echo htmlspecialchars($event['event_name']); ?></h1>
 
-  <!-- SUMMARY: details + side card (tickets / notes) -->
-  <section class="summary">
-    <div class="info">
-      <div class="info-grid">
-        <div class="info-item">
-          <div class="icon">🗓</div>
-          <div>
-            <b>When</b>
-            <span id="whenText">
-              <?php echo htmlspecialchars($whenText); ?>
-            </span>
-          </div>
-        </div>
-        <div class="info-item">
-          <div class="icon">📍</div>
-          <div>
-            <b>Where</b>
-            <span id="whereText">
-              <?php echo htmlspecialchars($event['event_location']); ?>
-            </span>
-          </div>
-        </div>
-        <div class="info-item">
-          <div class="icon">🏷</div>
-          <div>
-            <b>Max attendees</b>
-            <span>
-              <?php echo (int)$event['max_attendees']; ?> seats
-              • <?php echo (int)$event['attendees_count']; ?> registered
-            </span>
-          </div>
-        </div>
-        <div class="info-item">
-          <div class="icon">🤝</div>
-          <div>
-            <b>Sponsored by</b>
-            <span>TechVision Corp</span>
-            <!-- لاحقاً تقدر تربطها بتابل sponsor -->
-          </div>
-        </div>
-      </div>
-
-      <div class="cta">
-        <button class="btn primary" id="addCalBtn">Add to Calendar</button>
-        <button class="btn ghost" id="shareBtn">Share</button>
-      </div>
+    <div class="meta">
+      <span class="badge">Event</span>
+      <span class="dot"></span>
+      <span>
+        Hosted by: <?php echo htmlspecialchars($event['club_name']); ?>
+        • Sponsored by <?php echo htmlspecialchars($sponsorShow); ?>
+      </span>
     </div>
 
-    <aside class="side-card">
-      <h3>Tickets & Notes</h3>
-      <p class="tagline">
-        General admission is free. Seats are first-come, first-served.
+    <figure class="hero">
+      <?php if (!empty($event['banner_image'])): ?>
+        <img src="<?php echo htmlspecialchars($event['banner_image']); ?>" alt="Event banner">
+      <?php else: ?>
+        <img src="https://images.unsplash.com/photo-1551836022-d5d88e9218df?q=80&w=1600&auto=format&fit=crop" alt="Students attending an event">
+      <?php endif; ?>
+      <figcaption class="credit">Photo: CCH Media</figcaption>
+    </figure>
+
+    <section class="summary">
+      <div class="info">
+        <div class="info-grid">
+          <div class="info-item">
+            <div class="icon">🗓</div>
+            <div>
+              <b>When</b>
+              <span id="whenText">
+                <?php echo htmlspecialchars(formatWhenFull($event['starting_date'], $event['ending_date'])); ?>
+              </span>
+            </div>
+          </div>
+
+          <div class="info-item">
+            <div class="icon">📍</div>
+            <div>
+              <b>Where</b>
+              <span id="whereText">
+                <?php echo htmlspecialchars($event['event_location'] ?: 'Location to be announced'); ?>
+              </span>
+            </div>
+          </div>
+
+          <div class="info-item">
+            <div class="icon">🏷</div>
+            <div>
+              <b>Category</b>
+              <span><?php echo htmlspecialchars($categoryShow); ?></span>
+            </div>
+          </div>
+
+          <div class="info-item">
+            <div class="icon">🤝</div>
+            <div>
+              <b>Sponsored by</b>
+              <span><?php echo htmlspecialchars($sponsorShow); ?></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="cta">
+          <button class="btn primary" id="addCalBtn">Add to Calendar</button>
+          <button class="btn ghost" id="shareBtn">Share</button>
+        </div>
+      </div>
+
+      <aside class="side-card">
+        <h3>Tickets & Notes</h3>
+        <p class="tagline">General admission is free. Seats are first-come, first-served.</p>
+        <ul style="margin:10px 0 0 18px; line-height:1.7;">
+          <li>Please bring your student ID.</li>
+          <li>QR check-in available at entrance.</li>
+          <li>Snacks & coffee provided.</li>
+        </ul>
+      </aside>
+    </section>
+
+    <article class="content">
+      <p class="lead">
+        <?php echo htmlspecialchars($event['description'] ?: 'Event description will be added soon.'); ?>
       </p>
-      <ul style="margin:10px 0 0 18px; line-height:1.7;">
-        <li>Please bring your student ID.</li>
-        <li>QR check-in available at entrance.</li>
-        <li>Snacks & coffee provided.</li>
-      </ul>
-    </aside>
-  </section>
 
-  <!-- DESCRIPTION -->
-  <article class="content">
-    <p class="lead">
-      <?php echo nl2br(htmlspecialchars($event['description'])); ?>
-    </p>
+      <div class="map-wrap">
+        <h2 style="color:var(--navy); margin:0 0 12px;">Location</h2>
+        <iframe
+          class="map"
+          loading="lazy"
+          referrerpolicy="no-referrer-when-downgrade"
+          src="https://www.google.com/maps?q=<?php echo urlencode($event['event_location'] ?: 'Jordan University'); ?>&output=embed">
+        </iframe>
+      </div>
+    </article>
 
-    <p>
-      This event is part of the UniHive initiative to support active student
-      clubs, sponsors, and cross-university collaboration.
-    </p>
-
-    <!-- Map -->
-    <div class="map-wrap">
-      <h2 style="color:var(--navy); margin:0 0 12px;">Location</h2>
-      <iframe
-        class="map"
-        loading="lazy"
-        referrerpolicy="no-referrer-when-downgrade"
-        src="https://www.google.com/maps?q=<?php
-          echo urlencode($event['event_location'] . ' Jordan');
-        ?>&output=embed">
-      </iframe>
-    </div>
-
-  </article>
-
+  <?php endif; ?>
 </main>
 
-<?php include 'footer.php'; ?>
+<?php include('footer.php'); ?>
 
 <script>
-// ========= Interactions =========
-
-// Use PHP values inside JS
-const eventTitle = <?php echo json_encode($event['event_name']); ?>;
-const eventDesc  = <?php echo json_encode($event['description']); ?>;
-const eventLoc   = <?php echo json_encode($event['event_location']); ?>;
-const icsStart   = <?php echo json_encode($icsStart); ?>;
-const icsEnd     = <?php echo json_encode($icsEnd); ?>;
-
-// Share (uses Web Share API when available; falls back to copy)
+<?php if ($event): ?>
 document.getElementById('shareBtn').addEventListener('click', async () => {
   const shareData = {
-    title: eventTitle,
-    text: 'Join me at this UniHive event: ' + eventTitle,
+    title: '<?php echo addslashes($event['event_name']); ?>',
+    text: 'Join me at this CCH event!',
     url: window.location.href
   };
-  try {
-    if (navigator.share) {
+  try{
+    if(navigator.share){
       await navigator.share(shareData);
-    } else {
+    }else{
       await navigator.clipboard.writeText(shareData.url);
       alert('Link copied to clipboard!');
     }
-  } catch(e) {
-    console.log(e);
-  }
+  }catch(e){}
 });
 
-// Add to Calendar (.ics generator)
 document.getElementById('addCalBtn').addEventListener('click', () => {
-  const title = eventTitle;
-  const desc  = eventDesc;
-  const loc   = eventLoc;
-  const start = icsStart;
-  const end   = icsEnd;
+  const title = '<?php echo addslashes($event['event_name']); ?>';
+  const desc  = '<?php echo addslashes($event['description'] ?? 'CCH event'); ?>';
+  const loc   = '<?php echo addslashes($event['event_location'] ?? 'Campus'); ?>';
+  const start = '<?php echo $event['starting_date'] ? (new DateTime($event['starting_date']))->format("Ymd\THis") : ""; ?>';
+  const end   = '<?php echo $event['ending_date'] ? (new DateTime($event['ending_date']))->format("Ymd\THis") : ""; ?>';
+
+  if(!start){
+    alert('Start date not set for this event yet.');
+    return;
+  }
 
   const ics =
 `BEGIN:VCALENDAR
@@ -334,7 +387,7 @@ CALSCALE:GREGORIAN
 METHOD:PUBLISH
 BEGIN:VEVENT
 DTSTART:${start}
-DTEND:${end}
+${end ? 'DTEND:'+end : ''}
 SUMMARY:${title}
 DESCRIPTION:${desc}
 LOCATION:${loc}
@@ -346,12 +399,13 @@ END:VCALENDAR`;
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'event-<?php echo (int)$event['event_id']; ?>.ics';
+  a.download = 'cch-event.ics';
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
 });
+<?php endif; ?>
 </script>
 
 </body>
