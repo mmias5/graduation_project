@@ -240,7 +240,7 @@ body.menu-open .backdrop{ opacity:1; pointer-events:auto }
         </button>
         <div class="menu" role="menu" aria-label="Clubs menu">
 
-          <a href="clubpage.php" role="menuitem">
+          <a href="myclubpage.php" role="menuitem">
             <svg class="icon" viewBox="0 0 24 24" fill="none"
                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M8 21v-4m8 4v-4M4 10h16M2 6h20v12H2z"/>
