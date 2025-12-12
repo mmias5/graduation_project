@@ -10,115 +10,127 @@ require_once __DIR__ . '/../config.php';
 
 $presidentId = (int)$_SESSION['student_id'];
 
-// ===== Get president club_id (SECURITY) =====
+// 1) جيب club_id الحقيقي للرئيس (تجاهل أي club_id جاي من الفورم)
 $stmt = $conn->prepare("SELECT club_id FROM student WHERE student_id=? LIMIT 1");
 $stmt->bind_param("i", $presidentId);
 $stmt->execute();
-$myClubId = (int)($stmt->get_result()->fetch_assoc()['club_id'] ?? 0);
+$clubId = (int)($stmt->get_result()->fetch_assoc()['club_id'] ?? 0);
 $stmt->close();
 
-if ($myClubId <= 1) {
-    die("Not allowed.");
+if ($clubId <= 1) {
+    echo "<script>alert('You are not assigned to any club yet.'); location.href='index.php';</script>";
+    exit;
 }
 
-// ✅ Ignore posted club_id (prevent tampering)
-$club_id = $myClubId;
-
-// ===== Read inputs =====
+// 2) استقبل البيانات
 $club_name     = trim($_POST['club_name'] ?? '');
 $category      = trim($_POST['category'] ?? '');
 $contact_email = trim($_POST['contact_email'] ?? '');
 $description   = trim($_POST['description'] ?? '');
-$instagram     = trim($_POST['instagram'] ?? '');
-$facebook      = trim($_POST['facebook'] ?? '');
-$linkedin      = trim($_POST['linkedin'] ?? '');
 
-// Basic validation
-if ($club_name === '' || $contact_email === '' || $description === '') {
-    echo "<script>alert('Please fill required fields.'); history.back();</script>";
+$instagram = trim($_POST['instagram'] ?? '');
+$facebook  = trim($_POST['facebook'] ?? '');
+$linkedin  = trim($_POST['linkedin'] ?? '');
+
+// social_media_link في جدول club (عندك حقل واحد كمان)
+$new_social_media_link = trim($_POST['social_media_link'] ?? ''); // مش موجود بالفورم، بس خليها احتياط
+
+if ($club_name === '' || $category === '' || $contact_email === '' || $description === '') {
+    echo "<script>alert('Please fill all required fields.'); history.back();</script>";
     exit;
 }
 
-// ===== Fetch current logo to keep if no upload =====
-$currentLogo = '';
-$stmt = $conn->prepare("SELECT logo FROM club WHERE club_id=? LIMIT 1");
-$stmt->bind_param("i", $club_id);
-$stmt->execute();
-$currentLogo = (string)($stmt->get_result()->fetch_assoc()['logo'] ?? '');
-$stmt->close();
-
-// ===== Handle logo upload =====
-$logoPath = $currentLogo;
+// 3) رفع اللوجو (اختياري)
+$newLogoPath = null;
 
 if (isset($_FILES['logo']) && $_FILES['logo']['error'] === UPLOAD_ERR_OK) {
     $tmp  = $_FILES['logo']['tmp_name'];
-    $name = $_FILES['logo']['name'] ?? '';
-    $ext  = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+    $name = $_FILES['logo']['name'];
 
-    $allowed = ['jpg','jpeg','png','webp'];
+    $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+    $allowed = ['png','jpg','jpeg','webp','gif'];
     if (!in_array($ext, $allowed, true)) {
-        echo "<script>alert('Logo must be jpg, jpeg, png, or webp.'); history.back();</script>";
+        echo "<script>alert('Invalid logo file type. Please upload png/jpg/webp.'); history.back();</script>";
         exit;
     }
 
-    $uploadDir = __DIR__ . '/../assets/uploads/clubs';
+    // مكان الحفظ: /uploads/club_edit_requests/
+    $uploadDir = __DIR__ . '/../uploads/club_edit_requests/';
     if (!is_dir($uploadDir)) {
         @mkdir($uploadDir, 0777, true);
     }
 
-    $newName = 'club_' . $club_id . '_logo_' . time() . '.' . $ext;
-    $destAbs = $uploadDir . '/' . $newName;
+    $safeFile = 'club_'.$clubId.'_req_'.date('Ymd_His').'.'.$ext;
+    $dest = $uploadDir . $safeFile;
 
-    if (!move_uploaded_file($tmp, $destAbs)) {
+    if (!move_uploaded_file($tmp, $dest)) {
         echo "<script>alert('Failed to upload logo.'); history.back();</script>";
         exit;
     }
 
-    // save relative path for DB
-    $logoPath = 'assets/uploads/clubs/' . $newName;
+    // نخزن مسار نسبي مناسب للعرض
+    $newLogoPath = 'uploads/club_edit_requests/' . $safeFile;
 }
 
-// ===== Update club table =====
-// club columns you have:
-// club_name, description, category, contact_email, logo, facebook_url, instagram_url, linkedin_url
-$sql = "
-  UPDATE club
-  SET club_name=?,
-      description=?,
-      category=?,
-      contact_email=?,
-      logo=?,
-      facebook_url=?,
-      instagram_url=?,
-      linkedin_url=?
-  WHERE club_id=?
-";
+// 4) (اختياري) منع تقديم طلب جديد إذا في Pending
+// إذا لسا ما أضفت status column، راح نكمّل بدون منع
+try {
+    $stmt = $conn->prepare("SELECT request_id FROM club_edit_request WHERE club_id=? AND status='Pending' LIMIT 1");
+    $stmt->bind_param("i", $clubId);
+    $stmt->execute();
+    $pending = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if ($pending) {
+        echo "<script>alert('You already have a pending edit request. Wait for admin review.'); location.href='editclub.php';</script>";
+        exit;
+    }
+} catch (Throwable $e) {
+    // ignore
+}
+
+// 5) INSERT into club_edit_request
+// ملاحظة: هذا يعتمد على إضافة عمود status (الـ ALTER اللي فوق)
+$sql = "INSERT INTO club_edit_request
+        (club_id, requested_by_student_id,
+         new_club_name, new_description, new_category,
+         new_social_media_link, instagram, facebook, linkedin,
+         new_logo, new_contact_email,
+         submitted_at, reviewed_at, review_admin_id, status)
+        VALUES
+        (?, ?,
+         ?, ?, ?,
+         ?, ?, ?, ?,
+         ?, ?,
+         NOW(), NULL, NULL, 'Pending')";
 
 $stmt = $conn->prepare($sql);
 if (!$stmt) {
-    die("Prepare failed: " . $conn->error);
+    echo "<script>alert('DB Error: ".$conn->error."'); history.back();</script>";
+    exit;
 }
 
-// TYPES: s s s s s s s s i  (8 strings + 1 int)
 $stmt->bind_param(
-    "ssssssssi",
+    "iisssssssss",
+    $clubId,
+    $presidentId,
     $club_name,
     $description,
     $category,
-    $contact_email,
-    $logoPath,
-    $facebook,
+    $new_social_media_link,
     $instagram,
+    $facebook,
     $linkedin,
-    $club_id
+    $newLogoPath,
+    $contact_email
 );
 
 if (!$stmt->execute()) {
-    $err = $stmt->error;
-    $stmt->close();
-    die("Update failed: " . $err);
+    echo "<script>alert('Failed to submit request: ".$stmt->error."'); history.back();</script>";
+    exit;
 }
+
 $stmt->close();
 
-header("Location: clubpage.php?updated=1");
+echo "<script>alert('✅ Edit request submitted successfully! Waiting for admin approval.'); location.href='editclub.php';</script>";
 exit;
