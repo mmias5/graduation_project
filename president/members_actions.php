@@ -3,133 +3,244 @@ session_start();
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
-    echo json_encode(["ok"=>false, "error"=>"Unauthorized"]);
-    exit;
-}
-
-if (empty($_POST['csrf_token']) || empty($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])) {
-    echo json_encode(["ok"=>false, "error"=>"Invalid CSRF token"]);
+    echo json_encode(['ok' => false, 'error' => 'Unauthorized']);
     exit;
 }
 
 require_once '../config.php';
 
-$president_id = (int)$_SESSION['student_id'];
+/* CSRF check */
+if (
+    empty($_POST['csrf_token']) ||
+    empty($_SESSION['csrf_token']) ||
+    !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])
+) {
+    echo json_encode(['ok' => false, 'error' => 'Invalid CSRF token']);
+    exit;
+}
+
 $action = $_POST['action'] ?? '';
+$presidentId = (int)$_SESSION['student_id'];
 
 /* get president club_id */
-$stmt = $conn->prepare("SELECT club_id FROM student WHERE student_id=? AND role='club_president' LIMIT 1");
-$stmt->bind_param("i", $president_id);
+$stmt = $conn->prepare("
+    SELECT club_id
+    FROM student
+    WHERE student_id = ? AND role = 'club_president'
+    LIMIT 1
+");
+$stmt->bind_param("i", $presidentId);
 $stmt->execute();
 $res = $stmt->get_result();
 $pres = $res->fetch_assoc();
 $stmt->close();
 
-$club_id = isset($pres['club_id']) ? (int)$pres['club_id'] : 1;
-if ($club_id <= 1) {
-    echo json_encode(["ok"=>false, "error"=>"President has no active club"]);
+$clubId = (int)($pres['club_id'] ?? 0);
+
+if ($clubId <= 1) {
+    echo json_encode(['ok' => false, 'error' => 'No club assigned']);
     exit;
 }
 
-try {
-    if ($action === 'kick') {
-        $student_id = isset($_POST['student_id']) ? (int)$_POST['student_id'] : 0;
-        if ($student_id <= 0) throw new Exception("Invalid student");
+/* =========================
+   ACCEPT / REJECT request
+   ========================= */
+if (in_array($action, ['accept', 'reject'], true)) {
 
-        if ($student_id === $president_id) throw new Exception("You cannot kick yourself");
-
-        // verify member belongs to president club
-        $stmt = $conn->prepare("SELECT club_id FROM student WHERE student_id=? LIMIT 1");
-        $stmt->bind_param("i", $student_id);
-        $stmt->execute();
-        $r = $stmt->get_result();
-        $m = $r->fetch_assoc();
-        $stmt->close();
-
-        if (!$m || (int)$m['club_id'] !== $club_id) throw new Exception("Member not in your club");
-
-        $conn->begin_transaction();
-
-        // set to default no-club (club_id=1)
-        $stmt = $conn->prepare("UPDATE student SET club_id=1 WHERE student_id=?");
-        $stmt->bind_param("i", $student_id);
-        $stmt->execute();
-        $stmt->close();
-
-        // decrement member_count (safe)
-        $stmt = $conn->prepare("UPDATE club SET member_count = GREATEST(member_count - 1, 0) WHERE club_id=?");
-        $stmt->bind_param("i", $club_id);
-        $stmt->execute();
-        $stmt->close();
-
-        $conn->commit();
-        echo json_encode(["ok"=>true]);
+    $requestId = (int)($_POST['request_id'] ?? 0);
+    if ($requestId <= 0) {
+        echo json_encode(['ok' => false, 'error' => 'Invalid request']);
         exit;
     }
 
-    if ($action === 'accept' || $action === 'reject') {
-        $request_id = isset($_POST['request_id']) ? (int)$_POST['request_id'] : 0;
-        if ($request_id <= 0) throw new Exception("Invalid request");
+    /* get request */
+    $stmt = $conn->prepare("
+        SELECT student_id
+        FROM club_membership_request
+        WHERE request_id = ? AND club_id = ? AND status = 'Pending'
+        LIMIT 1
+    ");
+    $stmt->bind_param("ii", $requestId, $clubId);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $req = $res->fetch_assoc();
+    $stmt->close();
 
-        // load request and verify it belongs to this club and is pending
-        $stmt = $conn->prepare("
-            SELECT request_id, club_id, student_id, status
-            FROM club_membership_request
-            WHERE request_id=?
-            LIMIT 1
-        ");
-        $stmt->bind_param("i", $request_id);
-        $stmt->execute();
-        $res = $stmt->get_result();
-        $req = $res->fetch_assoc();
-        $stmt->close();
+    if (!$req) {
+        echo json_encode(['ok' => false, 'error' => 'Request not found']);
+        exit;
+    }
 
-        if (!$req) throw new Exception("Request not found");
-        if ((int)$req['club_id'] !== $club_id) throw new Exception("Not your club request");
-        if (($req['status'] ?? '') !== 'Pending') throw new Exception("Request already decided");
+    $studentId = (int)$req['student_id'];
 
-        $newStatus = ($action === 'accept') ? 'Approved' : 'Rejected';
-        $student_id = (int)$req['student_id'];
-
-        $conn->begin_transaction();
-
-        // update request
-        $stmt = $conn->prepare("
-            UPDATE club_membership_request
-            SET status=?, decided_at=NOW(), decided_by_student_id=?
-            WHERE request_id=?
-        ");
-        $stmt->bind_param("sii", $newStatus, $president_id, $request_id);
-        $stmt->execute();
-        $stmt->close();
-
+    $conn->begin_transaction();
+    try {
         if ($action === 'accept') {
-            // move student into club
-            $stmt = $conn->prepare("UPDATE student SET club_id=? WHERE student_id=?");
-            $stmt->bind_param("ii", $club_id, $student_id);
+
+            /* approve request */
+            $stmt = $conn->prepare("
+                UPDATE club_membership_request
+                SET status = 'Approved',
+                    decided_at = NOW(),
+                    decided_by_student_id = ?
+                WHERE request_id = ?
+            ");
+            $stmt->bind_param("ii", $presidentId, $requestId);
             $stmt->execute();
             $stmt->close();
 
-            // increment member_count
-            $stmt = $conn->prepare("UPDATE club SET member_count = member_count + 1 WHERE club_id=?");
-            $stmt->bind_param("i", $club_id);
+            /* assign student to club */
+            $stmt = $conn->prepare("
+                UPDATE student
+                SET club_id = ?
+                WHERE student_id = ?
+            ");
+            $stmt->bind_param("ii", $clubId, $studentId);
             $stmt->execute();
             $stmt->close();
 
-            // optional: if you want to auto-reject other pending requests for same student to other clubs, add it here.
+            /* increment member_count */
+            $stmt = $conn->prepare("
+                UPDATE club
+                SET member_count = member_count + 1
+                WHERE club_id = ?
+            ");
+            $stmt->bind_param("i", $clubId);
+            $stmt->execute();
+            $stmt->close();
+
+        } else {
+
+            /* reject request */
+            $stmt = $conn->prepare("
+                UPDATE club_membership_request
+                SET status = 'Rejected',
+                    decided_at = NOW(),
+                    decided_by_student_id = ?
+                WHERE request_id = ?
+            ");
+            $stmt->bind_param("ii", $presidentId, $requestId);
+            $stmt->execute();
+            $stmt->close();
         }
 
         $conn->commit();
-        echo json_encode(["ok"=>true]);
+        echo json_encode(['ok' => true]);
+        exit;
+
+    } catch (Throwable $e) {
+        $conn->rollback();
+        echo json_encode(['ok' => false, 'error' => 'Database error']);
+        exit;
+    }
+}
+
+/* =========================
+   KICK member
+   ========================= */
+if ($action === 'kick') {
+
+    $studentId = (int)($_POST['student_id'] ?? 0);
+    if ($studentId <= 0) {
+        echo json_encode(['ok' => false, 'error' => 'Invalid student']);
         exit;
     }
 
-    echo json_encode(["ok"=>false, "error"=>"Unknown action"]);
-} catch (Exception $e) {
-    if ($conn && $conn->errno === 0) { /* ignore */ }
-    if ($conn && $conn->ping()) {
-        // rollback if in transaction
-        try { $conn->rollback(); } catch (Throwable $t) {}
+    // prevent kicking yourself
+    if ($studentId === $presidentId) {
+        echo json_encode(['ok' => false, 'error' => "You can't kick yourself"]);
+        exit;
     }
-    echo json_encode(["ok"=>false, "error"=>$e->getMessage()]);
+
+    // make sure this student is actually in your club
+    $stmt = $conn->prepare("
+        SELECT club_id, role
+        FROM student
+        WHERE student_id = ?
+        LIMIT 1
+    ");
+    $stmt->bind_param("i", $studentId);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $st = $res->fetch_assoc();
+    $stmt->close();
+
+    if (!$st) {
+        echo json_encode(['ok' => false, 'error' => 'Student not found']);
+        exit;
+    }
+
+    if ((int)$st['club_id'] !== $clubId) {
+        echo json_encode(['ok' => false, 'error' => 'Student is not in your club']);
+        exit;
+    }
+
+    if (($st['role'] ?? '') === 'club_president') {
+        echo json_encode(['ok' => false, 'error' => "You can't kick the president"]);
+        exit;
+    }
+
+    $conn->begin_transaction();
+    try {
+
+        // remove student from club -> back to default (1)
+        $stmt = $conn->prepare("
+            UPDATE student
+            SET club_id = 1
+            WHERE student_id = ?
+        ");
+        $stmt->bind_param("i", $studentId);
+        $stmt->execute();
+        $stmt->close();
+
+        // decrement member_count (protect from negative)
+        $stmt = $conn->prepare("
+            UPDATE club
+            SET member_count = CASE WHEN member_count > 0 THEN member_count - 1 ELSE 0 END
+            WHERE club_id = ?
+        ");
+        $stmt->bind_param("i", $clubId);
+        $stmt->execute();
+        $stmt->close();
+
+        // mark latest approved request as Left (optional but useful for history)
+        $stmt = $conn->prepare("
+            SELECT request_id
+            FROM club_membership_request
+            WHERE student_id = ? AND club_id = ? AND status = 'Approved'
+            ORDER BY COALESCE(decided_at, submitted_at) DESC, request_id DESC
+            LIMIT 1
+        ");
+        $stmt->bind_param("ii", $studentId, $clubId);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $r = $res->fetch_assoc();
+        $stmt->close();
+
+        if ($r) {
+            $reqId = (int)$r['request_id'];
+            $stmt = $conn->prepare("
+                UPDATE club_membership_request
+                SET status = 'Left',
+                    decided_at = NOW(),
+                    decided_by_student_id = ?
+                WHERE request_id = ?
+            ");
+            $stmt->bind_param("ii", $presidentId, $reqId);
+            $stmt->execute();
+            $stmt->close();
+        }
+
+        $conn->commit();
+        echo json_encode(['ok' => true]);
+        exit;
+
+    } catch (Throwable $e) {
+        $conn->rollback();
+        echo json_encode(['ok' => false, 'error' => 'Database error']);
+        exit;
+    }
 }
+
+echo json_encode(['ok' => false, 'error' => 'Unknown action']);
+exit;

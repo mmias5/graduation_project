@@ -11,7 +11,7 @@ require_once '../config.php';
 $president_id = (int)$_SESSION['student_id'];
 
 /* get president club_id */
-$stmt = $conn->prepare("SELECT club_id FROM student WHERE student_id=? AND role='club_president' LIMIT 1");
+$stmt = $conn->prepare("SELECT club_id FROM student WHERE student_id=? LIMIT 1");
 $stmt->bind_param("i", $president_id);
 $stmt->execute();
 $res = $stmt->get_result();
@@ -28,7 +28,7 @@ if ($club_id > 1) {
       FROM club_membership_request r
       JOIN student s ON s.student_id = r.student_id
       WHERE r.club_id = ?
-        AND r.status = 'Pending'
+        AND r.status = 'pending'
       ORDER BY r.submitted_at DESC
     ";
     $stmt = $conn->prepare($sql);
@@ -160,16 +160,13 @@ footer.cch-footer{ margin-top:auto !important; }
     <div class="subtitle"><span id="count"></span> pending</div>
   </div>
 
-  <!-- Toolbar -->
   <div class="toolbar">
     <input id="search" class="input" type="search" placeholder="Search by name…">
   </div>
 
-  <!-- Requests -->
   <div id="grid" class="grid"></div>
   <div id="empty" class="empty" style="display:none">No membership requests match your search.</div>
 
-  <!-- Pagination -->
   <div id="pager" class="pager"></div>
 </div>
 
@@ -180,18 +177,15 @@ const CSRF = <?php echo json_encode($csrf); ?>;
 const CLUB_ID = <?php echo (int)$club_id; ?>;
 const REQUESTS = <?php echo json_encode($requests, JSON_UNESCAPED_SLASHES); ?>;
 
-/* ==== Elements ==== */
 const grid=document.getElementById('grid');
 const empty=document.getElementById('empty');
 const pager=document.getElementById('pager');
 const countEl=document.getElementById('count');
 const searchEl=document.getElementById('search');
 
-/* ==== State ==== */
 let state={q:'',page:1,limit:8,data:[...REQUESTS]};
 countEl.textContent=state.data.length;
 
-/* ==== Render ==== */
 function renderGrid(){
   const ql = state.q.trim().toLowerCase();
   const filtered = state.data.filter(m => !ql || (m.name||'').toLowerCase().includes(ql));
@@ -249,13 +243,8 @@ function escapeHtml(str){
   }[s]));
 }
 
-/* Accept / Reject -> DB */
-async function acceptRequest(requestId){
-  await decide(requestId, 'accept');
-}
-async function rejectRequest(requestId){
-  await decide(requestId, 'reject');
-}
+async function acceptRequest(requestId){ await decide(requestId, 'accept'); }
+async function rejectRequest(requestId){ await decide(requestId, 'reject'); }
 
 async function decide(requestId, action){
   try{
@@ -264,7 +253,7 @@ async function decide(requestId, action){
     fd.append('request_id', String(requestId));
     fd.append('csrf_token', CSRF);
 
-    const res = await fetch('president_member_actions.php', { method:'POST', body: fd });
+    const res = await fetch('members_actions.php', { method:'POST', body: fd });
     const data = await res.json();
 
     if(!data.ok){
@@ -279,7 +268,6 @@ async function decide(requestId, action){
   }
 }
 
-/* ==== Init ==== */
 renderGrid();
 window.gotoPage=gotoPage;
 window.acceptRequest=acceptRequest;

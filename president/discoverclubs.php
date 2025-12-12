@@ -1,74 +1,69 @@
 <?php
 session_start();
-//president file
-if (
-  !isset($_SESSION['student_id']) ||
-  !isset($_SESSION['role']) ||
-  !in_array($_SESSION['role'], ['club_president'])
-) {
-  header('Location: ../login.php');
-  exit;
+//user file
+if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
+    if (isset($_SESSION['role']) && $_SESSION['role'] === 'student') {
+        header('Location: ../president/index.php');
+        exit;
+    }
+    header('Location: ../login.php');
+    exit;
 }
 
-require_once __DIR__ . '/../config.php';
+require_once '../config.php';
 
-/*
-  Fetch clubs:
-  - exclude club_id = 1 (No Club / Not Assigned)
-  - sponsor name (latest support record if exists)
-  - events count (total events per club)
-*/
-$sql = "
-  SELECT
-    c.club_id,
-    c.club_name,
-    c.description,
-    c.category,
-    c.logo,
-    c.member_count,
-    c.points,
-    COALESCE(ev.events_count, 0) AS events_count,
-    sp.company_name AS sponsor_name
-  FROM club c
-  LEFT JOIN (
-    SELECT club_id, COUNT(*) AS events_count
-    FROM event
-    GROUP BY club_id
-  ) ev ON ev.club_id = c.club_id
-  LEFT JOIN (
-    SELECT scs1.club_id, scs1.sponsor_id
-    FROM sponsor_club_support scs1
-    INNER JOIN (
-      SELECT club_id, MAX(start_date) AS max_start
-      FROM sponsor_club_support
-      GROUP BY club_id
-    ) scs2
-      ON scs2.club_id = scs1.club_id AND scs2.max_start = scs1.start_date
-  ) last_support ON last_support.club_id = c.club_id
-  LEFT JOIN sponsor sp ON sp.sponsor_id = last_support.sponsor_id
-  WHERE c.club_id <> 1
-  ORDER BY c.club_name ASC
-";
+$student_id = $_SESSION['student_id'];
 
+// ============================
+// 1) نحضر club_id الخاص بالطالب
+// ============================
+$student_club_id = 1; // default = No Club / Not Assigned
+$stmt = $conn->prepare("SELECT club_id FROM student WHERE student_id = ? LIMIT 1");
+if ($stmt) {
+    $stmt->bind_param("i", $student_id);
+    $stmt->execute();
+    $stmt->bind_result($student_club_id_db);
+    if ($stmt->fetch()) {
+        $student_club_id = (int)$student_club_id_db;
+    }
+    $stmt->close();
+}
+
+// ============================
+// 2) نحضر كل الأندية (active) من جدول club
+// ============================
 $clubs = [];
+$categories_map = [];
+
+$sql = "
+    SELECT club_id, club_name, description, category, logo, member_count, points, status
+    FROM club
+    WHERE status = 'active' AND club_id <> 1
+    ORDER BY club_name
+";
 $res = $conn->query($sql);
-if ($res) {
-  while ($row = $res->fetch_assoc()) {
-    $clubs[] = $row;
-  }
+if ($res && $res->num_rows > 0) {
+    while ($row = $res->fetch_assoc()) {
+        $clubs[] = $row;
+        if (!empty($row['category'])) {
+            $categories_map[$row['category']] = true;
+        }
+    }
 }
+
+$categories = array_keys($categories_map);
+sort($categories);
 ?>
 <!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>CCH — Header + Sidebar + Hover Dropdowns</title>
+<title>CCH — Discover Clubs</title>
 
 <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;600;700;800&display=swap" rel="stylesheet">
 <?php include 'header.php'; ?>
 
-<!-- ✅ START — Discover Clubs Section -->
 <style>
   :root{
     --c-navy:#2B3751;
@@ -89,8 +84,9 @@ if ($res) {
 
   html,body{
     margin:0;height:100%;
-    background: radial-gradient(1200px 800px at -10% 50%, rgba(168,186,240,.35), transparent 60%),
-    radial-gradient(900px 700px at 110% 60%, rgba(72,113,219,.20), transparent 60%);
+    background:
+      radial-gradient(1200px 800px at -10% 50%, rgba(168,186,240,.35), transparent 60%),
+      radial-gradient(900px 700px at 110% 60%, rgba(72,113,219,.20), transparent 60%);
     background-repeat:no-repeat;
     background-size:cover;
     font-family:"Raleway",sans-serif;
@@ -143,7 +139,10 @@ if ($res) {
     box-shadow: 0 0 0 3px rgba(72,113,219,.15);
   }
 
-  .cat-dd{ position:relative; width:210px; }
+  .cat-dd{
+    position:relative;
+    width:210px;
+  }
 
   .cat-btn{
     width:100%; height:46px;
@@ -182,7 +181,9 @@ if ($res) {
     cursor:pointer;
   }
 
-  .cat-item:hover{ background:#f5f7ff; }
+  .cat-item:hover{
+    background:#f5f7ff;
+  }
 
   .cat-item.active{
     background:#eef3ff;
@@ -231,13 +232,11 @@ if ($res) {
     border-radius:50%;
     border:3px solid var(--c-blue);
     object-fit:cover;
-    background:#e5e7eb;
   }
 
   .club-title h3{
     margin:0; font-family:"Raleway"; font-size:18px; font-weight:800;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-    max-width:170px;
   }
 
   .club-title small{ font-size:11px; color:#76829F; }
@@ -250,7 +249,6 @@ if ($res) {
     border-radius:999px;
     font-size:11px;
     font-weight:800;
-    white-space:nowrap;
   }
 
   .club-desc{
@@ -277,96 +275,73 @@ if ($res) {
 
     <h2 class="clubs-title">Your Next Adventure Starts Here — Join a Club You’ll Love!</h2>
 
-    <!-- ✅ Toolbar -->
+    <!-- Toolbar -->
     <div class="clubs-toolbar">
       <input id="clubSearch" class="input" placeholder="Search clubs…" />
 
-      <!-- ✅ Custom dropdown -->
       <div class="cat-dd">
-        <button id="catBtn" class="cat-btn" type="button">
+        <button id="catBtn" class="cat-btn">
           <span id="catLabel">All categories</span>
           <span class="arrow">▾</span>
         </button>
 
         <div id="catMenu" class="cat-menu">
           <div class="cat-item active" data-value="all">All categories</div>
-          <div class="cat-item" data-value="Technology">Technology</div>
-          <div class="cat-item" data-value="Sports">Sports</div>
-          <div class="cat-item" data-value="Arts">Arts</div>
-          <div class="cat-item" data-value="Community">Community</div>
-          <div class="cat-item" data-value="Science">Science</div>
-          <div class="cat-item" data-value="Business">Business</div>
-          <div class="cat-item" data-value="Culture">Culture</div>
-          <div class="cat-item" data-value="Other">Other</div>
+          <?php foreach ($categories as $cat): ?>
+            <div class="cat-item" data-value="<?php echo htmlspecialchars($cat); ?>">
+              <?php echo htmlspecialchars($cat); ?>
+            </div>
+          <?php endforeach; ?>
         </div>
       </div>
     </div>
 
-    <!-- ✅ Clubs Grid -->
+    <!-- Clubs Grid -->
     <div class="club-grid" id="clubGrid">
       <?php if (empty($clubs)): ?>
-        <div style="grid-column:1/-1; text-align:center; padding:22px; background:#fff; border-radius:16px; border:2px solid #DEE6FB; box-shadow:var(--shadow);">
-          No clubs found.
-        </div>
+        <p>No clubs available yet.</p>
       <?php else: ?>
-        <?php foreach($clubs as $c): ?>
-          <?php
-            $clubId   = (int)$c['club_id'];
-            $name     = $c['club_name'] ?? '';
-            $desc     = $c['description'] ?? '';
-            $cat      = $c['category'] ?? 'Other';
-            $members  = (int)($c['member_count'] ?? 0);
-            $events   = (int)($c['events_count'] ?? 0);
-            $points   = (int)($c['points'] ?? 0);
-            $sponsor  = $c['sponsor_name'] ?? '';
-            $logo     = $c['logo'] ?? '';
-
-            // logo fallback
-            $logoSrc = $logo ? htmlspecialchars($logo) : "assets/images/clubs/club1.png";
-          ?>
+        <?php foreach ($clubs as $club): 
+          $cat = $club['category'] ?: 'Other';
+          $logo = !empty($club['logo']) ? $club['logo'] : 'assets/images/clubs/default.png';
+        ?>
           <a class="club-card-link"
-             href="clubpage.php?club_id=<?php echo $clubId; ?>"
+             href="clubpage.php?club_id=<?php echo (int)$club['club_id']; ?>"
              data-category="<?php echo htmlspecialchars($cat); ?>">
             <article class="club-card">
               <div class="club-head">
                 <div class="club-id">
-                  <img class="club-logo" src="<?php echo $logoSrc; ?>" alt="Club Logo">
+                  <img class="club-logo"
+                       src="<?php echo htmlspecialchars($logo); ?>"
+                       alt="<?php echo htmlspecialchars($club['club_name']); ?>">
                   <div class="club-title">
-                    <h3><?php echo htmlspecialchars($name); ?></h3>
-                    <?php if (!empty($sponsor)): ?>
-                      <small>Sponsored by <span class="sponsor"><?php echo htmlspecialchars($sponsor); ?></span></small>
-                    <?php else: ?>
-                      <small>Sponsored by <span class="sponsor">—</span></small>
-                    <?php endif; ?>
+                    <h3><?php echo htmlspecialchars($club['club_name']); ?></h3>
+                    <small><?php echo htmlspecialchars($cat); ?></small>
                   </div>
                 </div>
                 <span class="category-chip"><?php echo htmlspecialchars($cat); ?></span>
               </div>
-
-              <p class="club-desc"><?php echo htmlspecialchars($desc); ?></p>
-
+              <p class="club-desc">
+                <?php echo htmlspecialchars($club['description']); ?>
+              </p>
               <div class="club-meta">
-                <span>Member: <?php echo number_format($members); ?></span>
-                <span>Events: <?php echo number_format($events); ?></span>
-                <span>Points: <?php echo number_format($points); ?></span>
+                <span>Members: <?php echo (int)$club['member_count']; ?></span>
+                <span>Points: <?php echo (int)$club['points']; ?></span>
               </div>
             </article>
           </a>
         <?php endforeach; ?>
       <?php endif; ?>
     </div>
-
   </div>
 </section>
 
-<!-- ✅ JavaScript (search + category dropdown filtering) -->
 <script>
   let selectedCategory = "all";
 
   const searchInput = document.getElementById("clubSearch");
   const clubCards = [...document.querySelectorAll(".club-card-link")];
 
-  // ----- Custom dropdown -----
   const catBtn = document.getElementById("catBtn");
   const catMenu = document.getElementById("catMenu");
   const catLabel = document.getElementById("catLabel");
@@ -399,7 +374,7 @@ if ($res) {
     const q = searchInput.value.toLowerCase().trim();
 
     clubCards.forEach(card => {
-      const name = (card.querySelector("h3")?.textContent || "").toLowerCase();
+      const name = card.querySelector("h3").textContent.toLowerCase();
       const cat = card.dataset.category;
 
       const matchText = !q || name.includes(q);
@@ -412,7 +387,6 @@ if ($res) {
   searchInput.addEventListener("input", applyFilters);
 </script>
 
-<!-- ✅ END — Discover Clubs Section -->
 <?php include 'footer.php'; ?>
 </body>
 </html>

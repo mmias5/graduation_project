@@ -338,7 +338,7 @@ kickConfirm.addEventListener('click', async ()=>{
     fd.append('student_id', String(pendingKickId));
     fd.append('csrf_token', CSRF);
 
-    const res = await fetch('president_member_actions.php', { method:'POST', body: fd });
+    const res = await fetch('members_actions.php', { method:'POST', body: fd });
     const data = await res.json();
 
     if(!data.ok){
