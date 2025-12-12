@@ -21,6 +21,7 @@ $presidentId = $_SESSION['president_id'] ?? $_SESSION['student_id'] ?? null;
 $displayName = "President";
 $points      = 0;
 $clubId      = null;
+$clubStatus  = 'Active'; // default
 
 if ($presidentId) {
     $stmt = $conn->prepare("
@@ -37,6 +38,18 @@ if ($presidentId) {
         $displayName = $row['student_name'] ?? $displayName;
         $points      = (int)($row['total_points'] ?? 0);
         $clubId      = $row['club_id'] ?? null;
+    }
+    $stmt->close();
+}
+
+/* ✅ Get club status (Active/Inactive) for this president club */
+if (!empty($clubId)) {
+    $stmt = $conn->prepare("SELECT status FROM club WHERE club_id = ? LIMIT 1");
+    $stmt->bind_param("i", $clubId);
+    $stmt->execute();
+    $r = $stmt->get_result();
+    if ($r && $r->num_rows > 0) {
+        $clubStatus = $r->fetch_assoc()['status'] ?? 'Active';
     }
     $stmt->close();
 }
@@ -195,7 +208,7 @@ body.menu-open .backdrop{ opacity:1; pointer-events:auto }
   padding:12px 14px;
   border-radius:12px;
   font-weight:700;
-  color:#4871db;            /* royal blue */
+  color:#4871db;
   text-decoration:none;
 }
 .menu a:link,
@@ -211,10 +224,114 @@ body.menu-open .backdrop{ opacity:1; pointer-events:auto }
 .menu a svg{
   width:18px;
   height:18px;
-  /* stroke uses currentColor from svg */
 }
+/* popup massage */
+/* ===== Nice Modal (same idea like screenshot) ===== */
+.cch-modal-wrap{
+  position:fixed; inset:0;
+  display:none;
+  align-items:center; justify-content:center;
+  z-index:9999;
+}
+.cch-modal-wrap.open{ display:flex; }
+
+.cch-modal-backdrop{
+  position:absolute; inset:0;
+  background:rgba(0,0,0,.45);
+}
+
+.cch-modal{
+  position:relative;
+  width:min(520px, calc(100% - 32px));
+  background:#fff;
+  border-radius:14px;
+  box-shadow:0 18px 60px rgba(0,0,0,.25);
+  border:1px solid #e8eaf2;
+  padding:22px 22px 18px;
+  text-align:center;
+  z-index:2;
+}
+
+.cch-modal-icon{
+  width:74px; height:74px;
+  border-radius:50%;
+  margin:4px auto 14px;
+  display:grid; place-items:center;
+  border:4px solid #35b7ff;
+  color:#35b7ff;
+  font-weight:900;
+  font-size:34px;
+  line-height:1;
+}
+
+.cch-modal-title{
+  margin:0 0 8px;
+  font-size:26px;
+  font-weight:800;
+  color:#3b3f49;
+}
+
+.cch-modal-text{
+  margin:0 0 18px;
+  color:#6b7280;
+  font-size:14.5px;
+  line-height:1.6;
+}
+
+.cch-modal-actions{
+  display:flex;
+  justify-content:center;
+  gap:10px;
+  flex-wrap:wrap;
+  padding-top:4px;
+}
+
+.cch-btn{
+  appearance:none;
+  border:0;
+  padding:10px 16px;
+  border-radius:6px;
+  font-weight:800;
+  cursor:pointer;
+  text-decoration:none;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.cch-btn.primary{
+  background:#5b6dff;
+  color:#fff;
+  box-shadow:0 8px 18px rgba(91,109,255,.25);
+}
+
+.cch-btn.secondary{
+  background:#6b7280;
+  color:#fff;
+}
+.cch-btn:focus-visible{ outline:2px solid var(--sun); outline-offset:2px }
+
 </style>
 </head>
+<!-- ===== Modal Popup (Discover Clubs + Close) ===== -->
+<div id="cchModal" class="cch-modal-wrap" aria-hidden="true">
+  <div class="cch-modal-backdrop" id="cchModalBackdrop"></div>
+
+  <div class="cch-modal" role="dialog" aria-modal="true" aria-labelledby="cchModalTitle" aria-describedby="cchModalDesc">
+    <div class="cch-modal-icon">i</div>
+
+    <h2 class="cch-modal-title" id="cchModalTitle">You haven’t joined a club yet</h2>
+    <p class="cch-modal-text" id="cchModalDesc">
+      To access this page, you need to <strong>join a club</strong> first.
+    </p>
+
+    <div class="cch-modal-actions">
+      <a id="cchModalPrimary" class="cch-btn primary" href="discoverclubs.php">Discover Clubs</a>
+      <button id="cchModalClose" class="cch-btn secondary" type="button">Close</button>
+    </div>
+  </div>
+</div>
+
 <body>
 
 <!-- ===== Top Bar ===== -->
@@ -315,7 +432,11 @@ body.menu-open .backdrop{ opacity:1; pointer-events:auto }
             All Events
           </a>
 
-          <a href="createevent.php" role="menuitem">
+          <!-- ✅ Create Event (blocked when club inactive) -->
+          <a href="createevent.php"
+             role="menuitem"
+             id="createEventLink"
+             data-club-status="<?= htmlspecialchars($clubStatus) ?>">
             <svg class="icon" viewBox="0 0 24 24" fill="none"
                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="12" y1="5" x2="12" y2="19"/>
@@ -428,6 +549,55 @@ body.menu-open .backdrop{ opacity:1; pointer-events:auto }
   document.getElementById('menuToggle').addEventListener('click',()=> body.classList.toggle('menu-open'));
   document.getElementById('backdrop').addEventListener('click',()=> body.classList.remove('menu-open'));
   document.addEventListener('keydown',e=>{ if(e.key==='Escape') body.classList.remove('menu-open'); });
+
+   // ===== Modal helpers =====
+function openCchModal(title, message, primaryHref){
+  const wrap = document.getElementById('cchModal');
+  const titleEl = document.getElementById('cchModalTitle');
+  const descEl  = document.getElementById('cchModalDesc');
+  const primary = document.getElementById('cchModalPrimary');
+
+  titleEl.textContent = title;
+  descEl.innerHTML = message; // allow <strong>
+  primary.href = primaryHref || 'discoverclubs.php';
+
+  wrap.classList.add('open');
+  wrap.setAttribute('aria-hidden', 'false');
+}
+
+function closeCchModal(){
+  const wrap = document.getElementById('cchModal');
+  wrap.classList.remove('open');
+  wrap.setAttribute('aria-hidden', 'true');
+}
+
+// close actions
+document.getElementById('cchModalClose')?.addEventListener('click', closeCchModal);
+document.getElementById('cchModalBackdrop')?.addEventListener('click', closeCchModal);
+document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') closeCchModal(); });
+
+// ✅ Block Create Event if club inactive (use modal like screenshot)
+(function(){
+  const link = document.getElementById('createEventLink');
+  if(!link) return;
+
+  link.addEventListener('click', function(e){
+    const status = (link.dataset.clubStatus || '').toLowerCase().trim();
+    if(status === 'inactive'){
+      e.preventDefault();
+
+      openCchModal(
+        "Your club is inactive",
+        "To access this page, please contact the <strong>University Administrator</strong> or join another club.",
+        "discoverclubs.php"
+      );
+
+      return false;
+    }
+  });
+})();
+
+
 </script>
 
 </body>
