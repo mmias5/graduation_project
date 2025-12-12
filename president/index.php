@@ -65,7 +65,6 @@ if (isset($conn) && $conn instanceof mysqli) {
             FROM ranking r
             JOIN club c ON c.club_id = r.club_id
             WHERE r.period_end = ?
-              AND (c.status IS NULL OR c.status = 'Active')
             ORDER BY r.rank_position ASC, r.total_points DESC
             LIMIT 4
         ");
@@ -83,7 +82,6 @@ if (isset($conn) && $conn instanceof mysqli) {
         $res = $conn->query("
             SELECT club_id, club_name, logo, points
             FROM club
-            WHERE (status IS NULL OR status = 'Active')
             ORDER BY points DESC, club_name ASC
             LIMIT 4
         ");
