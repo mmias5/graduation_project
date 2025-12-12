@@ -8,7 +8,7 @@ if (!isset($_SESSION['student_id']) || ($_SESSION['role'] !== 'student' && $_SES
 
 require_once '../config.php';
 
-// ===== Fetch ALL events with club + sponsor (company_name) =====
+// ===== Fetch ALL events with club + sponsor (from event.sponsor_id) =====
 $sql = "
     SELECT
         e.event_id,
@@ -17,15 +17,14 @@ $sql = "
         e.starting_date,
         e.ending_date,
         e.banner_image,
+        e.category,
         c.club_name,
-        s.company_name AS sponsor_name
+        sp.company_name AS sponsor_name
     FROM event e
     INNER JOIN club c
         ON e.club_id = c.club_id
-    LEFT JOIN sponsor_club_support scs
-        ON scs.club_id = c.club_id
-    LEFT JOIN sponsor s
-        ON scs.sponsor_id = s.sponsor_id
+    LEFT JOIN sponsor sp
+        ON sp.sponsor_id = e.sponsor_id
     ORDER BY e.starting_date DESC
 ";
 
@@ -50,9 +49,9 @@ function formatEventDateParts(?string $dtStr): array {
     if (!$dtStr) return ['--','---',''];
     $dt = new DateTime($dtStr);
     return [
-        $dt->format('d'),            // day
-        strtoupper($dt->format('M')),// month
-        $dt->format('D')             // weekday
+        $dt->format('d'),
+        strtoupper($dt->format('M')),
+        $dt->format('D')
     ];
 }
 
@@ -145,10 +144,10 @@ function formatEventTime(?string $dtStr): string {
       <?php if (empty($upcoming)): ?>
         <p style="grid-column:1/-1;color:#6b7280;">No upcoming events yet.</p>
       <?php else: ?>
-        <?php foreach ($upcoming as $ev): 
+        <?php foreach ($upcoming as $ev):
           [$day,$mon,$dow] = formatEventDateParts($ev['starting_date']);
           $time = formatEventTime($ev['starting_date']);
-          $sponsor = $ev['sponsor_name'] ? 'Sponsor: '.$ev['sponsor_name'] : 'No sponsor listed';
+          $sponsor = !empty($ev['sponsor_name']) ? 'Sponsor: '.$ev['sponsor_name'] : 'No sponsor listed';
         ?>
         <article
           class="card"
@@ -193,9 +192,9 @@ function formatEventTime(?string $dtStr): string {
       <?php if (empty($past)): ?>
         <p style="grid-column:1/-1;color:#6b7280;">No past events yet.</p>
       <?php else: ?>
-        <?php foreach ($past as $ev): 
+        <?php foreach ($past as $ev):
           [$day,$mon,$dow] = formatEventDateParts($ev['starting_date']);
-          $sponsor = $ev['sponsor_name'] ? 'Sponsor: '.$ev['sponsor_name'] : 'No sponsor listed';
+          $sponsor = !empty($ev['sponsor_name']) ? 'Sponsor: '.$ev['sponsor_name'] : 'No sponsor listed';
         ?>
         <article
           class="card"
@@ -220,7 +219,6 @@ function formatEventTime(?string $dtStr): string {
               <?php endif; ?>
             </div>
             <div class="footer">
-              <!-- static demo rating, can be replaced later -->
               <span class="review"><span class="stars" style="--rating:4.3"></span>4.3</span>
             </div>
           </div>

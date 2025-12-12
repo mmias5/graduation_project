@@ -2,51 +2,145 @@
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
+
 session_start();
 if (!isset($_SESSION['admin_id'])) {
     header('Location: login.php');
     exit;
 }
 
-// ===============================
-// DB Connection
-// ===============================
-require_once '../config.php'; // غيّر المسار إذا كان غير ذلك
+require_once '../config.php';
+
+function redirect_self() {
+    $self = basename($_SERVER['PHP_SELF']);
+    header("Location: $self");
+    exit;
+}
 
 // ===============================
 // Handle Approve / Reject (POST)
 // ===============================
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'], $_POST['event_id'])) {
 
-    $eventId = (int)$_POST['event_id'];
-    $adminId = $_SESSION['admin_id'];
+    $requestId = (int)$_POST['event_id'];   // request_id
+    $adminId   = (int)$_SESSION['admin_id'];
+    $action    = $_POST['action'];
 
-    if ($_POST['action'] === 'approve') {
-        // ✅ لاحقًا: تنسخ البيانات لجدول event
+    $conn->begin_transaction();
+
+    try {
+
+        // Fetch request (make sure exists)
+        $stmt = $conn->prepare("
+            SELECT
+                request_id,
+                club_id,
+                requested_by_student_id,
+                event_name,
+                description,
+                event_location,
+                category,
+                sponsor_id,
+                max_attendees,
+                starting_date,
+                ending_date,
+                banner_image,
+                reviewed_at
+            FROM event_creation_request
+            WHERE request_id = ?
+            LIMIT 1
+        ");
+        $stmt->bind_param("i", $requestId);
+        $stmt->execute();
+        $req = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        if (!$req) {
+            $conn->rollback();
+            redirect_self();
+        }
+
+        // Already reviewed? don't re-insert
+        if (!empty($req['reviewed_at'])) {
+            $conn->commit();
+            redirect_self();
+        }
+
+        if ($action === 'approve') {
+
+            // Insert into event table (include category + sponsor_id)
+            $insert = $conn->prepare("
+                INSERT INTO event
+                    (event_name, description, event_location, category, sponsor_id, max_attendees,
+                     starting_date, ending_date, banner_image, club_id, created_by_student_id, created_by_admin_id)
+                VALUES
+                    (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ");
+
+            $eventName   = $req['event_name'];
+            $desc        = $req['description'];
+            $loc         = $req['event_location'];
+
+            $category    = $req['category'];      // nullable
+            $sponsorId   = $req['sponsor_id'];    // nullable
+
+            $maxAtt      = $req['max_attendees']; // nullable
+            $startDt     = $req['starting_date'];
+            $endDt       = $req['ending_date'];
+            $banner      = $req['banner_image'];
+
+            $clubId      = (int)$req['club_id'];
+            $createdBySt = (int)$req['requested_by_student_id'];
+            $createdByAd = $adminId;
+
+            // Normalize empty strings -> NULL for nullable ints
+            if ($sponsorId === '' ) $sponsorId = null;
+            if ($maxAtt === '' ) $maxAtt = null;
+
+            $insert->bind_param(
+                "ssssiisssiii",
+                $eventName,
+                $desc,
+                $loc,
+                $category,
+                $sponsorId,
+                $maxAtt,
+                $startDt,
+                $endDt,
+                $banner,
+                $clubId,
+                $createdBySt,
+                $createdByAd
+            );
+
+            $insert->execute();
+            $insert->close();
+        }
+
+        // Mark as reviewed (for approve OR reject)
+        $upd = $conn->prepare("
+            UPDATE event_creation_request
+            SET reviewed_at = NOW(),
+                review_admin_id = ?
+            WHERE request_id = ?
+            LIMIT 1
+        ");
+        $upd->bind_param("ii", $adminId, $requestId);
+        $upd->execute();
+        $upd->close();
+
+        $conn->commit();
+        redirect_self();
+
+    } catch (Throwable $e) {
+        $conn->rollback();
+        die("Error: " . htmlspecialchars($e->getMessage()));
     }
-
-    // تحديث حالة المراجعة
-    $stmt = $conn->prepare("
-        UPDATE event_creation_request
-        SET reviewed_at = NOW(),
-            review_admin_id = ?
-        WHERE request_id = ?
-        LIMIT 1
-    ");
-    $stmt->bind_param("ii", $adminId, $eventId);
-    $stmt->execute();
-    $stmt->close();
-
-    header("Location: event_requests.php");
-    exit;
 }
+
 // ===============================
 // Fetch Pending Event Requests
 // ===============================
-
-// ملاحظة مهمة:
-// - غيّر أسماء الجداول والحقول تحت لتطابق الـ DB تبعتك
-// - عملت aliases عشان تمشي مع أسماء الـ keys اللي مستخدمها بالـ frontend تبعك
 $eventRequests = [];
 
 $sql = "
@@ -57,22 +151,23 @@ SELECT
     DATE(e.starting_date)   AS event_date,
     DATE_FORMAT(e.starting_date, '%h:%i %p') AS start_time,
     DATE_FORMAT(e.ending_date, '%h:%i %p')   AS end_time,
-    'General'               AS category,         -- مؤقت
-    NULL                    AS sponsor,          -- مؤقت
+    e.category              AS category,
+    sp.company_name         AS sponsor,
     e.description           AS description,
     e.banner_image          AS cover_image,
     c.club_name             AS club_name,
-    s.student_name AS requested_by,
+    s.student_name          AS requested_by,
     e.submitted_at          AS created_at
 FROM event_creation_request e
 LEFT JOIN club c 
        ON e.club_id = c.club_id
 LEFT JOIN student s 
        ON e.requested_by_student_id = s.student_id
+LEFT JOIN sponsor sp
+       ON sp.sponsor_id = e.sponsor_id
 WHERE e.reviewed_at IS NULL
 ORDER BY e.submitted_at DESC
 ";
-
 
 $result = $conn->query($sql);
 if ($result && $result->num_rows > 0) {
@@ -93,7 +188,7 @@ if ($result && $result->num_rows > 0) {
 
   <style>
     :root{
-      --sidebarWidth:240px; /* make sure this matches your global value */
+      --sidebarWidth:240px;
       --navy:#242751;
       --royal:#4871db;
       --coral:#ff5e5e;
@@ -106,23 +201,18 @@ if ($result && $result->num_rows > 0) {
       --radius-lg:20px;
       --radius-pill:999px;
     }
-
     *{box-sizing:border-box;margin:0;padding:0}
-
     body{
       margin:0;
       font-family:"Raleway",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
       background:var(--paper);
       color:var(--ink);
     }
-
-    /* ======= Layout with sidebar ======= */
     .page-shell{
       margin-left:var(--sidebarWidth);
       min-height:100vh;
       padding:32px 40px 40px;
     }
-
     .page-header{
       display:flex;
       align-items:flex-end;
@@ -130,21 +220,17 @@ if ($result && $result->num_rows > 0) {
       gap:16px;
       margin-bottom:24px;
     }
-
     .page-title{
       font-size:1.6rem;
       font-weight:800;
       letter-spacing:.02em;
       color:var(--navy);
     }
-
     .page-subtitle{
       font-size:.97rem;
       color:var(--muted);
       margin-top:4px;
     }
-
-    /* Filter/search row */
     .toolbar{
       display:flex;
       justify-content:space-between;
@@ -152,12 +238,10 @@ if ($result && $result->num_rows > 0) {
       gap:16px;
       margin-bottom:24px;
     }
-
     .search-input{
       flex:1;
       position:relative;
     }
-
     .search-input input{
       width:100%;
       padding:10px 14px;
@@ -167,13 +251,11 @@ if ($result && $result->num_rows > 0) {
       font-size:.93rem;
       outline:none;
     }
-
     .search-input input:focus{
       border-color:var(--coral);
       box-shadow:0 0 0 1px rgba(255,94,94,.18);
       background:#ffffff;
     }
-
     .badge-pill{
       display:inline-flex;
       align-items:center;
@@ -185,14 +267,11 @@ if ($result && $result->num_rows > 0) {
       background:rgba(255,94,94,.06);
       color:var(--coral);
     }
-
-    /* ======= Cards ======= */
     .requests-grid{
       display:flex;
       flex-direction:column;
       gap:18px;
     }
-
     .request-card{
       background:var(--card);
       border-radius:var(--radius-lg);
@@ -202,26 +281,22 @@ if ($result && $result->num_rows > 0) {
       grid-template-columns:minmax(0,1fr) auto;
       gap:18px;
     }
-
     .request-main{
       display:flex;
       flex-direction:column;
       gap:12px;
     }
-
     .request-header{
       display:flex;
       align-items:center;
       justify-content:space-between;
       gap:10px;
     }
-
     .request-title{
       font-size:1.05rem;
       font-weight:700;
       color:var(--navy);
     }
-
     .request-meta-top{
       display:flex;
       flex-wrap:wrap;
@@ -229,7 +304,6 @@ if ($result && $result->num_rows > 0) {
       font-size:.8rem;
       color:var(--muted);
     }
-
     .chip{
       padding:4px 10px;
       border-radius:999px;
@@ -240,14 +314,12 @@ if ($result && $result->num_rows > 0) {
       align-items:center;
       gap:6px;
     }
-
     .chip-icon{
       width:6px;
       height:6px;
       border-radius:50%;
       background:var(--coral);
     }
-
     .meta-row{
       display:flex;
       flex-wrap:wrap;
@@ -255,12 +327,10 @@ if ($result && $result->num_rows > 0) {
       font-size:.8rem;
       color:var(--muted);
     }
-
     .meta-label{
       font-weight:600;
       color:var(--ink);
     }
-
     .description{
       font-size:.86rem;
       line-height:1.45;
@@ -271,8 +341,6 @@ if ($result && $result->num_rows > 0) {
       max-height:96px;
       overflow:auto;
     }
-
-    /* Right side: cover + actions */
     .request-side{
       display:flex;
       flex-direction:column;
@@ -281,7 +349,6 @@ if ($result && $result->num_rows > 0) {
       gap:12px;
       min-width:190px;
     }
-
     .cover-thumb{
       width:100%;
       max-width:220px;
@@ -295,20 +362,17 @@ if ($result && $result->num_rows > 0) {
       font-size:.78rem;
       color:var(--muted);
     }
-
     .cover-thumb img{
       width:100%;
       height:100%;
       object-fit:cover;
     }
-
     .actions{
       display:flex;
       flex-wrap:wrap;
       gap:10px;
       justify-content:flex-end;
     }
-
     .btn{
       padding:8px 18px;
       border-radius:var(--radius-pill);
@@ -319,61 +383,41 @@ if ($result && $result->num_rows > 0) {
       transition:.18s ease all;
       font-family:inherit;
     }
-
     .btn-approve{
       background:var(--coral);
       color:#ffffff;
       box-shadow:0 10px 20px rgba(255,94,94,.35);
     }
-
     .btn-approve:hover{
       transform:translateY(-1px);
       box-shadow:0 12px 26px rgba(255,94,94,.45);
     }
-
     .btn-reject{
       background:#ffffff;
       color:#b91c1c;
       border-color:rgba(185,28,28,.2);
     }
-
     .btn-reject:hover{
       background:#fef2f2;
     }
-
     .empty-state{
       text-align:center;
       margin-top:40px;
       color:var(--muted);
       font-size:.95rem;
     }
-
     @media (max-width:900px){
-      .page-shell{
-        margin-left:0;
-        padding:20px 16px 28px;
-      }
-      .request-card{
-        grid-template-columns:1fr;
-      }
-      .request-side{
-        align-items:stretch;
-      }
-      .cover-thumb{
-        max-width:100%;
-      }
-      .actions{
-        justify-content:flex-start;
-      }
+      .page-shell{ margin-left:0; padding:20px 16px 28px; }
+      .request-card{ grid-template-columns:1fr; }
+      .request-side{ align-items:stretch; }
+      .cover-thumb{ max-width:100%; }
+      .actions{ justify-content:flex-start; }
     }
   </style>
 </head>
 <body>
 
-<?php
-  // include your existing admin sidebar
-  include 'sidebar.php';
-?>
+<?php include 'sidebar.php'; ?>
 
 <div class="page-shell">
   <header class="page-header">
@@ -398,10 +442,16 @@ if ($result && $result->num_rows > 0) {
   <section class="requests-grid" id="requestsList">
     <?php if (!empty($eventRequests)): ?>
       <?php foreach($eventRequests as $row): ?>
-        <article class="request-card" data-search="<?php 
+        <?php
+          $cat = $row['category'] ?? '';
+          $catShow = trim((string)$cat) === '' ? '—' : $cat;
+
+          $sponsorShow = trim((string)($row['sponsor'] ?? '')) === '' ? '' : $row['sponsor'];
+        ?>
+        <article class="request-card" data-search="<?php
           echo htmlspecialchars(
             strtolower(
-              $row['title'].' '.$row['club_name'].' '.$row['category'].' '.$row['location']
+              $row['title'].' '.$row['club_name'].' '.$catShow.' '.$row['location'].' '.$sponsorShow
             ),
             ENT_QUOTES
           );
@@ -427,9 +477,9 @@ if ($result && $result->num_rows > 0) {
               <span><span class="meta-label">Start:</span> <?php echo htmlspecialchars($row['start_time']); ?></span>
               <span><span class="meta-label">End:</span> <?php echo htmlspecialchars($row['end_time']); ?></span>
               <span><span class="meta-label">Location:</span> <?php echo htmlspecialchars($row['location']); ?></span>
-              <span><span class="meta-label">Category:</span> <?php echo htmlspecialchars($row['category']); ?></span>
-              <?php if(!empty($row['sponsor'])): ?>
-                <span><span class="meta-label">Sponsor:</span> <?php echo htmlspecialchars($row['sponsor']); ?></span>
+              <span><span class="meta-label">Category:</span> <?php echo htmlspecialchars($catShow); ?></span>
+              <?php if(!empty($sponsorShow)): ?>
+                <span><span class="meta-label">Sponsor:</span> <?php echo htmlspecialchars($sponsorShow); ?></span>
               <?php endif; ?>
             </div>
 

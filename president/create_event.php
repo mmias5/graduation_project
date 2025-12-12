@@ -23,7 +23,7 @@ $date       = trim($_POST['date'] ?? '');
 $start_time = trim($_POST['start_time'] ?? '');
 $end_time   = trim($_POST['end_time'] ?? '');
 $category   = trim($_POST['category'] ?? '');
-$sponsor    = trim($_POST['sponsor'] ?? '');
+$sponsor    = trim($_POST['sponsor'] ?? ''); // company_name from form
 $desc       = trim($_POST['description'] ?? '');
 
 $old = [
@@ -37,7 +37,7 @@ $old = [
   'description' => $desc,
 ];
 
-/* ✅ Make sure this president belongs to this club_id */
+/* ✅ Ensure this president belongs to this club_id */
 $stmt = $conn->prepare("SELECT club_id FROM student WHERE student_id = ? LIMIT 1");
 $stmt->bind_param("i", $presidentId);
 $stmt->execute();
@@ -95,44 +95,50 @@ if (isset($_FILES['cover']) && $_FILES['cover']['error'] !== UPLOAD_ERR_NO_FILE)
         back_with_error("Could not save the image.", $old);
     }
 
-    // ✅ store relative path in DB (adjust if you prefer another path)
+    // store relative path in DB
     $bannerPath = "uploads/events/" . $newName;
 }
 
-/*
-  ✅ Your DB tables:
-  - event_creation_request: (request_id, club_id, requested_by_student_id, event_name, event_location, description,
-                            max_attendees, starting_date, ending_date, banner_image, submitted_at, reviewed_at, review_admin_id)
+/* ✅ sponsor_id in DB (lookup by company_name from input). If not found -> NULL */
+$sponsorId = null;
+if ($sponsor !== '') {
+    $st = $conn->prepare("SELECT sponsor_id FROM sponsor WHERE company_name = ? LIMIT 1");
+    $st->bind_param("s", $sponsor);
+    $st->execute();
+    $rr = $st->get_result();
+    if ($rr && $rr->num_rows > 0) {
+        $sponsorId = (int)$rr->fetch_assoc()['sponsor_id'];
+    }
+    $st->close();
 
-  Note: category + sponsor columns are NOT in your DB.
-  We will safely append them inside description so you don’t lose them.
-*/
-$finalDesc = $desc;
-if ($category !== '' || $sponsor !== '') {
-    $finalDesc .= "\n\n";
-    if ($category !== '') $finalDesc .= "Category: " . $category . "\n";
-    if ($sponsor !== '')  $finalDesc .= "Sponsor: " . $sponsor . "\n";
+    // if user typed a name that doesn't exist in sponsor table, keep sponsorId NULL
+    // and optionally append the typed name in description so you don’t lose it:
+    if ($sponsorId === null) {
+        $desc .= "\n\nSponsor (typed): " . $sponsor;
+    }
 }
 
-/* ✅ Insert as a CREATION REQUEST (admin can approve later) */
+/* ✅ Insert into event_creation_request exactly as DB columns */
 $max_attendees = null;
 $submitted_at  = date('Y-m-d H:i:s');
 
 $stmt = $conn->prepare("
     INSERT INTO event_creation_request
-      (club_id, requested_by_student_id, event_name, event_location, description, max_attendees,
+      (club_id, sponsor_id, requested_by_student_id, event_name, event_location, category, description, max_attendees,
        starting_date, ending_date, banner_image, submitted_at)
     VALUES
-      (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ");
 
 $stmt->bind_param(
-    "iisssissss",
+    "iiissssissss",
     $club_id,
+    $sponsorId,
     $presidentId,
     $title,
     $location,
-    $finalDesc,
+    $category,
+    $desc,
     $max_attendees,
     $startDT,
     $endDT,

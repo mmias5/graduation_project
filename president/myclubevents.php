@@ -26,7 +26,7 @@ $eventsUpcoming = [];
 $eventsPast     = [];
 
 if ($clubId) {
-    // 2) Fetch events for this club only
+    // 2) Fetch events for this club only (sponsor from event.sponsor_id)
     $sql = "
         SELECT
             e.event_id,
@@ -35,15 +35,14 @@ if ($clubId) {
             e.starting_date,
             e.ending_date,
             e.banner_image,
+            e.category,
             c.club_name,
-            s.company_name AS sponsor_name
+            sp.company_name AS sponsor_name
         FROM event e
         INNER JOIN club c
             ON e.club_id = c.club_id
-        LEFT JOIN sponsor_club_support scs
-            ON scs.club_id = c.club_id
-        LEFT JOIN sponsor s
-            ON scs.sponsor_id = s.sponsor_id
+        LEFT JOIN sponsor sp
+            ON sp.sponsor_id = e.sponsor_id
         WHERE e.club_id = ?
         ORDER BY e.starting_date DESC
     ";
@@ -148,55 +147,13 @@ function formatEventTime2(?string $dtStr): string {
   .review{display:flex;align-items:center;gap:8px;font-weight:800;color:#111827}
   .sepbar{height:1px;background:#e5e7eb;margin:14px 0}
 
-  /* Empty state */
-  .empty-wrap{
-    max-width:700px;
-    margin:60px auto 80px;
-    padding:0 18px;
-  }
-  .empty-card{
-    background:#ffffff;
-    border-radius:20px;
-    box-shadow:0 18px 38px rgba(12,22,60,.12);
-    padding:32px 26px 30px;
-    text-align:left;
-  }
-  .empty-eyebrow{
-    font-size:12px;
-    font-weight:800;
-    letter-spacing:.14em;
-    text-transform:uppercase;
-    color:#8186a0;
-    display:block;
-    margin-bottom:6px;
-  }
-  .empty-title{
-    margin:0 0 10px;
-    font-size:26px;
-    font-weight:800;
-    color:var(--navy);
-  }
-  .empty-text{
-    margin:0 0 18px;
-    font-size:15px;
-    color:#4b5168;
-  }
-  .discover-pill{
-    display:inline-flex;
-    align-items:center;
-    justify-content:center;
-    padding:10px 18px;
-    border-radius:999px;
-    background:#4871db;
-    color:#fff;
-    text-decoration:none;
-    font-weight:800;
-    box-shadow:0 12px 30px rgba(72,113,219,.34);
-  }
-  .discover-pill:hover{
-    background:#fff;
-    color:#4871db;
-  }
+  .empty-wrap{max-width:700px;margin:60px auto 80px;padding:0 18px;}
+  .empty-card{background:#ffffff;border-radius:20px;box-shadow:0 18px 38px rgba(12,22,60,.12);padding:32px 26px 30px;text-align:left;}
+  .empty-eyebrow{font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#8186a0;display:block;margin-bottom:6px;}
+  .empty-title{margin:0 0 10px;font-size:26px;font-weight:800;color:var(--navy);}
+  .empty-text{margin:0 0 18px;font-size:15px;color:#4b5168;}
+  .discover-pill{display:inline-flex;align-items:center;justify-content:center;padding:10px 18px;border-radius:999px;background:#4871db;color:#fff;text-decoration:none;font-weight:800;box-shadow:0 12px 30px rgba(72,113,219,.34);}
+  .discover-pill:hover{background:#fff;color:#4871db;}
 </style>
 </head>
 
@@ -206,7 +163,6 @@ function formatEventTime2(?string $dtStr): string {
 
 <?php if (!$clubId): ?>
 
-  <!-- ===== EMPTY STATE WHEN STUDENT HAS NO CLUB ===== -->
   <main class="empty-wrap mt-from-header mb-to-footer" role="main" aria-labelledby="no-club-title">
     <section class="empty-card">
       <span class="empty-eyebrow">Heads up</span>
@@ -215,7 +171,6 @@ function formatEventTime2(?string $dtStr): string {
         To see <strong>My Club Events</strong> you need to join a club first.
         Browse the available clubs and pick the one that suits you best.
       </p>
-
       <a class="discover-pill" href="discoverclubs.php" title="Go to Discover Clubs">
         Discover Clubs
       </a>
@@ -224,7 +179,6 @@ function formatEventTime2(?string $dtStr): string {
 
 <?php else: ?>
 
-  <!-- ===== Events Content (user already in a club) ===== -->
   <div class="wrapper">
     <h1 class="page-title">My Club Events</h1>
     <p class="subtle">Discover upcoming club activities and revisit completed ones.</p>
@@ -238,11 +192,12 @@ function formatEventTime2(?string $dtStr): string {
           <?php foreach ($eventsUpcoming as $ev):
             [$day,$mon,$dow] = formatEventDateParts2($ev['starting_date']);
             $time    = formatEventTime2($ev['starting_date']);
-            $sponsor = $ev['sponsor_name'] ? 'Sponsor: '.$ev['sponsor_name'] : 'No sponsor listed';
+            $sponsor = !empty($ev['sponsor_name']) ? 'Sponsor: '.$ev['sponsor_name'] : 'No sponsor listed';
           ?>
           <article
             class="card"
-            data-href="eventpage.php?event_id=<?php echo (int)$ev['event_id']; ?>"
+            data-href="myeventpage.php?id=<?php echo (int)$ev['event_id']; ?>"
+
             role="link"
             tabindex="0"
             aria-label="Open event: <?php echo htmlspecialchars($ev['event_name']); ?>">
@@ -284,7 +239,7 @@ function formatEventTime2(?string $dtStr): string {
         <?php else: ?>
           <?php foreach ($eventsPast as $ev):
             [$day,$mon,$dow] = formatEventDateParts2($ev['starting_date']);
-            $sponsor = $ev['sponsor_name'] ? 'Sponsor: '.$ev['sponsor_name'] : 'No sponsor listed';
+            $sponsor = !empty($ev['sponsor_name']) ? 'Sponsor: '.$ev['sponsor_name'] : 'No sponsor listed';
           ?>
           <article
             class="card"

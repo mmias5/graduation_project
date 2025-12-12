@@ -5,11 +5,114 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
     header('Location: ../login.php');
     exit;
 }
-// event_details.php
-// session_start();
-// $isLeader = isset($_SESSION['role']) && $_SESSION['role']==='leader';
-$event_id = $_GET['id'] ?? 1;
-$isLeader = true; // demo: show button. Switch to your real check.
+
+require_once '../config.php';
+
+$president_id = (int)$_SESSION['student_id'];
+$event_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+if ($event_id <= 0) {
+    header('Location: index.php');
+    exit;
+}
+
+/* helpers (legacy tags inside description) */
+function cch_get_tag($text, $tag) {
+    if (!$text) return '';
+    $pattern = '/\[' . preg_quote($tag,'/') . '\](.*?)\[\/' . preg_quote($tag,'/') . '\]/s';
+    if (preg_match($pattern, $text, $m)) return trim($m[1]);
+    return '';
+}
+function cch_strip_tags($text) {
+    if (!$text) return '';
+    $text = preg_replace('/\[CCH_DESC\].*?\[\/CCH_DESC\]/s', '', $text);
+    $text = preg_replace('/\[CCH_CATEGORY\].*?\[\/CCH_CATEGORY\]/s', '', $text);
+    $text = preg_replace('/\[CCH_SPONSOR\].*?\[\/CCH_SPONSOR\]/s', '', $text);
+    $text = preg_replace('/\[CCH_NOTES\].*?\[\/CCH_NOTES\]/s', '', $text);
+    return trim($text);
+}
+
+/* get president club_id */
+$stmt = $conn->prepare("SELECT club_id FROM student WHERE student_id=? AND role='club_president' LIMIT 1");
+$stmt->bind_param("i", $president_id);
+$stmt->execute();
+$res = $stmt->get_result();
+$pres = $res->fetch_assoc();
+$stmt->close();
+
+$club_id = isset($pres['club_id']) ? (int)$pres['club_id'] : 1;
+if ($club_id <= 1) {
+    header('Location: index.php');
+    exit;
+}
+
+/* load event: must belong to president club
+   IMPORTANT: sponsor is from event.sponsor_id (NOT sponsor_club_support)
+*/
+$stmt = $conn->prepare("
+    SELECT
+      e.event_id, e.event_name, e.description, e.event_location, e.max_attendees,
+      e.starting_date, e.ending_date, e.attendees_count, e.banner_image,
+      e.club_id, e.category, e.sponsor_id,
+      c.club_name,
+      sp.company_name AS sponsor_name
+    FROM event e
+    JOIN club c ON c.club_id = e.club_id
+    LEFT JOIN sponsor sp ON sp.sponsor_id = e.sponsor_id
+    WHERE e.event_id=? AND e.club_id=?
+    LIMIT 1
+");
+$stmt->bind_param("ii", $event_id, $club_id);
+$stmt->execute();
+$res = $stmt->get_result();
+$event = $res->fetch_assoc();
+$stmt->close();
+
+if (!$event) {
+    header('Location: index.php');
+    exit;
+}
+
+/* description */
+$rawDesc  = $event['description'] ?? '';
+$descMain = cch_get_tag($rawDesc, 'CCH_DESC');
+if ($descMain === '') $descMain = cch_strip_tags($rawDesc);
+
+/* category: prefer column, fallback legacy tag */
+$category = trim((string)($event['category'] ?? ''));
+if ($category === '') {
+    $category = cch_get_tag($rawDesc, 'CCH_CATEGORY');
+}
+
+/* sponsor: prefer DB sponsor_name (event.sponsor_id), fallback legacy tag */
+$sponsor_name = trim((string)($event['sponsor_name'] ?? ''));
+if ($sponsor_name === '') {
+    $legacySponsor = cch_get_tag($rawDesc, 'CCH_SPONSOR');
+    if ($legacySponsor !== '') $sponsor_name = $legacySponsor;
+}
+
+/* notes from tag */
+$notes = cch_get_tag($rawDesc, 'CCH_NOTES');
+
+/* cover image */
+$cover = $event['banner_image'];
+if (!$cover) {
+    $cover = "https://images.unsplash.com/photo-1551836022-d5d88e9218df?q=80&w=1600&auto=format&fit=crop";
+}
+
+/* date/time formatting */
+$startDT = !empty($event['starting_date']) ? new DateTime($event['starting_date']) : null;
+$endDT   = !empty($event['ending_date']) ? new DateTime($event['ending_date']) : null;
+
+$whenText = '—';
+if ($startDT) {
+    $weekday   = $startDT->format('l');
+    $dateStr   = $startDT->format('M d, Y');
+    $startTime = $startDT->format('g:i A');
+    $endTime   = $endDT ? $endDT->format('g:i A') : '';
+    $whenText  = $weekday . " • " . $dateStr . " • " . $startTime . ($endTime ? "–".$endTime : "");
+}
+
+$isLeader = true;
 ?>
 <!doctype html>
 <html lang="en">
@@ -66,21 +169,20 @@ $isLeader = true; // demo: show button. Switch to your real check.
 
 <main class="wrap">
   <div class="headline">
-    <span>CCH Tech & Innovation Meetup — Fall 2025</span>
+    <span><?php echo htmlspecialchars($event['event_name']); ?></span>
     <?php if($isLeader): ?>
-      <a class="edit-btn" href="editevent.php">Edit</a>
+      <a class="edit-btn" href="editevent.php?id=<?php echo (int)$event_id; ?>">Edit</a>
     <?php endif; ?>
   </div>
 
   <div class="meta">
     <span class="badge">Event</span>
     <span class="dot"></span>
-    <span>Hosted by: Campus Clubs Hub • Jordan</span>
+    <span>Hosted by: <?php echo htmlspecialchars($event['club_name']); ?> • Jordan</span>
   </div>
 
   <figure class="hero">
-    <img src="https://images.unsplash.com/photo-1551836022-d5d88e9218df?q=80&w=1600&auto=format&fit=crop"
-         alt="Students attending a technology meetup on campus">
+    <img src="<?php echo htmlspecialchars($cover); ?>" alt="Event cover">
     <figcaption class="credit">Photo: CCH Media</figcaption>
   </figure>
 
@@ -89,26 +191,20 @@ $isLeader = true; // demo: show button. Switch to your real check.
       <div class="info-grid">
         <div class="info-item">
           <div class="icon">🗓</div>
-          <div><b>When</b><span id="whenText">Thursday • Nov 20, 2025 • 4:00–7:30 PM</span></div>
+          <div><b>When</b><span id="whenText"><?php echo htmlspecialchars($whenText); ?></span></div>
         </div>
         <div class="info-item">
           <div class="icon">📍</div>
-          <div><b>Where</b><span id="whereText">Amman, JU Main Campus — Innovation Hall</span></div>
+          <div><b>Where</b><span id="whereText"><?php echo htmlspecialchars($event['event_location'] ?: '—'); ?></span></div>
         </div>
         <div class="info-item">
           <div class="icon">🏷</div>
-          <div><b>Category</b><span>Technology • Workshops • Networking</span></div>
+          <div><b>Category</b><span><?php echo htmlspecialchars($category !== '' ? $category : '—'); ?></span></div>
         </div>
         <div class="info-item">
-  <div class="icon">🤝</div>
-  <div>
-    <b>Sponsored by</b>
-    <span>TechVision Corp</span>
-    <!-- Example: you can make it dynamic later -->
-    <!-- <span><?php echo htmlspecialchars($sponsor_name ?? 'No sponsor listed'); ?></span> -->
-  </div>
-</div>
-
+          <div class="icon">🤝</div>
+          <div><b>Sponsored by</b><span><?php echo htmlspecialchars($sponsor_name !== '' ? $sponsor_name : 'No sponsor listed'); ?></span></div>
+        </div>
       </div>
 
       <div class="cta">
@@ -120,22 +216,32 @@ $isLeader = true; // demo: show button. Switch to your real check.
     <aside class="side-card">
       <h3>Tickets & Notes</h3>
       <p class="tagline">General admission is free. Seats are first-come, first-served.</p>
-      <ul style="margin:10px 0 0 18px; line-height:1.7;">
-        <li>Please bring your student ID.</li>
-        <li>QR check-in available at entrance.</li>
-        <li>Snacks & coffee provided.</li>
-      </ul>
+      <?php
+        $lines = array_filter(array_map('trim', preg_split("/\r\n|\n|\r/", (string)$notes)));
+      ?>
+      <?php if (!empty($lines)): ?>
+        <ul style="margin:10px 0 0 18px; line-height:1.7;">
+          <?php foreach($lines as $ln): ?>
+            <li><?php echo htmlspecialchars($ln); ?></li>
+          <?php endforeach; ?>
+        </ul>
+      <?php else: ?>
+        <ul style="margin:10px 0 0 18px; line-height:1.7;">
+          <li>Please bring your student ID.</li>
+          <li>QR check-in available at entrance.</li>
+          <li>Snacks & coffee provided.</li>
+        </ul>
+      <?php endif; ?>
     </aside>
   </section>
 
   <article class="content">
-    <p class="lead">A hands-on evening to explore analytics, club growth tactics, and tech demos built on Campus Clubs Hub.</p>
-    <p>The meetup features practical mini-workshops on event analytics, loyalty points, and collaboration. Learn how to interpret engagement peaks, configure ranking signals, and package sponsor-ready highlight summaries after each event.</p>
+    <p class="lead"><?php echo htmlspecialchars($descMain ?: '—'); ?></p>
 
     <div class="map-wrap">
       <h2 style="color:var(--navy); margin:0 0 12px;">Location</h2>
       <iframe class="map" loading="lazy" referrerpolicy="no-referrer-when-downgrade"
-              src="https://www.google.com/maps?q=Jordan%20University%20Innovation%20Hall&output=embed"></iframe>
+              src="https://www.google.com/maps?q=<?php echo urlencode($event['event_location'] ?: 'Jordan'); ?>&output=embed"></iframe>
     </div>
   </article>
 </main>
@@ -143,19 +249,24 @@ $isLeader = true; // demo: show button. Switch to your real check.
 <?php include('footer.php'); ?>
 
 <script>
-// Share
 document.getElementById('shareBtn').addEventListener('click', async () => {
   const shareData = { title: document.title, text: 'Join me at this CCH event!', url: window.location.href };
-  try{ if(navigator.share){ await navigator.share(shareData); } else { await navigator.clipboard.writeText(shareData.url); alert('Link copied!'); } }
-  catch(e){ console.log(e); }
+  try{
+    if(navigator.share){ await navigator.share(shareData); }
+    else { await navigator.clipboard.writeText(shareData.url); alert('Link copied!'); }
+  }catch(e){}
 });
 
-// Add to Calendar (.ics)
 document.getElementById('addCalBtn').addEventListener('click', () => {
-  const title='CCH Tech & Innovation Meetup — Fall 2025';
-  const desc='Hands-on workshops, panels, and networking across universities. Powered by CCH.';
-  const loc='Amman, JU Main Campus — Innovation Hall';
-  const start='20251120T160000'; const end='20251120T193000';
+  const title = <?php echo json_encode($event['event_name']); ?>;
+  const desc  = <?php echo json_encode($descMain ?: ''); ?>;
+  const loc   = <?php echo json_encode($event['event_location'] ?: ''); ?>;
+
+  const start = <?php echo json_encode($startDT ? $startDT->format('Ymd\THis') : ''); ?>;
+  const end   = <?php echo json_encode($endDT ? $endDT->format('Ymd\THis') : ''); ?>;
+
+  if(!start){ alert('Event start date is missing.'); return; }
+
   const ics=`BEGIN:VCALENDAR
 VERSION:2.0
 PRODID:-//CCH//EN
@@ -163,13 +274,14 @@ CALSCALE:GREGORIAN
 METHOD:PUBLISH
 BEGIN:VEVENT
 DTSTART:${start}
-DTEND:${end}
+DTEND:${end || start}
 SUMMARY:${title}
-DESCRIPTION:${desc}
+DESCRIPTION:${(desc||'').replace(/\n/g,'\\n')}
 LOCATION:${loc}
 UID:${Date.now()}@cch.local
 END:VEVENT
 END:VCALENDAR`;
+
   const blob=new Blob([ics],{type:'text/calendar;charset=utf-8'});
   const url=URL.createObjectURL(blob); const a=document.createElement('a');
   a.href=url; a.download='cch-event.ics'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);

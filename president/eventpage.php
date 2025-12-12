@@ -8,33 +8,36 @@ if (!isset($_SESSION['student_id']) || ($_SESSION['role'] !== 'student' && $_SES
 
 require_once '../config.php';
 
+
+
 $eventId = isset($_GET['event_id']) ? (int)$_GET['event_id'] : 0;
 
-$sql = "
-    SELECT
-        e.*,
-        c.club_name,
-        s.company_name AS sponsor_name
-    FROM event e
-    INNER JOIN club c
-        ON e.club_id = c.club_id
-    LEFT JOIN sponsor_club_support scs
-        ON scs.club_id = c.club_id
-    LEFT JOIN sponsor s
-        ON scs.sponsor_id = s.sponsor_id
-    WHERE e.event_id = ?
-    LIMIT 1
-";
+$event = null;
 
-$stmt = $conn->prepare($sql);
-$stmt->bind_param("i", $eventId);
-$stmt->execute();
-$res  = $stmt->get_result();
-$event = $res->fetch_assoc();
-$stmt->close();
+if ($eventId > 0) {
+    $sql = "
+        SELECT
+            e.*,
+            c.club_name,
+            sp.company_name AS sponsor_name
+        FROM event e
+        INNER JOIN club c
+            ON e.club_id = c.club_id
+        LEFT JOIN sponsor sp
+            ON sp.sponsor_id = e.sponsor_id
+        WHERE e.event_id = ?
+        LIMIT 1
+    ";
+
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("i", $eventId);
+    $stmt->execute();
+    $res  = $stmt->get_result();
+    $event = $res->fetch_assoc();
+    $stmt->close();
+}
 
 if (!$event) {
-    // simple 404
     http_response_code(404);
     $title = "Event not found";
 } else {
@@ -187,6 +190,12 @@ function formatWhenFull($startStr, $endStr): string {
     <h1 class="headline">Event not found</h1>
     <p style="font-size:18px;color:#6b7280;">This event does not exist or was removed.</p>
   <?php else: ?>
+
+    <?php
+      $categoryShow = trim((string)($event['category'] ?? '')) === '' ? '—' : $event['category'];
+      $sponsorShow  = trim((string)($event['sponsor_name'] ?? '')) === '' ? 'No sponsor listed' : $event['sponsor_name'];
+    ?>
+
     <h1 class="headline"><?php echo htmlspecialchars($event['event_name']); ?></h1>
 
     <div class="meta">
@@ -194,9 +203,8 @@ function formatWhenFull($startStr, $endStr): string {
       <span class="dot"></span>
       <span>
         Hosted by: <?php echo htmlspecialchars($event['club_name']); ?>
-        <?php if (!empty($event['sponsor_name'])): ?>
-          • Sponsored by <?php echo htmlspecialchars($event['sponsor_name']); ?>
-        <?php endif; ?>
+        • Sponsored by <?php echo htmlspecialchars($sponsorShow); ?>
+
       </span>
     </div>
 
@@ -240,16 +248,14 @@ function formatWhenFull($startStr, $endStr): string {
             <div class="icon">🏷</div>
             <div>
               <b>Category</b>
-              <span>Campus Event • Workshop</span>
+              <span><?php echo htmlspecialchars($categoryShow); ?></span>
             </div>
           </div>
           <div class="info-item">
             <div class="icon">🤝</div>
             <div>
               <b>Sponsored by</b>
-              <span>
-                <?php echo htmlspecialchars($event['sponsor_name'] ?: 'No sponsor listed'); ?>
-              </span>
+              <span><?php echo htmlspecialchars($sponsorShow); ?></span>
             </div>
           </div>
         </div>
