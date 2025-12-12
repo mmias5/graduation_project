@@ -1,55 +1,66 @@
 <?php
 session_start();
 
-if (!isset($_SESSION['sponsor_id']) || $_SESSION['role'] !== 'sponsor') {
+if (!isset($_SESSION['sponsor_id']) || ($_SESSION['role'] ?? '') !== 'sponsor') {
     header('Location: ../login.php');
     exit;
 }
 
-require_once __DIR__ . '/../config.php'; // نفس الكونفيغ تبع المشروع
+require_once __DIR__ . '/../config.php';
 
-$sponsorId = (int)$_SESSION['sponsor_id'];
+if (!($conn instanceof mysqli)) {
+    die("DB connection error.");
+}
 
-// بنجيب club_id من الرابط: pastevents.php?id=XX
-$clubId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+/* =========================
+   Get club id from URL
+   pastevents.php?club_id=3  OR  pastevents.php?id=3
+========================= */
+$clubId = 0;
+if (isset($_GET['club_id'])) $clubId = (int)$_GET['club_id'];
+elseif (isset($_GET['id']))  $clubId = (int)$_GET['id'];
 
-$pastEvents = [];
+if ($clubId <= 0 || $clubId == 1) {
+    echo "<script>alert('Invalid club.'); location.href='discoverclubs.php';</script>";
+    exit;
+}
 
-if ($clubId > 0) {
-    // نجيب كل الأحداث الماضية لهذا الكلب فقط
-    $sql = "
-        SELECT 
-            e.event_id,
-            e.event_name,
-            e.event_location,
-            e.starting_date,
-            e.ending_date,
-            c.club_name,
-            AVG(r.rating) AS avg_rating
-        FROM event e
-        INNER JOIN club c 
-            ON e.club_id = c.club_id
-        LEFT JOIN rating r 
-            ON r.event_id = e.event_id
-        WHERE e.ending_date < NOW()     -- past events فقط
-          AND e.club_id = ?
-        GROUP BY 
-            e.event_id,
-            e.event_name,
-            e.event_location,
-            e.starting_date,
-            e.ending_date,
-            c.club_name
-        ORDER BY e.starting_date DESC
-    ";
+/* =========================
+   Fetch past events (ended before now)
+========================= */
+$events = [];
+$stmt = $conn->prepare("
+    SELECT
+        e.event_id,
+        e.event_name,
+        e.description,
+        e.event_location,
+        e.category,
+        e.max_attendees,
+        e.starting_date,
+        e.ending_date,
+        e.attendees_count,
+        e.banner_image
+    FROM event e
+    WHERE e.club_id = ?
+      AND e.ending_date IS NOT NULL
+      AND e.ending_date < NOW()
+    ORDER BY e.ending_date DESC
+");
+$stmt->bind_param("i", $clubId);
+$stmt->execute();
+$res = $stmt->get_result();
+if ($res) {
+    while ($row = $res->fetch_assoc()) $events[] = $row;
+}
+$stmt->close();
 
-    if ($stmt = $conn->prepare($sql)) {
-        $stmt->bind_param('i', $clubId);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $pastEvents = $result->fetch_all(MYSQLI_ASSOC);
-        $stmt->close();
-    }
+function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
+function fmtDT($dt){
+    if (!$dt) return '';
+    $ts = strtotime($dt);
+    if (!$ts) return $dt;
+    return date("M d, Y • h:i A", $ts);
 }
 ?>
 <!doctype html>
@@ -61,221 +72,115 @@ if ($clubId > 0) {
 
 <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;600;700;800&display=swap" rel="stylesheet">
 
+<!-- IMPORTANT:
+     We keep CSS minimal + scoped so we don't ruin your project styling -->
 <style>
-  /* ===== Brand Tokens (same as Upcoming Events) ===== */
-  :root{
-    --navy:#242751;
-    --royal:#4871db;
-    --gold:#e5b758;
-    --lightGold:#f4df6d;
-    --paper:#EEF2F7;
-    --card:#ffffff;
-    --ink:#0e1228;
-    --muted:#6b7280;
-    --shadow:0 14px 34px rgba(10,23,60,.12);
-    --radius:18px;
+  .pe-wrap{
+    max-width: 1100px;
+    margin: 24px auto 48px;
+    padding: 0 18px;
+    font-family: "Raleway", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   }
 
-  body{
-    margin:0;
-    font-family:"Raleway",system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
-    color:var(--ink);
-    background:
-      radial-gradient(1200px 700px at -10% 40%, rgba(168,186,240,.3), transparent 60%),
-      radial-gradient(900px 600px at 110% 60%, rgba(72,113,219,.22), transparent 60%),
-      var(--paper);
-    background-repeat:no-repeat;
+  .pe-title{
+    margin: 0 0 6px;
+    font-weight: 800;
+    font-size: 28px;
   }
 
-  /* ===== Page wrapper ===== */
-  .wrapper{
-    max-width:1100px;
-    margin:32px auto 48px;
-    padding:0 18px;
+  .pe-subtitle{
+    margin: 0 0 18px;
+    color: #6b7280;
+    font-weight: 600;
+    font-size: 14px;
   }
 
-  .page-title{
-    font-size:30px;
-    font-weight:800;
-    color:var(--navy);
-    margin:10px 0 6px;
-    text-align:left;
+  .pe-grid{
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
   }
 
-  .page-title::after{
-    content:"";
-    display:block;
-    width:170px;
-    height:6px;
-    border-radius:999px;
-    margin-top:10px;
-    background:linear-gradient(90deg,var(--gold),var(--lightGold));
+  @media (max-width: 850px){
+    .pe-grid{ grid-template-columns: 1fr; }
   }
 
-  .subtle{
-    color:var(--muted);
-    margin:8px 0 22px;
-    font-size:15px;
+  .pe-card{
+    background: #fff;
+    border-radius: 16px;
+    padding: 16px;
+    box-shadow: 0 14px 34px rgba(10,23,60,.10);
+    display: grid;
+    grid-template-columns: 86px 1fr;
+    gap: 14px;
+    border: 1px solid rgba(0,0,0,.06);
   }
 
-  .section{
-    margin:10px 0;
-  }
-
-  .section h2{
-    font-size:20px;
-    margin:0 0 12px;
-    color:var(--navy);
-    font-weight:800;
-  }
-
-  /* ===== Grid + cards ===== */
-  .grid{
-    display:grid;
-    grid-template-columns:repeat(2,1fr);
-    gap:18px;
-  }
-  @media (max-width:800px){
-    .grid{ grid-template-columns:1fr; }
-  }
-
-  .card{
-    background:var(--card);
-    border-radius:var(--radius);
-    box-shadow:var(--shadow);
-    padding:18px;
-    display:grid;
-    grid-template-columns:90px 1fr;
-    gap:16px;
-    cursor:pointer;
-    transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease;
-    border:2px solid transparent;
-  }
-  .card:hover{
-    transform:translateY(-2px);
-    box-shadow:0 18px 38px rgba(12,22,60,.16);
-    border-color:var(--gold);
-  }
-  .card:focus{
-    outline:3px solid var(--royal);
-    outline-offset:3px;
-  }
-
-  .date{
+  .pe-thumb{
+    width: 86px;
+    height: 86px;
+    border-radius: 16px;
+    overflow: hidden;
+    background: #e5e7eb;
     display:flex;
-    flex-direction:column;
+    align-items:center;
     justify-content:center;
-    align-items:center;
-    background:#FBF5D6;
-    border-radius:14px;
-    padding:12px 10px;
-    text-align:center;
-    font-weight:800;
-    min-height:90px;
-    color:var(--navy);
-    border:2px solid var(--gold);
+    font-weight: 800;
+    color: #111827;
   }
-  .date .day{
-    font-size:28px;
-  }
-  .date .mon{
-    font-size:12px;
-    margin-top:2px;
-    letter-spacing:1px;
-  }
-  .date .sep{
-    font-size:11px;
-    color:#6b7280;
-    margin-top:6px;
+  .pe-thumb img{
+    width:100%;
+    height:100%;
+    object-fit:cover;
+    display:block;
   }
 
-  .topline{
-    display:flex;
-    align-items:center;
-    gap:8px;
-    flex-wrap:wrap;
-  }
-
-  .badge{
-    background:#e8f5ff;
-    color:#135f9b;
-    padding:6px 10px;
-    border-radius:999px;
-    font-size:12px;
-    font-weight:800;
-  }
-
-  .chip.sponsor{
-    background:#fffdf3;
-    color:#8a5b00;
-    padding:6px 10px;
-    border-radius:999px;
-    font-size:12px;
-    font-weight:700;
-    border:1px solid #ffecb5;
-  }
-
-  .title{
-    margin:8px 0 4px;
-    font-weight:800;
-    font-size:18px;
-    color:var(--ink);
-  }
-
-  .mini{
-    color:var(--muted);
-    font-size:13px;
-    display:flex;
-    gap:14px;
-    flex-wrap:wrap;
-  }
-
-  .footer{
-    margin-top:8px;
-    font-size:13px;
-    color:var(--muted);
-    display:flex;
-    align-items:center;
-  }
-
-  /* ===== Extra bits for past (completed) events ===== */
-  .state.completed{
-    background:#ecfdf3;
-    color:#127a39;
-    padding:6px 10px;
-    border-radius:999px;
-    font-size:12px;
-    font-weight:800;
-  }
-
-  .stars{
-    position:relative;
+  .pe-badge{
     display:inline-block;
-    font-size:16px;
-    letter-spacing:2px;
-    --rating:4.5;
-  }
-  .stars::before{
-    content:"★★★★★";
-    color:#e5e7eb;
-  }
-  .stars::after{
-    content:"★★★★★";
-    position:absolute;
-    left:0;
-    top:0;
-    width:calc(var(--rating)/5*100%);
-    overflow:hidden;
-    color:#f5c542;
-    white-space:nowrap;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    background: rgba(72,113,219,.12);
+    color: #242751;
+    margin-bottom: 8px;
   }
 
-  .review{
+  .pe-name{
+    margin: 0 0 6px;
+    font-size: 16px;
+    font-weight: 800;
+  }
+
+  .pe-desc{
+    margin: 0 0 10px;
+    color: #6b7280;
+    font-size: 13px;
+    line-height: 1.35;
+    max-height: 40px;
+    overflow: hidden;
+  }
+
+  .pe-meta{
     display:flex;
-    align-items:center;
-    gap:8px;
-    font-weight:800;
-    color:#111827;
+    flex-wrap: wrap;
+    gap: 10px;
+    color: #6b7280;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .pe-meta strong{ color:#111827; }
+
+  .pe-empty{
+    background: #fff;
+    border-radius: 16px;
+    padding: 16px;
+    box-shadow: 0 14px 34px rgba(10,23,60,.10);
+    border: 1px solid rgba(0,0,0,.06);
+    color:#6b7280;
+    font-weight:700;
   }
 </style>
 </head>
@@ -284,109 +189,60 @@ if ($clubId > 0) {
 
 <?php include 'header.php'; ?>
 
-<!-- ===== Past Events Content ===== -->
-<div class="wrapper">
-  <h1 class="page-title">Past Events</h1>
-  <p class="subtle">
-    Explore what this club has already organized — completed events, locations, and ratings.
-  </p>
+<main class="pe-wrap" role="main">
+  <h1 class="pe-title">Past Events</h1>
+  <p class="pe-subtitle">All events that already ended for this club.</p>
 
-  <section class="section">
-    <h2>Completed Events</h2>
-
-    <?php if (empty($pastEvents)): ?>
-      <p class="subtle">No past events yet for this club.</p>
-    <?php else: ?>
-      <div class="grid">
-
-        <?php foreach ($pastEvents as $event): 
-            $start = strtotime($event['starting_date']);
-            $day   = date('d', $start);
-            $mon   = strtoupper(date('M', $start)); // SEP, AUG...
-            $dow   = date('D', $start);             // Mon, Tue...
-
-            $avgRating = $event['avg_rating'] !== null 
-              ? round($event['avg_rating'], 1)
-              : null;
-
-            $clubName  = $event['club_name'];
-            $eventName = $event['event_name'];
-            $fullTitle = $clubName . ' — ' . $eventName;
+  <?php if (count($events) === 0): ?>
+    <div class="pe-empty">No past events found for this club yet.</div>
+  <?php else: ?>
+    <div class="pe-grid">
+      <?php foreach ($events as $e): ?>
+        <?php
+          $name   = $e['event_name'] ?? 'Event';
+          $cat    = trim((string)($e['category'] ?? 'General')); if ($cat==='') $cat='General';
+          $desc   = $e['description'] ?? '';
+          $loc    = $e['event_location'] ?? '—';
+          $start  = $e['starting_date'] ?? null;
+          $end    = $e['ending_date'] ?? null;
+          $maxAtt = (int)($e['max_attendees'] ?? 0);
+          $att    = (int)($e['attendees_count'] ?? 0);
+          $banner = $e['banner_image'] ?? '';
+          $init   = strtoupper(substr($name, 0, 2));
         ?>
-        <!-- ===== PAST EVENT CARD ===== -->
-        <article
-          class="card"
-          data-href="eventpage.php?id=<?php echo (int)$event['event_id']; ?>"
-          role="link"
-          tabindex="0"
-          aria-label="Open event: <?php echo htmlspecialchars($fullTitle); ?> (past)">
-          <div class="date">
-            <div class="day"><?php echo htmlspecialchars($day); ?></div>
-            <div class="mon"><?php echo htmlspecialchars($mon); ?></div>
-            <div class="sep"><?php echo htmlspecialchars($dow); ?></div>
+
+        <article class="pe-card">
+          <div class="pe-thumb">
+            <?php if (!empty($banner)): ?>
+              <img src="<?php echo h($banner); ?>" alt="<?php echo h($name); ?> banner">
+            <?php else: ?>
+              <?php echo h($init); ?>
+            <?php endif; ?>
           </div>
+
           <div>
-            <div class="topline">
-              <span class="state completed">Completed</span>
-              <span class="chip sponsor">
-                Club: <?php echo htmlspecialchars($clubName); ?>
-              </span>
-            </div>
-            <div class="title">
-              <?php echo htmlspecialchars($fullTitle); ?>
-            </div>
-            <div class="mini">
-              <?php if (!empty($event['event_location'])): ?>
-                <span>📍 <?php echo htmlspecialchars($event['event_location']); ?></span>
-              <?php endif; ?>
-            </div>
-            <div class="footer">
-              <?php if ($avgRating !== null): ?>
-                <span class="review">
-                  <span class="stars" style="--rating:<?php echo $avgRating; ?>"></span>
-                  <?php echo $avgRating; ?>
-                </span>
-              <?php else: ?>
-                <span class="mini">No ratings yet</span>
-              <?php endif; ?>
+            <span class="pe-badge"><?php echo h($cat); ?></span>
+            <h3 class="pe-name"><?php echo h($name); ?></h3>
+
+            <?php if (!empty($desc)): ?>
+              <p class="pe-desc"><?php echo h($desc); ?></p>
+            <?php endif; ?>
+
+            <div class="pe-meta">
+              <span>📍 <strong><?php echo h($loc); ?></strong></span>
+              <span>🕒 <strong><?php echo h(fmtDT($start)); ?></strong></span>
+              <span>✅ Ended: <strong><?php echo h(fmtDT($end)); ?></strong></span>
+              <span>👥 <strong><?php echo $att; ?></strong><?php echo $maxAtt ? " / $maxAtt" : ""; ?> attendees</span>
             </div>
           </div>
         </article>
-        <?php endforeach; ?>
 
-      </div>
-    <?php endif; ?>
-  </section>
-</div>
+      <?php endforeach; ?>
+    </div>
+  <?php endif; ?>
+</main>
 
 <?php include 'footer.php'; ?>
-
-<script>
-/* Make any .card with data-href clickable + keyboard accessible */
-(function(){
-  function shouldIgnore(target){
-    const interactive = ['A','BUTTON','INPUT','SELECT','TEXTAREA','LABEL','SVG','PATH'];
-    return interactive.includes(target.tagName);
-  }
-
-  document.addEventListener('click', (e) => {
-    const card = e.target.closest('.card[data-href]');
-    if(!card) return;
-    if(shouldIgnore(e.target)) return;
-    const url = card.getAttribute('data-href');
-    if(url) window.location.href = url;
-  });
-
-  document.addEventListener('keydown', (e) => {
-    if(e.key !== 'Enter' && e.key !== ' ') return;
-    const card = e.target.closest('.card[data-href]');
-    if(!card) return;
-    e.preventDefault();
-    const url = card.getAttribute('data-href');
-    if(url) window.location.href = url;
-  });
-})();
-</script>
 
 </body>
 </html>
