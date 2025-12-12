@@ -427,7 +427,6 @@ body{
   <div class="wrap">
     <div class="hero-card">
       <div class="hero-top">
-        <h1>YOUR CLUB</h1>
         <div class="tag">
           <?php echo htmlspecialchars($university); ?>
         </div>
