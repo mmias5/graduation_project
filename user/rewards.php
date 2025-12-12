@@ -1,9 +1,10 @@
 <?php
+
 session_start();
 
 if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
     if (isset($_SESSION['role']) && $_SESSION['role'] === 'club_president') {
-        header('Location: ../president/index.php');
+        header('Location: ../president/rewards.php');
         exit;
     }
     header('Location: ../login.php');
@@ -22,7 +23,6 @@ function escapeH(?string $s): string {
     return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 }
 
-/* مجموع النقاط من جدول student.total_points */
 function getStudentPointsFromStudent(mysqli $conn, int $studentId): int {
     $sql = "SELECT COALESCE(total_points,0) AS total_points FROM student WHERE student_id = ? LIMIT 1";
     $stmt = $conn->prepare($sql);
@@ -33,12 +33,25 @@ function getStudentPointsFromStudent(mysqli $conn, int $studentId): int {
     return (int)($row['total_points'] ?? 0);
 }
 
-/* تحديث total_points بعد الـ redeem */
+/* خصم النقاط (داخل Transaction) */
 function updateStudentPoints(mysqli $conn, int $studentId, int $cost): bool {
-    // ننقص النقاط فقط إذا عنده نقاط كافية (شرط في الـ WHERE كمان)
-    $sql = "UPDATE student SET total_points = total_points - ? WHERE student_id = ? AND total_points >= ?";
+    $sql = "UPDATE student
+            SET total_points = total_points - ?
+            WHERE student_id = ? AND total_points >= ?";
     $stmt = $conn->prepare($sql);
     $stmt->bind_param("iii", $cost, $studentId, $cost);
+    $stmt->execute();
+    $ok = $stmt->affected_rows > 0;
+    $stmt->close();
+    return $ok;
+}
+
+/* ✅ إضافة صف بجدول redemption */
+function addRedemptionRow(mysqli $conn, int $studentId, int $itemId, int $pointsSpent): bool {
+    $sql = "INSERT INTO redemption (student_id, item_id, redeemed_at, points_spent)
+            VALUES (?, ?, NOW(), ?)";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("iii", $studentId, $itemId, $pointsSpent);
     $stmt->execute();
     $ok = $stmt->affected_rows > 0;
     $stmt->close();
@@ -57,7 +70,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['redeem_submit'])) {
             $redeemError = 'Please choose a reward and enter its code.';
         } else {
             // جلب الـ reward من DB
-            $sql = "SELECT item_id, item_name, value, code, picture FROM items_to_redeem WHERE item_id = ? LIMIT 1";
+            $sql = "SELECT item_id, item_name, value, code, picture
+                    FROM items_to_redeem
+                    WHERE item_id = ? LIMIT 1";
             $stmt = $conn->prepare($sql);
             $stmt->bind_param("i", $itemId);
             $stmt->execute();
@@ -77,12 +92,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['redeem_submit'])) {
                 } elseif ($currentPoints < $costPoints) {
                     $redeemError = 'You do not have enough points to redeem this reward.';
                 } else {
-                    // نحاول ننقص النقاط من جدول student
-                    if (updateStudentPoints($conn, $studentId, $costPoints)) {
+                    // ✅ Transaction: يا بخصم + بسجّل redemption يا بيرجع ولا كأنّه صار شي
+                    try {
+                        $conn->begin_transaction();
+
+                        if (!updateStudentPoints($conn, $studentId, $costPoints)) {
+                            throw new Exception('Could not update your points.');
+                        }
+
+                        if (!addRedemptionRow($conn, $studentId, $itemId, $costPoints)) {
+                            throw new Exception('Could not save redemption record.');
+                        }
+
+                        $conn->commit();
                         $redeemSuccess = 'Reward redeemed successfully!';
-                    } else {
-                        // حالة safety لو الـ UPDATE فشل بسبب شرط total_points
-                        $redeemError = 'Could not update your points. Please try again.';
+                    } catch (Throwable $e) {
+                        $conn->rollback();
+                        $redeemError = $e->getMessage();
                     }
                 }
             }
@@ -281,7 +307,6 @@ if (isset($conn) && $conn instanceof mysqli) {
 <body>
 
 <?php include 'header.php'; ?>
-
 <section class="loyalty" aria-labelledby="loyalty-heading">
   <div class="container">
 
