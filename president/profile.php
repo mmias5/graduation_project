@@ -226,7 +226,6 @@ body{
         <div class="sub"><?php echo htmlspecialchars($m['email']); ?></div>
         <div class="badges">
           <span class="role"><?php echo htmlspecialchars($role); ?></span>
-          <span class="joined">Joined — <?php echo htmlspecialchars($joined); ?></span>
         </div>
       </div>
     </div>

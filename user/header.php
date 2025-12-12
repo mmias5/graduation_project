@@ -3,7 +3,7 @@
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-
+//user file
 // لازم يكون داخل كـ student أو club_president
 if (
     !isset($_SESSION['student_id']) ||
@@ -26,9 +26,12 @@ $studentName  = $_SESSION['student_name']  ?? 'Student';
 $totalPoints  = $_SESSION['total_points']  ?? 0;
 
 // نحاول نجيب آخر قيمة من جدول student
+// نحاول نجيب آخر قيمة من جدول student
+$clubId = null;
+
 if (isset($conn) && $conn instanceof mysqli) {
     $stmt = $conn->prepare("
-        SELECT student_name, total_points
+        SELECT student_name, total_points, club_id
         FROM student
         WHERE student_id = ?
         LIMIT 1
@@ -40,14 +43,20 @@ if (isset($conn) && $conn instanceof mysqli) {
         if ($row = $result->fetch_assoc()) {
             $studentName = $row['student_name'];
             $totalPoints = (int) $row['total_points'];
+            $clubId      = isset($row['club_id']) ? (int)$row['club_id'] : null;
         }
         $stmt->close();
     }
 }
+
+// اعتبره "مش منضم" إذا club_id فاضي أو 1 (default)
+$notInClub = (empty($clubId) || (int)$clubId === 1);
+
 ?>
 <!doctype html>
 <html lang="en">
 <head>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>CCH — Student Portal</title>
@@ -209,7 +218,7 @@ if (isset($conn) && $conn instanceof mysqli) {
         </button>
         <div class="menu" role="menu" aria-label="Clubs menu">
 
-          <a href="clubpage.php" role="menuitem">
+          <a href="clubpage.php" class="needs-club" role="menuitem">
             <svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none"
                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M8 21v-4m8 4v-4M4 10h16M2 6h20v12H2z"/>
@@ -217,7 +226,7 @@ if (isset($conn) && $conn instanceof mysqli) {
             My Club
           </a>
 
-          <a href="memberspage.php" role="menuitem">
+          <a href="memberspage.php" class="needs-club" role="menuitem">
             <svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none"
                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
@@ -267,7 +276,7 @@ if (isset($conn) && $conn instanceof mysqli) {
         </button>
         <div class="menu" role="menu" aria-label="Events menu">
 
-          <a href="myclubevents.php" role="menuitem">
+          <a href="myclubevents.php" class="needs-club" role="menuitem">
             <svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none"
                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="4" width="18" height="18" rx="2"/>
@@ -355,7 +364,7 @@ if (isset($conn) && $conn instanceof mysqli) {
       </div>
     </div>
     <div class="sidebar-content" id="sideDesc">
-      <button class="side-btn primary" type="button" onclick="location.href='clubpage.php'">
+      <button class="side-btn primary needs-club-btn" type="button" data-href="clubpage.php">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21v-4m8 4v-4M4 10h16M2 6h20v12H2z"/></svg>
         <span>My Club</span>
       </button>
@@ -374,6 +383,46 @@ if (isset($conn) && $conn instanceof mysqli) {
   document.getElementById('menuToggle').addEventListener('click',()=> body.classList.toggle('menu-open'));
   document.getElementById('backdrop').addEventListener('click',()=> body.classList.remove('menu-open'));
   document.addEventListener('keydown',e=>{ if(e.key==='Escape') body.classList.remove('menu-open'); });
+</script>
+<script>
+  const NOT_IN_CLUB = <?php echo $notInClub ? 'true' : 'false'; ?>;
+
+  function showNoClubPopup(goTo) {
+    Swal.fire({
+      icon: 'info',
+      title: "You haven’t joined a club yet",
+      html: "To access this page, you need to <b>join a club</b> first.",
+      showCancelButton: true,
+      confirmButtonText: 'Discover Clubs',
+      cancelButtonText: 'Close',
+      allowOutsideClick: false
+    }).then((res) => {
+      if (res.isConfirmed) {
+        window.location.href = 'discoverclubs.php';
+      }
+      // إذا كبس Close: ما بنعمل شيء (بيضل بنفس الصفحة)
+    });
+  }
+
+  // للروابط داخل الدروب داون (a)
+  document.querySelectorAll('a.needs-club').forEach(a => {
+    a.addEventListener('click', function(e){
+      if (NOT_IN_CLUB) {
+        e.preventDefault();
+        showNoClubPopup(this.getAttribute('href'));
+      }
+    });
+  });
+
+  // للزر (button) داخل السايدبار
+  document.querySelectorAll('.needs-club-btn').forEach(btn => {
+    btn.addEventListener('click', function(e){
+      if (NOT_IN_CLUB) {
+        e.preventDefault();
+        showNoClubPopup('clubpage.php');
+      }
+    });
+  });
 </script>
 
 </body>

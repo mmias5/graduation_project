@@ -1,6 +1,6 @@
 <?php
 session_start();
-
+//user file
 if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
     if (isset($_SESSION['role']) && $_SESSION['role'] === 'club_president') {
         header('Location: ../president/index.php');

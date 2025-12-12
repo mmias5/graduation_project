@@ -375,7 +375,6 @@ body{
         <div id="email" class="sub"><?php echo htmlspecialchars($me['email']); ?></div>
         <div class="badges">
           <span id="role" class="role">President</span>
-          <span id="joined" class="joined">Joined — <?php echo htmlspecialchars($joined); ?></span>
         </div>
 
         <?php if ($success): ?>

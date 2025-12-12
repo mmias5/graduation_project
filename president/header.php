@@ -1,4 +1,6 @@
 <?php
+//president file
+
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }

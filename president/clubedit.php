@@ -5,8 +5,49 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
     header('Location: ../login.php');
     exit;
 }
-?>
 
+require_once __DIR__ . '/../config.php';
+
+$presidentId = (int)$_SESSION['student_id'];
+
+// ===== Get president club_id =====
+$stmt = $conn->prepare("SELECT club_id FROM student WHERE student_id=? LIMIT 1");
+$stmt->bind_param("i", $presidentId);
+$stmt->execute();
+$myClubId = (int)($stmt->get_result()->fetch_assoc()['club_id'] ?? 0);
+$stmt->close();
+
+if ($myClubId <= 1) {
+    echo "<script>alert('You are not assigned to any club yet.'); location.href='index.php';</script>";
+    exit;
+}
+
+// ===== Fetch club (ONLY his club) =====
+$stmt = $conn->prepare("SELECT * FROM club WHERE club_id=? LIMIT 1");
+$stmt->bind_param("i", $myClubId);
+$stmt->execute();
+$club = $stmt->get_result()->fetch_assoc() ?: [];
+$stmt->close();
+
+$club_id        = (int)$myClubId;
+$club_name      = $club['club_name'] ?? '';
+$category       = $club['category'] ?? '';
+$contact_email  = $club['contact_email'] ?? '';
+$description    = $club['description'] ?? '';
+$logo_url       = $club['logo'] ?? '';
+$instagram      = $club['instagram_url'] ?? '';
+$facebook       = $club['facebook_url'] ?? '';
+$linkedin       = $club['linkedin_url'] ?? '';
+
+// cover مش موجود بالـ DB عندك
+$cover_url      = 'tools/pics/social_life.png';
+
+// sponsor مش موجودين بجدول club عندك
+$sponsor_name   = '—';
+$sponsor_logo   = 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Amazon_logo.svg/1200px-Amazon_logo.svg.png';
+
+if (!$logo_url) $logo_url = 'tools/pics/social_life.png';
+?>
 <!doctype html>
 <html lang="en">
 <head>
@@ -90,7 +131,7 @@ body{
 
 /* ===== Buttons ===== */
 .actions{ display:flex; justify-content:flex-end; gap:12px; margin-top:18px; flex-wrap:wrap }
-.btn{ appearance:none; border:0; border-radius:12px; padding:12px 16px; font-weight:800; cursor:pointer; }
+.btn{ appearance:none; border:0; border-radius:12px; padding:12px 16px; font-weight:800; cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; }
 .btn.primary{ background:var(--royal); color:#fff; box-shadow:var(--shadow); }
 .btn.ghost{ background:#eef2ff; color:#1f2a6b; }
 
@@ -102,7 +143,7 @@ body{
 .uploader input[type=file]{ display:none; }
 .pick{ display:inline-block; padding:10px 12px; border-radius:10px; background:#f3f4ff; color:#1f2a6b; font-weight:800; cursor:pointer; }
 
-/* ===== Custom Category Dropdown (same size as inputs) ===== */
+/* ===== Custom Category Dropdown ===== */
 .cch-select{position:relative;font-size:14px;}
 .cch-select__btn{
   width:100%;display:flex;align-items:center;justify-content:space-between;
@@ -130,11 +171,6 @@ body{
 .cch-select__option[aria-selected="true"]{
   background:linear-gradient(180deg,#f5f8ff,#eef3ff);color:#1a2a5a;
 }
-
-/* Responsive bits preserved */
-@media (max-width:900px){
-  .nav-links{display:none}
-}
 </style>
 </head>
 
@@ -142,23 +178,6 @@ body{
   <?php include 'header.php'; ?>
   <div class="underbar"></div>
 
-  <?php
-    // ===== Prefill (replace with your real fetch) =====
-    $club_id        = isset($club['club_id']) ? (int)$club['club_id'] : 1;
-    $club_name      = isset($club['club_name']) ? $club['club_name'] : 'Birds';
-    $sponsor_name   = isset($club['sponsor_name']) ? $club['sponsor_name'] : 'Amazone';
-    $sponsor_logo   = isset($club['sponsor_logo']) ? $club['sponsor_logo'] : 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Amazon_logo.svg/1200px-Amazon_logo.svg.png';
-    $category       = isset($club['category']) ? $club['category'] : 'Technology';
-    $contact_email  = isset($club['contact_email']) ? $club['contact_email'] : 'club@example.edu';
-    $description    = isset($club['description']) ? $club['description'] : 'Description about the club goes here. It can be two to three sentences long.';
-    $logo_url       = isset($club['logo']) ? $club['logo'] : 'https://img.freepik.com/free-vector/bird-colorful-gradient-design-vector_343694-2506.jpg?semt=ais_hybrid&w=740&q=80';
-    $cover_url      = isset($club['cover']) ? $club['cover'] : 'tools/pics/social_life.png';
-    $instagram      = isset($club['instagram']) ? $club['instagram'] : '';
-    $facebook       = isset($club['facebook']) ? $club['facebook'] : '';
-    $linkedin       = isset($club['linkedin']) ? $club['linkedin'] : '';
-  ?>
-
-  <!-- ========== HERO ========== -->
   <section class="section hero">
     <div class="wrap">
       <div class="hero-card" style="--hero-bg: url('<?php echo htmlspecialchars($cover_url); ?>');">
@@ -190,17 +209,16 @@ body{
     </div>
   </section>
 
-  <!-- ========== EDIT FORM ========== -->
   <section class="section">
     <div class="wrap">
       <h3 class="h-title">Club Details</h3>
       <div class="hr"></div>
 
       <form class="card" id="editClubForm" action="update_club.php" method="POST" enctype="multipart/form-data" novalidate>
+        <!-- مهم: حتى لو انبعت، update_club.php رح يتجاهله ويستخدم club_id تبع الرئيس -->
         <input type="hidden" name="club_id" value="<?php echo (int)$club_id; ?>">
 
         <div class="form-grid">
-          <!-- Club name -->
           <div class="field">
             <label class="label" for="club_name">Club name</label>
             <input class="input" id="club_name" name="club_name" required maxlength="255"
@@ -208,7 +226,6 @@ body{
             <span class="hint">Your official club display name.</span>
           </div>
 
-          <!-- Category (custom) -->
           <div class="field">
             <label class="label">Category</label>
             <div class="cch-select" id="categorySelect">
@@ -230,7 +247,6 @@ body{
             <span class="hint">Choose the best-fit category.</span>
           </div>
 
-          <!-- Contact email -->
           <div class="field">
             <label class="label" for="contact_email">Contact email</label>
             <input class="input" id="contact_email" name="contact_email" type="email" required
@@ -238,7 +254,6 @@ body{
             <span class="hint">For student & sponsor inquiries.</span>
           </div>
 
-          <!-- Sponsor name (FIXED - Super Admin only) -->
           <div class="field">
             <label class="label" for="sponsor_name_display">Sponsor name</label>
             <input class="input" id="sponsor_name_display" value="<?php echo htmlspecialchars($sponsor_name); ?>" disabled>
@@ -246,7 +261,6 @@ body{
             <span class="hint">Assigned by the Super Admin. You can’t change the sponsor from this page.</span>
           </div>
 
-          <!-- About -->
           <div class="field" style="grid-column:1 / -1">
             <label class="label" for="description">About the club</label>
             <textarea class="textarea" id="description" name="description" maxlength="1000" required><?php echo htmlspecialchars($description); ?></textarea>
@@ -254,7 +268,6 @@ body{
           </div>
         </div>
 
-        <!-- Images -->
         <h3 class="h-title" style="font-size:20px; letter-spacing:.2em; margin-top:24px">Images</h3>
         <div class="hr" style="width:180px"></div>
         <div class="form-grid">
@@ -277,12 +290,11 @@ body{
               <div>
                 <label class="pick" for="cover">Choose file</label>
                 <input id="cover" name="cover" type="file" accept="image/*">
-                <div class="hint">Wide ~1200×600 works well.</div>
+                <div class="hint">Cover preview only (not saved to DB).</div>
               </div>
             </div>
           </div>
 
-          <!-- Sponsor logo (FIXED - Super Admin only) -->
           <div class="field">
             <span class="label">Sponsor logo</span>
             <div class="uploader">
@@ -297,7 +309,6 @@ body{
           </div>
         </div>
 
-        <!-- Social links -->
         <h3 class="h-title" style="font-size:20px; letter-spacing:.2em; margin-top:24px">Social Links</h3>
         <div class="hr" style="width:210px"></div>
         <div class="form-grid">
@@ -319,7 +330,7 @@ body{
         </div>
 
         <div class="actions">
-          <a class="btn ghost" href="club.php?club_id=<?php echo urlencode($club_id); ?>">Cancel</a>
+          <a class="btn ghost" href="clubpage.php">Cancel</a>
           <button class="btn primary" type="submit" id="saveBtn">Save changes</button>
         </div>
       </form>
@@ -329,7 +340,6 @@ body{
   <?php include 'footer.php'; ?>
 
 <script>
-  // ===== Custom dropdown =====
   (function(){
     const sel = document.getElementById('categorySelect');
     const btn = sel.querySelector('.cch-select__btn');
@@ -356,7 +366,6 @@ body{
     document.addEventListener('click', e=>{ if(!sel.contains(e.target)) close(); });
   })();
 
-  // ===== Image previews (club logo + cover only) =====
   function previewImage(inputEl, imgEl){
     const f = inputEl.files && inputEl.files[0];
     if(!f) return;
@@ -364,20 +373,17 @@ body{
     reader.onload = () => { imgEl.src = reader.result; };
     reader.readAsDataURL(f);
   }
+
   document.getElementById('logo')?.addEventListener('change', function(){
     previewImage(this, document.getElementById('logoPreview'));
   });
+
   document.getElementById('cover')?.addEventListener('change', function(){
     previewImage(this, document.getElementById('coverPreview'));
-    document.querySelector('.hero-card').style.setProperty('--hero-bg', `url('${URL.createObjectURL(this.files[0])}')`);
+    if (this.files && this.files[0]) {
+      document.querySelector('.hero-card')?.style.setProperty('--hero-bg', `url('${URL.createObjectURL(this.files[0])}')`);
+    }
   });
-
-  // ===== Live preview for description (optional if you have aboutText somewhere) =====
-  const descEl = document.getElementById('description');
-  const aboutText = document.getElementById('aboutText');
-  if(aboutText && descEl){
-    ['input','change'].forEach(ev=>descEl.addEventListener(ev, ()=> aboutText.textContent = descEl.value));
-  }
 </script>
 </body>
 </html>

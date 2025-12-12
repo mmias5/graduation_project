@@ -2,7 +2,6 @@
 session_start();
 
 if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
-    // لو بدك تخلي الـ president يدخل على صفحة مختلفة
     if (isset($_SESSION['role']) && $_SESSION['role'] === 'club_president') {
         header('Location: ../president/index.php');
         exit;
@@ -10,9 +9,199 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
     header('Location: ../login.php');
     exit;
 }
-  // create_club_request.php
-  // session_start();
-  // $studentId = $_SESSION['student_id'] ?? '';
+
+require_once '../config.php';
+
+$studentId = (int)$_SESSION['student_id'];
+$errors = [];
+
+/**
+ * Detect columns in `student` table and fetch name/email safely.
+ * (Because your DB column names may differ.)
+ */
+function get_student_profile(mysqli $conn, int $studentId): array {
+    $cols = [];
+    $res = $conn->query("SHOW COLUMNS FROM student");
+    if ($res) {
+        while ($r = $res->fetch_assoc()) {
+            $cols[] = $r['Field'];
+        }
+    }
+
+    // pick best name expression based on existing columns
+    $nameExpr = "CAST(student_id AS CHAR)";
+    if (in_array('full_name', $cols, true)) {
+        $nameExpr = "full_name";
+    } elseif (in_array('student_name', $cols, true)) {
+        $nameExpr = "student_name";
+    } elseif (in_array('name', $cols, true)) {
+        $nameExpr = "name";
+    } elseif (in_array('first_name', $cols, true) && in_array('last_name', $cols, true)) {
+        $nameExpr = "CONCAT(first_name,' ',last_name)";
+    } elseif (in_array('first_name', $cols, true)) {
+        $nameExpr = "first_name";
+    }
+
+    // pick best email column
+    $emailCol = null;
+    foreach (['email','student_email','uni_email'] as $c) {
+        if (in_array($c, $cols, true)) { $emailCol = $c; break; }
+    }
+    if (!$emailCol) $emailCol = "NULL";
+
+    $sql = "SELECT $nameExpr AS applicant_name, $emailCol AS applicant_email
+            FROM student
+            WHERE student_id = ?
+            LIMIT 1";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("i", $studentId);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    return [
+        'name'  => $row['applicant_name'] ?? ('Student#' . $studentId),
+        'email' => $row['applicant_email'] ?? ''
+    ];
+}
+
+// ====== HANDLE POST (INSERT into your shown table) ======
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+    $club_name     = trim($_POST['club_name'] ?? '');
+    $category      = trim($_POST['category'] ?? '');
+    $description   = trim($_POST['description'] ?? '');
+    $contact_email = trim($_POST['contact_email'] ?? ''); // we will use it if student email is empty
+    $linkedin_url  = trim($_POST['linkedin_url'] ?? '');
+    $facebook_url  = trim($_POST['facebook_url'] ?? '');
+    $instagram_url = trim($_POST['instagram_url'] ?? '');
+
+    if ($club_name === '') $errors[] = "Club name is required.";
+    if ($category === '')  $errors[] = "Category is required.";
+    if ($description === '') $errors[] = "Description is required.";
+
+    // Validate optional urls
+    foreach ([
+        'LinkedIn' => $linkedin_url,
+        'Facebook' => $facebook_url,
+        'Instagram' => $instagram_url
+    ] as $label => $url) {
+        if ($url !== '' && !filter_var($url, FILTER_VALIDATE_URL)) {
+            $errors[] = "$label link is not a valid URL.";
+        }
+    }
+
+    // Get applicant name/email from student table
+    $profile = get_student_profile($conn, $studentId);
+    $applicant_name  = trim($profile['name']);
+    $applicant_email = trim($profile['email']);
+
+    // if DB student email empty, fallback to form email
+    if ($applicant_email === '' && $contact_email !== '' && filter_var($contact_email, FILTER_VALIDATE_EMAIL)) {
+        $applicant_email = $contact_email;
+    }
+    if ($applicant_email === '' || !filter_var($applicant_email, FILTER_VALIDATE_EMAIL)) {
+        $errors[] = "Valid applicant email is required (from student table or contact email field).";
+    }
+
+    // Logo upload (optional) -> store in assets/clubs/
+    $logo_path = null;
+    if (isset($_FILES['logo']) && $_FILES['logo']['error'] !== UPLOAD_ERR_NO_FILE) {
+
+        if ($_FILES['logo']['error'] !== UPLOAD_ERR_OK) {
+            $errors[] = "Logo upload failed. Please try again.";
+        } else {
+            $allowed = ['jpg','jpeg','png','webp'];
+            $maxSize = 3 * 1024 * 1024; // 3MB
+            $ext = strtolower(pathinfo($_FILES['logo']['name'], PATHINFO_EXTENSION));
+
+            if (!in_array($ext, $allowed, true)) {
+                $errors[] = "Logo must be JPG, JPEG, PNG, or WEBP.";
+            } elseif ((int)$_FILES['logo']['size'] > $maxSize) {
+                $errors[] = "Logo size must be <= 3MB.";
+            } else {
+                $uploadDir = __DIR__ . "/../assets/clubs/";
+                if (!is_dir($uploadDir)) {
+                    @mkdir($uploadDir, 0777, true);
+                }
+
+                $safeFile = "club_" . $studentId . "_" . date("Ymd_His") . "_" . bin2hex(random_bytes(4)) . "." . $ext;
+                $destAbs  = $uploadDir . $safeFile;
+
+                if (!move_uploaded_file($_FILES['logo']['tmp_name'], $destAbs)) {
+                    $errors[] = "Could not save uploaded logo.";
+                } else {
+                    // matches your table examples like: assets/club_ai.png
+                    $logo_path = "assets/clubs/" . $safeFile;
+                }
+            }
+        }
+    }
+
+    // Build social_links (store as JSON string)
+    $social_links = json_encode([
+        'linkedin'  => $linkedin_url ?: null,
+        'facebook'  => $facebook_url ?: null,
+        'instagram' => $instagram_url ?: null
+    ], JSON_UNESCAPED_SLASHES);
+
+    // Prevent duplicate pending (optional but recommended)
+    if (empty($errors)) {
+        $chk = $conn->prepare("
+            SELECT request_id
+            FROM club_creation_request
+            WHERE applicant_student_id = ?
+              AND reviewed_at IS NULL
+            LIMIT 1
+        ");
+        $chk->bind_param("i", $studentId);
+        $chk->execute();
+        $chkRes = $chk->get_result();
+        $hasPending = ($chkRes && $chkRes->num_rows > 0);
+        $chk->close();
+
+        if ($hasPending) {
+            $errors[] = "You already have a pending club creation request.";
+        }
+    }
+
+    if (empty($errors)) {
+
+        $stmt = $conn->prepare("
+            INSERT INTO club_creation_request
+            (applicant_student_id, applicant_name, applicant_email, club_name, category, description,
+             social_links, facebook_url, instagram_url, linkedin_url, logo, submitted_at)
+            VALUES
+            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        ");
+
+        $stmt->bind_param(
+            "issssssssss",
+            $studentId,
+            $applicant_name,
+            $applicant_email,
+            $club_name,
+            $category,
+            $description,
+            $social_links,
+            $facebook_url,
+            $instagram_url,
+            $linkedin_url,
+            $logo_path
+        );
+
+        if ($stmt->execute()) {
+            echo "<script>
+                alert('Your club creation request has been submitted successfully!');
+                window.location.href = 'index.php';
+            </script>";
+            exit;
+        } else {
+            $errors[] = "DB Error: " . htmlspecialchars($stmt->error);
+        }
+        $stmt->close();
+    }
+}
 ?>
 <!doctype html>
 <html lang="en">
@@ -30,7 +219,6 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
   --gold:#e5b758; --paper:#eef2f7; --ink:#0e1228; --card:#ffffff;
   --shadow:0 14px 34px rgba(10,23,60,.12); --radius:22px;
 }
-
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;}
 body{
@@ -38,8 +226,6 @@ body{
   background:linear-gradient(180deg,#f9fbff 0%, #eef2f7 100%);
   color:var(--ink);
 }
-
-/* ====== CARD ====== */
 .wrapper{
   max-width:970px;
   margin:32px auto 90px;
@@ -52,23 +238,10 @@ body{
   padding:34px;
   border:1px solid #e1e6f0;
 }
+.title-box{ margin-bottom:26px; }
+.title{ font-size:30px; font-weight:800; margin-bottom:4px; letter-spacing:0.3px; }
+.subtitle{ opacity:.8; font-size:15px; }
 
-/* ====== TITLE ====== */
-.title-box{
-  margin-bottom:26px;
-}
-.title{
-  font-size:30px;
-  font-weight:800;
-  margin-bottom:4px;
-  letter-spacing:0.3px;
-}
-.subtitle{
-  opacity:.8;
-  font-size:15px;
-}
-
-/* ====== GRID ====== */
 .row{
   display:grid;
   grid-template-columns:1fr 1fr;
@@ -82,8 +255,6 @@ label{
   margin-bottom:6px;
   display:block;
 }
-
-/* ====== INPUTS ====== */
 input[type="text"],
 input[type="email"],
 input[type="url"],
@@ -104,11 +275,8 @@ textarea:focus{
   box-shadow:0 0 0 4px rgba(72,113,219,.15);
 }
 
-/* ====== CUSTOM DROPDOWN ====== */
-.select {
-  position: relative;
-  font-size: 15px;
-}
+/* dropdown */
+.select { position: relative; font-size: 15px; }
 .select-toggle{
   width:100%;
   display:flex; align-items:center; justify-content:space-between;
@@ -128,14 +296,8 @@ textarea:focus{
   border-color:var(--royal);
   box-shadow:0 0 0 4px rgba(72,113,219,.15);
 }
-.select .chev{
-  flex:0 0 20px;
-  width:20px; height:20px;
-  transition:transform .18s ease;
-  color:var(--royal);
-}
+.select .chev{ flex:0 0 20px; width:20px; height:20px; transition:transform .18s ease; color:var(--royal); }
 .select.open .chev{ transform:rotate(180deg); }
-
 .select-menu{
   position:absolute; left:0; right:0; top:calc(100% + 8px);
   background:#fff; border:1px solid #dee6f5; border-radius:16px;
@@ -146,30 +308,19 @@ textarea:focus{
   z-index:30;
 }
 .select.open .select-menu{ display:block; }
-
-.select-menu li{
-  padding:12px 12px;
-  border-radius:12px;
-  cursor:pointer;
-  font-weight:600;
-}
+.select-menu li{ padding:12px 12px; border-radius:12px; cursor:pointer; font-weight:600; }
 .select-menu li:hover,
 .select-menu li[aria-selected="true"]{
   background:linear-gradient(180deg,#f5f8ff,#eef3ff);
   color:#1a2a5a;
 }
-
-/* error hint */
 .select.error .select-toggle{
   border-color:#ff5e5e;
   box-shadow:0 0 0 4px rgba(255,94,94,.15);
 }
-.small-hint{
-  font-size:12px; color:#ff5e5e; margin-top:6px; display:none;
-}
+.small-hint{ font-size:12px; color:#ff5e5e; margin-top:6px; display:none; }
 .select.error + .small-hint{ display:block; }
 
-/* ====== FILE UPLOAD ====== */
 .file-upload{
   border:1px dashed #cad2e3;
   border-radius:18px;
@@ -180,9 +331,7 @@ textarea:focus{
 }
 .file-upload svg{opacity:.55}
 
-/* ====== SOCIAL INPUT ====== */
 .social-box label{font-weight:800;}
-
 .social-wrap{
   position:relative;
   background:#fff;
@@ -195,35 +344,25 @@ textarea:focus{
   box-shadow:0 1px 3px rgba(0,0,0,.05);
   transition:.25s;
 }
-
 .social-wrap:focus-within{
   border-color:var(--royal);
   box-shadow:0 0 0 5px rgba(72,113,219,.12);
 }
-
 .social-icon{
-  width:28px;
-  height:28px;
-  position:absolute;
-  left:18px;
-  top:50%;
+  width:28px; height:28px;
+  position:absolute; left:18px; top:50%;
   transform:translateY(-50%);
   object-fit:contain;
 }
-
 .social-wrap input{
   width:100%;
-  border:none;
-  outline:none;
+  border:none; outline:none;
   background:transparent;
   font-size:15px;
   color:#4a4a4a;
 }
-.social-wrap input::placeholder{
-  color:#9aa5b6;
-}
+.social-wrap input::placeholder{ color:#9aa5b6; }
 
-/* ====== BUTTONS ====== */
 .actions{
   margin-top:28px;
   display:flex;
@@ -251,6 +390,19 @@ textarea:focus{
 .btn.primary:hover{
   background:linear-gradient(135deg,#4d70ee,#2958e0);
 }
+
+/* small errors box */
+.errbox{
+  background:#fff2f2;
+  border:1px solid #ffd2d2;
+  padding:12px 14px;
+  border-radius:14px;
+  margin-bottom:16px;
+  color:#b00020;
+  font-weight:700;
+  font-size:14px;
+}
+.errbox ul{margin:8px 0 0 18px; font-weight:600;}
 </style>
 </head>
 <body>
@@ -265,11 +417,21 @@ textarea:focus{
       <div class="subtitle">Fill out the details below and submit your request for review.</div>
     </div>
 
+    <?php if (!empty($errors)): ?>
+      <div class="errbox">
+        Please fix the following:
+        <ul>
+          <?php foreach ($errors as $e): ?>
+            <li><?php echo htmlspecialchars($e); ?></li>
+          <?php endforeach; ?>
+        </ul>
+      </div>
+    <?php endif; ?>
+
     <form action="" method="post" enctype="multipart/form-data">
 
-      <input type="hidden" name="president_id" value="<?php /* echo $studentId */ ?>">
+      <input type="hidden" name="president_id" value="<?php echo (int)$studentId; ?>">
 
-      <!-- Club Name + Category -->
       <div class="row">
         <div>
           <label>Club Name</label>
@@ -278,7 +440,6 @@ textarea:focus{
 
         <div>
           <label>Category</label>
-          <!-- Custom dropdown -->
           <div class="select" id="categorySelect" data-name="category">
             <button type="button" class="select-toggle" aria-haspopup="listbox" aria-expanded="false">
               <span class="select-value">Select category</span>
@@ -299,7 +460,6 @@ textarea:focus{
         </div>
       </div>
 
-      <!-- Description -->
       <div class="row full">
         <div>
           <label>Description</label>
@@ -307,7 +467,6 @@ textarea:focus{
         </div>
       </div>
 
-      <!-- Email + Logo -->
       <div class="row">
         <div>
           <label>Contact Email</label>
@@ -323,7 +482,6 @@ textarea:focus{
         </div>
       </div>
 
-      <!-- SOCIALS -->
       <div class="row">
         <div class="social-box">
           <label>LinkedIn (optional)</label>
@@ -352,7 +510,6 @@ textarea:focus{
         </div>
       </div>
 
-      <!-- ACTION BUTTONS -->
       <div class="actions">
         <button type="reset" class="btn secondary">Reset</button>
         <button type="submit" class="btn primary">Submit Request</button>
@@ -364,7 +521,6 @@ textarea:focus{
 
 <?php include('footer.php'); ?>
 
-<!-- JS for custom dropdown -->
 <script>
 (function(){
   const sel     = document.getElementById('categorySelect');
@@ -393,7 +549,7 @@ textarea:focus{
   });
 
   opts.forEach(li=>{
-    li.addEventListener('click', (e)=>{
+    li.addEventListener('click', ()=>{
       set(li.dataset.value, li.textContent.trim());
       close();
     });
@@ -403,7 +559,6 @@ textarea:focus{
     if (!sel.contains(e.target)) close();
   });
 
-  // validate on submit
   const form = sel.closest('form');
   form.addEventListener('submit', (e)=>{
     if (!hidden.value){

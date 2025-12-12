@@ -1,12 +1,63 @@
 <?php
 session_start();
+//president file
+if (
+  !isset($_SESSION['student_id']) ||
+  !isset($_SESSION['role']) ||
+  !in_array($_SESSION['role'], ['club_president'])
+) {
+  header('Location: ../login.php');
+  exit;
+}
 
-if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
-    header('Location: ../login.php');
-    exit;
+require_once __DIR__ . '/../config.php';
+
+/*
+  Fetch clubs:
+  - exclude club_id = 1 (No Club / Not Assigned)
+  - sponsor name (latest support record if exists)
+  - events count (total events per club)
+*/
+$sql = "
+  SELECT
+    c.club_id,
+    c.club_name,
+    c.description,
+    c.category,
+    c.logo,
+    c.member_count,
+    c.points,
+    COALESCE(ev.events_count, 0) AS events_count,
+    sp.company_name AS sponsor_name
+  FROM club c
+  LEFT JOIN (
+    SELECT club_id, COUNT(*) AS events_count
+    FROM event
+    GROUP BY club_id
+  ) ev ON ev.club_id = c.club_id
+  LEFT JOIN (
+    SELECT scs1.club_id, scs1.sponsor_id
+    FROM sponsor_club_support scs1
+    INNER JOIN (
+      SELECT club_id, MAX(start_date) AS max_start
+      FROM sponsor_club_support
+      GROUP BY club_id
+    ) scs2
+      ON scs2.club_id = scs1.club_id AND scs2.max_start = scs1.start_date
+  ) last_support ON last_support.club_id = c.club_id
+  LEFT JOIN sponsor sp ON sp.sponsor_id = last_support.sponsor_id
+  WHERE c.club_id <> 1
+  ORDER BY c.club_name ASC
+";
+
+$clubs = [];
+$res = $conn->query($sql);
+if ($res) {
+  while ($row = $res->fetch_assoc()) {
+    $clubs[] = $row;
+  }
 }
 ?>
-
 <!doctype html>
 <html lang="en">
 <head>
@@ -16,6 +67,7 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
 
 <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;600;700;800&display=swap" rel="stylesheet">
 <?php include 'header.php'; ?>
+
 <!-- ✅ START — Discover Clubs Section -->
 <style>
   :root{
@@ -35,12 +87,10 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
     font-display:swap;
   }
 
-  /* removed redundant @import - font already loaded in head */
-
   html,body{
     margin:0;height:100%;
     background: radial-gradient(1200px 800px at -10% 50%, rgba(168,186,240,.35), transparent 60%),
-    radial-gradient(900px 700px at 110% 60%, rgba(72,113,219,.20), transparent 60%)
+    radial-gradient(900px 700px at 110% 60%, rgba(72,113,219,.20), transparent 60%);
     background-repeat:no-repeat;
     background-size:cover;
     font-family:"Raleway",sans-serif;
@@ -70,7 +120,6 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
     font-weight:800;
   }
 
-  /* ✅ Toolbar: search + dropdown */
   .clubs-toolbar{
     display:grid;
     grid-template-columns:1fr 210px;
@@ -94,11 +143,7 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
     box-shadow: 0 0 0 3px rgba(72,113,219,.15);
   }
 
-  /* ✅ Custom dropdown */
-  .cat-dd{
-    position:relative;
-    width:210px;
-  }
+  .cat-dd{ position:relative; width:210px; }
 
   .cat-btn{
     width:100%; height:46px;
@@ -137,9 +182,7 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
     cursor:pointer;
   }
 
-  .cat-item:hover{
-    background:#f5f7ff;
-  }
+  .cat-item:hover{ background:#f5f7ff; }
 
   .cat-item.active{
     background:#eef3ff;
@@ -151,7 +194,6 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
     .cat-dd{ width:100%; }
   }
 
-  /* ✅ Clubs grid */
   .club-grid{
     display:grid;
     gap:16px;
@@ -189,11 +231,13 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
     border-radius:50%;
     border:3px solid var(--c-blue);
     object-fit:cover;
+    background:#e5e7eb;
   }
 
   .club-title h3{
     margin:0; font-family:"Raleway"; font-size:18px; font-weight:800;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    max-width:170px;
   }
 
   .club-title small{ font-size:11px; color:#76829F; }
@@ -206,21 +250,19 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
     border-radius:999px;
     font-size:11px;
     font-weight:800;
+    white-space:nowrap;
   }
 
   .club-desc{
-  margin:6px 2px 8px;
-  font-size:13px;
-  line-height:1.45;
-  overflow:hidden;
-
-  /* line clamp (standard + webkit) */
-  line-clamp: 2;                 /* ✅ standard */
-  display: -webkit-box;          /* required for webkit */
-  -webkit-line-clamp: 2;         /* ✅ webkit */
-  -webkit-box-orient: vertical;  /* required for webkit */
-}
-
+    margin:6px 2px 8px;
+    font-size:13px;
+    line-height:1.45;
+    overflow:hidden;
+    line-clamp: 2;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
 
   .club-meta{
     margin-top:auto;
@@ -241,7 +283,7 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
 
       <!-- ✅ Custom dropdown -->
       <div class="cat-dd">
-        <button id="catBtn" class="cat-btn">
+        <button id="catBtn" class="cat-btn" type="button">
           <span id="catLabel">All categories</span>
           <span class="arrow">▾</span>
         </button>
@@ -253,109 +295,67 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
           <div class="cat-item" data-value="Arts">Arts</div>
           <div class="cat-item" data-value="Community">Community</div>
           <div class="cat-item" data-value="Science">Science</div>
+          <div class="cat-item" data-value="Business">Business</div>
+          <div class="cat-item" data-value="Culture">Culture</div>
+          <div class="cat-item" data-value="Other">Other</div>
         </div>
       </div>
     </div>
 
     <!-- ✅ Clubs Grid -->
     <div class="club-grid" id="clubGrid">
+      <?php if (empty($clubs)): ?>
+        <div style="grid-column:1/-1; text-align:center; padding:22px; background:#fff; border-radius:16px; border:2px solid #DEE6FB; box-shadow:var(--shadow);">
+          No clubs found.
+        </div>
+      <?php else: ?>
+        <?php foreach($clubs as $c): ?>
+          <?php
+            $clubId   = (int)$c['club_id'];
+            $name     = $c['club_name'] ?? '';
+            $desc     = $c['description'] ?? '';
+            $cat      = $c['category'] ?? 'Other';
+            $members  = (int)($c['member_count'] ?? 0);
+            $events   = (int)($c['events_count'] ?? 0);
+            $points   = (int)($c['points'] ?? 0);
+            $sponsor  = $c['sponsor_name'] ?? '';
+            $logo     = $c['logo'] ?? '';
 
-      <a class="club-card-link" href="#" data-category="Technology">
-        <article class="club-card">
-          <div class="club-head">
-            <div class="club-id">
-              <img class="club-logo" src="assets/images/clubs/club1.png">
-              <div class="club-title">
-                <h3>AI & Robotics Club</h3>
-                <small>Sponsored by <span class="sponsor">TechCorp</span></small>
+            // logo fallback
+            $logoSrc = $logo ? htmlspecialchars($logo) : "assets/images/clubs/club1.png";
+          ?>
+          <a class="club-card-link"
+             href="clubpage.php?club_id=<?php echo $clubId; ?>"
+             data-category="<?php echo htmlspecialchars($cat); ?>">
+            <article class="club-card">
+              <div class="club-head">
+                <div class="club-id">
+                  <img class="club-logo" src="<?php echo $logoSrc; ?>" alt="Club Logo">
+                  <div class="club-title">
+                    <h3><?php echo htmlspecialchars($name); ?></h3>
+                    <?php if (!empty($sponsor)): ?>
+                      <small>Sponsored by <span class="sponsor"><?php echo htmlspecialchars($sponsor); ?></span></small>
+                    <?php else: ?>
+                      <small>Sponsored by <span class="sponsor">—</span></small>
+                    <?php endif; ?>
+                  </div>
+                </div>
+                <span class="category-chip"><?php echo htmlspecialchars($cat); ?></span>
               </div>
-            </div>
-            <span class="category-chip">Technology</span>
-          </div>
-          <p class="club-desc">Build robots, compete in challenges, and learn cutting-edge AI.</p>
-          <div class="club-meta">
-            <span>Member: 120</span><span>Events: 15</span><span>Points: 555</span>
-          </div>
-        </article>
-      </a>
 
-      <a class="club-card-link" href="#" data-category="Sports">
-        <article class="club-card">
-          <div class="club-head">
-            <div class="club-id">
-              <img class="club-logo" src="assets/images/clubs/club2.png">
-              <div class="club-title">
-                <h3>Campus Runners</h3>
-                <small>Sponsored by <span class="sponsor">FitLife</span></small>
+              <p class="club-desc"><?php echo htmlspecialchars($desc); ?></p>
+
+              <div class="club-meta">
+                <span>Member: <?php echo number_format($members); ?></span>
+                <span>Events: <?php echo number_format($events); ?></span>
+                <span>Points: <?php echo number_format($points); ?></span>
               </div>
-            </div>
-            <span class="category-chip">Sports</span>
-          </div>
-          <p class="club-desc">Weekly runs, marathon training, and fitness challenges.</p>
-          <div class="club-meta">
-            <span>Member: 98</span><span>Events: 22</span><span>Points: 610</span>
-          </div>
-        </article>
-      </a>
-
-      <a class="club-card-link" href="#" data-category="Arts">
-        <article class="club-card">
-          <div class="club-head">
-            <div class="club-id">
-              <img class="club-logo" src="assets/images/clubs/club3.png">
-              <div class="club-title">
-                <h3>Creative Studio</h3>
-                <small>Sponsored by <span class="sponsor">ArtWorks</span></small>
-              </div>
-            </div>
-            <span class="category-chip">Arts</span>
-          </div>
-          <p class="club-desc">Design, art, illustration and creative collaboration.</p>
-          <div class="club-meta">
-            <span>Member: 140</span><span>Events: 18</span><span>Points: 530</span>
-          </div>
-        </article>
-      </a>
-
-      <a class="club-card-link" href="#" data-category="Community">
-        <article class="club-card">
-          <div class="club-head">
-            <div class="club-id">
-              <img class="club-logo" src="assets/images/clubs/club4.png">
-              <div class="club-title">
-                <h3>Volunteer Circle</h3>
-                <small>Sponsored by <span class="sponsor">CarePlus</span></small>
-              </div>
-            </div>
-            <span class="category-chip">Community</span>
-          </div>
-          <p class="club-desc">Volunteer projects and charity events across campus.</p>
-          <div class="club-meta">
-            <span>Member: 200</span><span>Events: 35</span><span>Points: 890</span>
-          </div>
-        </article>
-      </a>
-
-      <a class="club-card-link" href="#" data-category="Science">
-        <article class="club-card">
-          <div class="club-head">
-            <div class="club-id">
-              <img class="club-logo" src="assets/images/clubs/club5.png">
-              <div class="club-title">
-                <h3>Astronomy Society</h3>
-                <small>Sponsored by <span class="sponsor">StarLab</span></small>
-              </div>
-            </div>
-            <span class="category-chip">Science</span>
-          </div>
-          <p class="club-desc">Stargazing nights, telescopes and science talks.</p>
-          <div class="club-meta">
-            <span>Member: 85</span><span>Events: 12</span><span>Points: 410</span>
-          </div>
-        </article>
-      </a>
-
+            </article>
+          </a>
+        <?php endforeach; ?>
+      <?php endif; ?>
     </div>
+
   </div>
 </section>
 
@@ -395,27 +395,24 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
     });
   });
 
-  // ✅ Filtering
-function applyFilters(){
-  const q = searchInput.value.toLowerCase().trim();
+  function applyFilters(){
+    const q = searchInput.value.toLowerCase().trim();
 
-  clubCards.forEach(card => {
-    const name = card.querySelector("h3").textContent.toLowerCase();
-    const cat = card.dataset.category;
+    clubCards.forEach(card => {
+      const name = (card.querySelector("h3")?.textContent || "").toLowerCase();
+      const cat = card.dataset.category;
 
-    const matchText = !q || name.includes(q);   // ✅ ONLY checks title
-    const matchCat  = selectedCategory === "all" || selectedCategory === cat;
+      const matchText = !q || name.includes(q);
+      const matchCat  = selectedCategory === "all" || selectedCategory === cat;
 
-    card.style.display = (matchText && matchCat) ? "" : "none";
-  });
-}
-
+      card.style.display = (matchText && matchCat) ? "" : "none";
+    });
+  }
 
   searchInput.addEventListener("input", applyFilters);
 </script>
 
 <!-- ✅ END — Discover Clubs Section -->
 <?php include 'footer.php'; ?>
-<!--end footer-->
 </body>
 </html>
