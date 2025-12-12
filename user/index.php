@@ -36,23 +36,65 @@ if (isset($conn) && $conn instanceof mysqli) {
 }
 
 /* =======================
-   TOP CLUBS RANKING
+   TOP CLUBS RANKING (FROM ranking table - latest period)
    ======================= */
 $topClubs = [];
+
 if (isset($conn) && $conn instanceof mysqli) {
-    $sql = "
-        SELECT club_id, club_name, logo, points
-        FROM club
-        WHERE status IS NULL OR status = 'Active'
-        ORDER BY points DESC, club_name ASC
-        LIMIT 4
-    ";
-    if ($res = $conn->query($sql)) {
+
+    // 1) Get latest ranking period_end
+    $latestEnd = null;
+    $periodRes = $conn->query("
+        SELECT period_end
+        FROM ranking
+        ORDER BY period_end DESC
+        LIMIT 1
+    ");
+    if ($periodRes && $periodRes->num_rows > 0) {
+        $latestEnd = $periodRes->fetch_assoc()['period_end'];
+    }
+
+    // 2) Get top 4 clubs from ranking for that period
+    if ($latestEnd !== null) {
+        $stmt = $conn->prepare("
+            SELECT
+                r.club_id,
+                c.club_name,
+                c.logo,
+                r.total_points AS points,
+                r.rank_position
+            FROM ranking r
+            JOIN club c ON c.club_id = r.club_id
+            WHERE r.period_end = ?
+              AND (c.status IS NULL OR c.status = 'Active')
+            ORDER BY r.rank_position ASC, r.total_points DESC
+            LIMIT 4
+        ");
+        $stmt->bind_param("s", $latestEnd);
+        $stmt->execute();
+        $res = $stmt->get_result();
         while ($row = $res->fetch_assoc()) {
             $topClubs[] = $row;
         }
+        $stmt->close();
+    }
+
+    // fallback لو جدول ranking فاضي/ما رجّع شي
+    if (empty($topClubs)) {
+        $res = $conn->query("
+            SELECT club_id, club_name, logo, points
+            FROM club
+            WHERE (status IS NULL OR status = 'Active')
+            ORDER BY points DESC, club_name ASC
+            LIMIT 4
+        ");
+        if ($res) {
+            while ($row = $res->fetch_assoc()) $topClubs[] = $row;
+        }
     }
 }
+
+// fallback نهائي لو فاضي
 if (empty($topClubs)) {
     $topClubs = [
         ['club_id'=>1, 'club_name'=>'AI Innovators', 'logo'=>null, 'points'=>9800],
@@ -104,29 +146,23 @@ if (empty($newsItems)) {
 }
 
 /* =======================
-   SPONSORS DOTS (3 sponsors من DB)
+   SPONSORS (7 random)
    ======================= */
 $sponsors = [];
 if (isset($conn) && $conn instanceof mysqli) {
     $sql = "
         SELECT sponsor_id, company_name, logo
         FROM sponsor
-        ORDER BY sponsor_id ASC
-        LIMIT 3
+        ORDER BY RAND()
+        LIMIT 7
     ";
     if ($res = $conn->query($sql)) {
-        while ($row = $res->fetch_assoc()) {
-            $sponsors[] = $row;
-        }
+        while ($row = $res->fetch_assoc()) $sponsors[] = $row;
     }
 }
-// نكمّل 3 عناصر لو أقل من 3
-while (count($sponsors) < 3) {
-    $sponsors[] = [
-        'sponsor_id'   => 0,
-        'company_name' => 'Sponsor',
-        'logo'         => null,
-    ];
+// لو أقل من 7، كمّل placeholders
+while (count($sponsors) < 7) {
+    $sponsors[] = ['sponsor_id'=>0,'company_name'=>'Sponsor','logo'=>null];
 }
 
 /* =======================
@@ -134,8 +170,6 @@ while (count($sponsors) < 3) {
    ======================= */
 function club_logo_url(?string $logo): string {
     if ($logo && $logo !== '') {
-        // عندك بالـ SQL قيم زي: assets/sponsor_coffee.png
-        // فبنستخدمها زي ما هي، والمجلد يكون موجود نسبي لملف index.php
         return htmlspecialchars($logo, ENT_QUOTES, 'UTF-8');
     }
     return 'https://dummyimage.com/120x120/a9bff8/242751.png&text=CL';
@@ -150,7 +184,6 @@ function sponsor_logo_url(?string $logo): string {
 
 function news_image_url(?string $image): string {
     if ($image && $image !== '') {
-        // نفس الفكرة، لو القيمة assets/news_xxx.png خليها موجودة في نفس المسار
         return htmlspecialchars($image, ENT_QUOTES, 'UTF-8');
     }
     return 'https://images.unsplash.com/photo-1519389950473-47ba0277781c?q=80&w=1200&auto=format&fit=crop';
@@ -362,23 +395,52 @@ body{
 }
 .btn:hover{ filter:brightness(1.08); background:#fff; color:#4871db }
 
-/* ========= Sponsors ========= */
+/* ========= Sponsors (ONE ROW 3-1-3) ========= */
 .sponsors{ margin:34px auto 40px; text-align:center }
 .sponsors-title{ font-size:42px; letter-spacing:2px; color:var(--navy); margin:4px 0 16px; font-weight:800 }
-.sponsor-panel{
-  border:2px solid #efd679; border-radius:22px; padding:26px;
-  display:flex; gap:26px; justify-content:center; align-items:center;
-  background:#fff; box-shadow:var(--shadow)
+
+.sponsors .sponsor-panel{
+  border:2px solid #efd679;
+  border-radius:22px;
+  padding:26px;
+  background:#fff;
+  box-shadow:var(--shadow);
+
+  display:flex;
+  flex-direction:row;
+  align-items:center;
+  justify-content:center;
+  gap:26px;
+
+  flex-wrap:nowrap;   /* مهم: ما ينزلوا تحت */
+  overflow-x:auto;    /* لو الشاشة ضيقة */
 }
-.sponsor-dot{
-  width:94px; height:94px; border-radius:50%;
+
+.sponsors .sponsor-dot{
+  width:94px;
+  height:94px;
+  border-radius:50%;
   background:#f1f4ff;
-  display:grid; place-items:center; overflow:hidden;
+
+  display:flex;
+  align-items:center;
+  justify-content:center;
+
+  overflow:hidden;
+  flex:0 0 auto;
 }
-.sponsor-dot.large{
-  width:152px; height:152px;
+
+.sponsors .sponsor-dot.large{
+  width:160px;
+  height:160px;
 }
-.sponsor-dot img{ width:90%; height:90%; object-fit:contain }
+
+.sponsors .sponsor-dot img{
+  width:90%;
+  height:90%;
+  object-fit:contain;
+  display:block;
+}
 
 /* ========= Footer Stats ========= */
 .stats{ position:relative; background:#4871db; color:#fff; margin-top:40px }
@@ -464,25 +526,20 @@ body{
   </div>
 </section>
 
-<!-- ===== SPONSORS FROM DB ===== -->
+<!-- ===== SPONSORS (7 ONE ROW) ===== -->
 <section class="sponsors container">
   <h2 class="sponsors-title">SPONSORS</h2>
+
   <div class="sponsor-panel">
-    <?php
-      // small – large – small زي الصورة
-      $left  = $sponsors[0];
-      $mid   = $sponsors[1];
-      $right = $sponsors[2];
-    ?>
-    <div class="sponsor-dot">
-      <img src="<?php echo sponsor_logo_url($left['logo']); ?>" alt="<?php echo htmlspecialchars($left['company_name']); ?>">
-    </div>
-    <div class="sponsor-dot large">
-      <img src="<?php echo sponsor_logo_url($mid['logo']); ?>" alt="<?php echo htmlspecialchars($mid['company_name']); ?>">
-    </div>
-    <div class="sponsor-dot">
-      <img src="<?php echo sponsor_logo_url($right['logo']); ?>" alt="<?php echo htmlspecialchars($right['company_name']); ?>">
-    </div>
+    <div class="sponsor-dot"><img src="<?php echo sponsor_logo_url($sponsors[0]['logo']); ?>" alt=""></div>
+    <div class="sponsor-dot"><img src="<?php echo sponsor_logo_url($sponsors[1]['logo']); ?>" alt=""></div>
+    <div class="sponsor-dot"><img src="<?php echo sponsor_logo_url($sponsors[2]['logo']); ?>" alt=""></div>
+
+    <div class="sponsor-dot large"><img src="<?php echo sponsor_logo_url($sponsors[3]['logo']); ?>" alt=""></div>
+
+    <div class="sponsor-dot"><img src="<?php echo sponsor_logo_url($sponsors[4]['logo']); ?>" alt=""></div>
+    <div class="sponsor-dot"><img src="<?php echo sponsor_logo_url($sponsors[5]['logo']); ?>" alt=""></div>
+    <div class="sponsor-dot"><img src="<?php echo sponsor_logo_url($sponsors[6]['logo']); ?>" alt=""></div>
   </div>
 </section>
 
