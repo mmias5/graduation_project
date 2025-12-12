@@ -218,7 +218,7 @@ $notInClub = (empty($clubId) || (int)$clubId === 1);
         </button>
         <div class="menu" role="menu" aria-label="Clubs menu">
 
-          <a href="clubpage.php" class="needs-club" role="menuitem">
+          <a href="myclubpage.php" class="needs-club" role="menuitem">
             <svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none"
                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M8 21v-4m8 4v-4M4 10h16M2 6h20v12H2z"/>
@@ -364,7 +364,7 @@ $notInClub = (empty($clubId) || (int)$clubId === 1);
       </div>
     </div>
     <div class="sidebar-content" id="sideDesc">
-      <button class="side-btn primary needs-club-btn" type="button" data-href="clubpage.php">
+      <button class="side-btn primary needs-club-btn" type="button" data-href="myclubpage.php">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21v-4m8 4v-4M4 10h16M2 6h20v12H2z"/></svg>
         <span>My Club</span>
       </button>
@@ -419,7 +419,7 @@ $notInClub = (empty($clubId) || (int)$clubId === 1);
     btn.addEventListener('click', function(e){
       if (NOT_IN_CLUB) {
         e.preventDefault();
-        showNoClubPopup('clubpage.php');
+        showNoClubPopup('myclubpage.php');
       }
     });
   });
