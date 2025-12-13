@@ -4,6 +4,67 @@ if (!isset($_SESSION['admin_id'])) {
     header('Location: login.php');
     exit;
 }
+
+require_once '../config.php';
+
+// ====================== Get club_id from URL ======================
+$clubId = isset($_GET['club_id']) ? (int)$_GET['club_id'] : 0;
+if ($clubId <= 0) {
+    header('Location: viewclubs.php');
+    exit;
+}
+
+// ====================== Fetch club + sponsor from DB ======================
+$stmt = $conn->prepare("
+    SELECT
+        c.club_id,
+        c.club_name,
+        c.category,
+        c.contact_email,
+        c.description,
+        c.logo,
+        c.cover,
+        c.instagram_url,
+        c.facebook_url,
+        c.linkedin_url,
+        c.sponsor_id,
+        COALESCE(sp.company_name,'') AS sponsor_name
+    FROM club c
+    LEFT JOIN sponsor sp ON sp.sponsor_id = c.sponsor_id
+    WHERE c.club_id = ?
+    LIMIT 1
+");
+$stmt->bind_param("i", $clubId);
+$stmt->execute();
+$res = $stmt->get_result();
+$clubRow = $res->fetch_assoc();
+$stmt->close();
+
+if (!$clubRow) {
+    echo "<h2 style='font-family:system-ui;margin:40px;'>Club not found.</h2>";
+    exit;
+}
+
+// ====================== Prefill values from DB ======================
+$club_id        = (int)$clubRow['club_id'];
+$club_name      = $clubRow['club_name'] ?? '';
+$category       = $clubRow['category'] ?? '';
+$contact_email  = $clubRow['contact_email'] ?? '';
+$description    = $clubRow['description'] ?? '';
+
+$logo_url       = !empty($clubRow['logo'])  ? $clubRow['logo']  : 'assets/club_placeholder.png';
+$cover_url      = !empty($clubRow['cover']) ? $clubRow['cover'] : 'tools/pics/social_life.png';
+
+$sponsor_name   = trim($clubRow['sponsor_name'] ?? '');
+if ($sponsor_name === '') $sponsor_name = 'No sponsor yet';
+
+// sponsor_logo: ما دام مش متأكدين من عمود بالشponsor table، خليناه placeholder ثابت بدون ما يكسر SQL
+$sponsor_logo   = 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Amazon_logo.svg/1200px-Amazon_logo.svg.png';
+
+// social links
+$instagram      = $clubRow['instagram_url'] ?? '';
+$facebook       = $clubRow['facebook_url'] ?? '';
+$linkedin       = $clubRow['linkedin_url'] ?? '';
 ?>
 
 <!doctype html>
@@ -393,28 +454,11 @@ if (!isset($_SESSION['admin_id'])) {
       background:#e5e7eb;
       color:#111827;
     }
-
   </style>
 </head>
 <body>
 
   <?php include 'sidebar.php'; ?>
-
-  <?php
-    // ===== Prefill (replace with your real fetch) =====
-    $club_id        = isset($club['club_id']) ? (int)$club['club_id'] : 1;
-    $club_name      = isset($club['club_name']) ? $club['club_name'] : 'Birds';
-    $sponsor_name   = isset($club['sponsor_name']) ? $club['sponsor_name'] : 'Amazone';
-    $sponsor_logo   = isset($club['sponsor_logo']) ? $club['sponsor_logo'] : 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Amazon_logo.svg/1200px-Amazon_logo.svg.png';
-    $category       = isset($club['category']) ? $club['category'] : 'Technology';
-    $contact_email  = isset($club['contact_email']) ? $club['contact_email'] : 'club@example.edu';
-    $description    = isset($club['description']) ? $club['description'] : 'Description about the club goes here. It can be two to three sentences long.';
-    $logo_url       = isset($club['logo']) ? $club['logo'] : 'https://img.freepik.com/free-vector/bird-colorful-gradient-design-vector_343694-2506.jpg?semt=ais_hybrid&w=740&q=80';
-    $cover_url      = isset($club['cover']) ? $club['cover'] : 'tools/pics/social_life.png';
-    $instagram      = isset($club['instagram']) ? $club['instagram'] : '';
-    $facebook       = isset($club['facebook']) ? $club['facebook'] : '';
-    $linkedin       = isset($club['linkedin']) ? $club['linkedin'] : '';
-  ?>
 
   <main class="main">
     <!-- PAGE HEADER -->
@@ -593,7 +637,7 @@ if (!isset($_SESSION['admin_id'])) {
 
       <!-- ACTIONS -->
       <div class="actions">
-        <a class="btn ghost" href="club.php?club_id=<?php echo urlencode($club_id); ?>">Cancel</a>
+        <a class="btn ghost" href="clubpage.php?club_id=<?php echo (int)$club_id; ?>">Cancel</a>
         <button class="btn primary" type="submit" id="saveBtn">Save changes</button>
       </div>
     </form>

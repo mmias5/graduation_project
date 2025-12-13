@@ -7,6 +7,9 @@ if (!isset($_SESSION['admin_id'])) {
 
 require_once '../config.php';
 
+/* ✅ خلي mysqli يرمي Exceptions عشان try/catch يشتغل صح */
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+
 $adminId   = (int)$_SESSION['admin_id'];
 $requestId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
@@ -15,8 +18,10 @@ if ($requestId <= 0) {
     exit;
 }
 
-// اجلب الطلب من DB
-$stmt = $conn->prepare("SELECT * FROM club_creation_request WHERE request_id = ?");
+/* =========================
+   Fetch request from DB
+========================= */
+$stmt = $conn->prepare("SELECT * FROM club_creation_request WHERE request_id = ? LIMIT 1");
 $stmt->bind_param("i", $requestId);
 $stmt->execute();
 $result  = $stmt->get_result();
@@ -31,35 +36,38 @@ if (!$request) {
 $alreadyReviewed = !is_null($request['reviewed_at']);
 $errorMsg = "";
 
-// معالجة approve / reject
+/* =========================
+   Approve / Reject
+========================= */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$alreadyReviewed) {
 
+    /* ========= APPROVE ========= */
     if (isset($_POST['approve'])) {
 
-        mysqli_begin_transaction($conn);
+        $conn->begin_transaction();
 
         try {
-            // بيانات النادي
-            $clubName    = $request['club_name'];
-            $description = $request['description'];
-            $category    = $request['category'];
+            // Request data
+            $clubName        = $request['club_name'];
+            $description     = $request['description'];
+            $category        = $request['category'];
 
-            // لو حابة تحتفظي بـ social_links الأساسي
-            $socialMain  = $request['social_links'];
+            $socialMain      = $request['social_links'];
+            $facebook        = $request['facebook_url'];
+            $instagram       = $request['instagram_url'];
+            $linkedin        = $request['linkedin_url'];
 
-            $facebook    = $request['facebook_url'];
-            $instagram   = $request['instagram_url'];
-            $linkedin    = $request['linkedin_url'];
+            $logo            = $request['logo'];
+            $email           = $request['applicant_email'];
 
-            $logo        = $request['logo'];
-            $email       = $request['applicant_email'];
+            $applicantId     = (int)$request['applicant_student_id']; // ✅ مهم
 
-            $creationDate = date('Y-m-d H:i:s');
-            $status       = 'active';
-            $memberCount  = 0;
-            $points       = 0;
+            $creationDate    = date('Y-m-d H:i:s');
+            $status          = 'active';
+            $memberCount     = 1;  // ✅ بما إنه صار عنده نادي، خليه أول عضو
+            $points          = 0;
 
-            // INSERT في جدول club (تأكدي إن أسماء الأعمدة هي نفسها في الجدول)
+            /* 1) Insert club */
             $stmt1 = $conn->prepare("
                 INSERT INTO club
                     (club_name, description, category,
@@ -67,7 +75,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$alreadyReviewed) {
                      logo, creation_date, status, contact_email, member_count, points)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
-
             $stmt1->bind_param(
                 "sssssssssssii",
                 $clubName,
@@ -85,46 +92,77 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$alreadyReviewed) {
                 $points
             );
             $stmt1->execute();
+
+            // ✅ club_id الجديد
+            $newClubId = (int)$conn->insert_id;
             $stmt1->close();
 
-            // نعلّم الطلب إنه تمت مراجعته
+            if ($newClubId <= 0) {
+                throw new Exception("Failed to create club.");
+            }
+
+            /* 2) Update applicant role -> club_president + assign club_id */
+            if ($applicantId > 0) {
+                $stmtU = $conn->prepare("
+                    UPDATE student
+                    SET role = 'club_president',
+                        club_id = ?
+                    WHERE student_id = ?
+                    LIMIT 1
+                ");
+                $stmtU->bind_param("ii", $newClubId, $applicantId);
+                $stmtU->execute();
+                $stmtU->close();
+            } else {
+                // إذا ما في applicant_student_id بالطلب (غير متوقع حسب الـ DB تبعك)
+                throw new Exception("Applicant student id not found in request.");
+            }
+
+            /* 3) Mark request reviewed */
             $reviewedAt = date('Y-m-d H:i:s');
             $stmt2 = $conn->prepare("
                 UPDATE club_creation_request
                 SET reviewed_at = ?, review_admin_id = ?
                 WHERE request_id = ?
+                LIMIT 1
             ");
             $stmt2->bind_param("sii", $reviewedAt, $adminId, $requestId);
             $stmt2->execute();
             $stmt2->close();
 
-            mysqli_commit($conn);
+            $conn->commit();
 
             header("Location: clubcreation.php");
             exit;
 
         } catch (Exception $e) {
-            mysqli_rollback($conn);
-            $errorMsg = "Error while approving the request. Please try again.";
+            $conn->rollback();
+            $errorMsg = "Error while approving the request: " . $e->getMessage();
         }
 
+    /* ========= REJECT ========= */
     } elseif (isset($_POST['reject'])) {
 
-        $reviewedAt = date('Y-m-d H:i:s');
-        $stmt3 = $conn->prepare("
-            UPDATE club_creation_request
-            SET reviewed_at = ?, review_admin_id = ?
-            WHERE request_id = ?
-        ");
-        $stmt3->bind_param("sii", $reviewedAt, $adminId, $requestId);
-        $stmt3->execute();
-        $stmt3->close();
+        try {
+            $reviewedAt = date('Y-m-d H:i:s');
+            $stmt3 = $conn->prepare("
+                UPDATE club_creation_request
+                SET reviewed_at = ?, review_admin_id = ?
+                WHERE request_id = ?
+                LIMIT 1
+            ");
+            $stmt3->bind_param("sii", $reviewedAt, $adminId, $requestId);
+            $stmt3->execute();
+            $stmt3->close();
 
-        header("Location: clubcreation.php");
-        exit;
+            header("Location: clubcreation.php");
+            exit;
+
+        } catch (Exception $e) {
+            $errorMsg = "Error while rejecting the request: " . $e->getMessage();
+        }
     }
 }
-
 ?>
 <!doctype html>
 <html lang="en">
@@ -146,34 +184,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$alreadyReviewed) {
 
   --sidebarWidth:260px;
 }
-
 *{box-sizing:border-box;margin:0;padding:0}
-
 body{
   margin:0;
   background:var(--paper);
   font-family:"Raleway",system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
 }
-
 .content{
   margin-left:var(--sidebarWidth);
   padding:40px 50px 60px;
 }
-
 .page-title{
   font-size:2rem;
   font-weight:800;
   margin-bottom:25px;
   color:var(--ink);
 }
-
 .form-box{
   background:var(--card);
   padding:32px;
   border-radius:var(--radius);
   box-shadow:var(--shadow);
 }
-
 .logo-img{
   width:120px;
   height:120px;
@@ -182,14 +214,12 @@ body{
   background:#f3f4f6;
   margin-bottom:24px;
 }
-
 .field-label{
   font-weight:700;
   margin-top:10px;
   margin-bottom:6px;
   color:var(--ink);
 }
-
 .field-value{
   background:#f8f9fc;
   padding:14px 18px;
@@ -197,8 +227,6 @@ body{
   margin-bottom:8px;
   color:var(--ink);
 }
-
-/* SOCIAL LINKS STYLING */
 .social-pill{
   display:flex;
   align-items:center;
@@ -210,19 +238,12 @@ body{
   border:1px solid #e5e7eb;
   margin-top:10px;
 }
-
-.social-pill img{
-  width:26px;
-  height:26px;
-}
-
-/* Buttons */
+.social-pill img{ width:26px; height:26px; }
 .btn-row{
   margin-top:26px;
   display:flex;
   gap:16px;
 }
-
 .action-btn{
   padding:14px 34px;
   border-radius:999px;
@@ -232,30 +253,11 @@ body{
   border:none;
   cursor:pointer;
 }
-
-.action-btn.approve{
-  background:var(--navy);
-}
-
-.action-btn.reject{
-  background:var(--coral);
-}
-
-.action-btn[disabled]{
-  opacity:0.6;
-  cursor:not-allowed;
-}
-
-.error{
-  margin-top:18px;
-  color:var(--coral);
-  font-size:.95rem;
-}
-.info{
-  margin-top:12px;
-  color:var(--muted);
-  font-size:.95rem;
-}
+.action-btn.approve{ background:var(--navy); }
+.action-btn.reject{ background:var(--coral); }
+.action-btn[disabled]{ opacity:0.6; cursor:not-allowed; }
+.error{ margin-top:18px; color:var(--coral); font-size:.95rem; }
+.info{ margin-top:12px; color:var(--muted); font-size:.95rem; }
 </style>
 </head>
 
@@ -295,9 +297,7 @@ body{
     ?>
 
     <?php if (!$hasSocial): ?>
-
       <div class="field-value">No social links provided.</div>
-
     <?php else: ?>
 
       <?php if (!empty($request['facebook_url'])): ?>
@@ -345,26 +345,16 @@ body{
     <?php endif; ?>
 
     <?php if (!empty($errorMsg)): ?>
-      <div class="error"><?= $errorMsg ?></div>
+      <div class="error"><?= htmlspecialchars($errorMsg) ?></div>
     <?php endif; ?>
   </div>
 
   <form method="post" class="btn-row">
-    <button
-      type="submit"
-      name="approve"
-      class="action-btn approve"
-      <?= $alreadyReviewed ? 'disabled' : '' ?>
-    >
+    <button type="submit" name="approve" class="action-btn approve" <?= $alreadyReviewed ? 'disabled' : '' ?>>
       Approve
     </button>
 
-    <button
-      type="submit"
-      name="reject"
-      class="action-btn reject"
-      <?= $alreadyReviewed ? 'disabled' : '' ?>
-    >
+    <button type="submit" name="reject" class="action-btn reject" <?= $alreadyReviewed ? 'disabled' : '' ?>>
       Reject
     </button>
   </form>

@@ -23,7 +23,8 @@ $totalStudents = getSingleInt($conn, "SELECT COUNT(*) AS cnt FROM student");
 $totalClubs = getSingleInt($conn, "SELECT COUNT(*) AS cnt FROM club WHERE club_id <> 1");
 
 // Total events (all events)
-$totalEvents = getSingleInt($conn, "SELECT COUNT(*) AS cnt FROM event");
+$totalEvents = getSingleInt($conn, "SELECT COUNT(*) AS cnt FROM event WHERE ending_date IS NOT NULL AND ending_date < NOW()");
+
 
 // Engagement = students joined any club other than "No Club" (club_id = 1)
 $engagedStudents = getSingleInt(
@@ -43,52 +44,51 @@ $engagementRate = $totalStudents > 0
 $clubsRanking = [];
 
 $sqlRank = "
-  SELECT
-    r.rank_position,
-    r.total_points,
+    SELECT
+        r.rank_position,
+        r.total_points,
+        c.club_id,
+        c.club_name,
+        c.logo,
+        c.status,
+        COALESCE(c.member_count,0) AS members_count,
 
-    c.club_id,
-    c.club_name,
-    c.logo,
-    c.status,
-    COALESCE(c.member_count,0) AS members_count,
+        /* ✅ Only DONE events (past) */
+        COALESCE(COUNT(DISTINCT e.event_id),0) AS events_count,
 
-    COALESCE(COUNT(DISTINCT e.event_id),0) AS events_count,
+        /* ✅ Sponsored by from club.sponsor_id */
+        COALESCE(sp.company_name, '') AS sponsors
 
-    GROUP_CONCAT(
-      DISTINCT sp.company_name
-      ORDER BY sp.company_name
-      SEPARATOR ', '
-    ) AS sponsors
+    FROM ranking r
+    INNER JOIN club c
+        ON c.club_id = r.club_id
 
-  FROM ranking r
-  INNER JOIN club c
-    ON c.club_id = r.club_id
+    /* ✅ Only count events that ended */
+    LEFT JOIN event e
+        ON e.club_id = c.club_id
+       AND e.ending_date IS NOT NULL
+       AND e.ending_date < NOW()
 
-  LEFT JOIN event e
-    ON e.club_id = c.club_id
+    /* ✅ Sponsor from club table */
+    LEFT JOIN sponsor sp
+        ON sp.sponsor_id = c.sponsor_id
 
-  LEFT JOIN sponsor_club_support scs
-    ON scs.club_id = c.club_id
-   AND CURDATE() BETWEEN scs.start_date AND scs.end_date
+    WHERE c.club_id <> 1
 
-  LEFT JOIN sponsor sp
-    ON sp.sponsor_id = scs.sponsor_id
+    GROUP BY
+        r.rank_position,
+        r.total_points,
+        c.club_id,
+        c.club_name,
+        c.logo,
+        c.status,
+        c.member_count,
+        sp.company_name
 
-  WHERE c.club_id <> 1
-
-  GROUP BY
-    r.rank_position,
-    r.total_points,
-    c.club_id,
-    c.club_name,
-    c.logo,
-    c.status,
-    c.member_count
-
-  ORDER BY r.rank_position ASC
-  LIMIT 50
+    ORDER BY r.rank_position ASC
+    LIMIT 50
 ";
+
 
 $resRank = $conn->query($sqlRank);
 if ($resRank && $resRank->num_rows > 0) {

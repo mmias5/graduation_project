@@ -7,6 +7,9 @@ if (!isset($_SESSION['admin_id'])) {
 
 require_once '../config.php';
 
+/* ✅ Exceptions + strict */
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+
 $adminId   = (int)$_SESSION['admin_id'];
 $requestId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
@@ -15,10 +18,14 @@ if ($requestId <= 0) {
     exit;
 }
 
-// جلب طلب التعديل من DB
-$sql  = "SELECT * FROM club_edit_request WHERE request_id = $requestId";
-$res  = mysqli_query($conn, $sql);
-$row  = $res && mysqli_num_rows($res) ? mysqli_fetch_assoc($res) : null;
+/* =========================
+   1) Fetch edit request (Prepared)
+========================= */
+$stmt = $conn->prepare("SELECT * FROM club_edit_request WHERE request_id = ? LIMIT 1");
+$stmt->bind_param("i", $requestId);
+$stmt->execute();
+$row = $stmt->get_result()->fetch_assoc();
+$stmt->close();
 
 if (!$row) {
     header('Location: clubeditreq.php');
@@ -26,97 +33,151 @@ if (!$row) {
 }
 
 $alreadyReviewed = !is_null($row['reviewed_at']);
-
-// نكوّن array بنفس keys الواجهة القديمة
-$editRequest = [
-    "club_name"   => $row['new_club_name'],
-    "category"    => $row['new_category'],
-    "email"       => $row['new_contact_email'],
-    "sponsor"     => "",                    // ما في بالسكنشوت عمود للسـبونسر، نخليه فاضي
-    "description" => $row['new_description'],
-    "logo"        => $row['new_logo'],
-    "cover"       => $row['new_logo'],      // لسا ما عنا new_cover، فبنستعمل نفس اللوغو مؤقتاً
-    "instagram"   => $row['instagram'],
-    "facebook"    => $row['facebook'],
-    "linkedin"    => $row['linkedin']
-];
-
 $errorMsg = "";
 
-// معالجة Approve / Reject
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$alreadyReviewed) {
+/* =========================
+   2) Fetch current club (to avoid overwriting with NULL)
+========================= */
+$clubId = (int)$row['club_id'];
 
-    $clubId = (int)$row['club_id'];
+$stmtC = $conn->prepare("SELECT * FROM club WHERE club_id = ? LIMIT 1");
+$stmtC->bind_param("i", $clubId);
+$stmtC->execute();
+$currentClub = $stmtC->get_result()->fetch_assoc();
+$stmtC->close();
+
+if (!$currentClub) {
+    header('Location: clubeditreq.php');
+    exit;
+}
+
+/* =========================
+   3) Helper: choose new value if not empty, else keep old
+========================= */
+function pickValue($newVal, $oldVal) {
+    // إذا كانت NULL أو فاضية أو spaces => رجّع القديم
+    if ($newVal === null) return $oldVal;
+    if (is_string($newVal) && trim($newVal) === '') return $oldVal;
+    return $newVal;
+}
+
+/* =========================
+   4) Prepare values for UI (preview)
+========================= */
+$finalClubName   = pickValue($row['new_club_name'],        $currentClub['club_name']        ?? '');
+$finalCategory   = pickValue($row['new_category'],         $currentClub['category']         ?? '');
+$finalEmail      = pickValue($row['new_contact_email'],    $currentClub['contact_email']    ?? '');
+$finalDesc       = pickValue($row['new_description'],      $currentClub['description']      ?? '');
+$finalMainLink   = pickValue($row['new_social_media_link'], $currentClub['social_media_link'] ?? '');
+$finalInsta      = pickValue($row['instagram'],            $currentClub['instagram_url']    ?? '');
+$finalFacebook   = pickValue($row['facebook'],             $currentClub['facebook_url']     ?? '');
+$finalLinkedin   = pickValue($row['linkedin'],             $currentClub['linkedin_url']     ?? '');
+$finalLogo       = pickValue($row['new_logo'],             $currentClub['logo']             ?? '');
+
+/* نفس فكرة الواجهة القديمة */
+$editRequest = [
+    "club_name"   => $finalClubName,
+    "category"    => $finalCategory,
+    "email"       => $finalEmail,
+    "sponsor"     => "", // ما عندك sponsor column هون
+    "description" => $finalDesc,
+    "logo"        => $finalLogo,
+    "cover"       => $finalLogo, // ما في cover column، فخليه logo
+    "instagram"   => $finalInsta,
+    "facebook"    => $finalFacebook,
+    "linkedin"    => $finalLinkedin
+];
+
+/* =========================
+   5) Approve / Reject
+========================= */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$alreadyReviewed) {
 
     if (isset($_POST['approve'])) {
 
-        // قيم جاهزة للتحديث
-        $clubName   = mysqli_real_escape_string($conn, $editRequest['club_name']);
-        $category   = mysqli_real_escape_string($conn, $editRequest['category']);
-        $email      = mysqli_real_escape_string($conn, $editRequest['email']);
-        $desc       = mysqli_real_escape_string($conn, $editRequest['description']);
-        $mainLink   = mysqli_real_escape_string($conn, $row['new_social_media_link']);
-        $insta      = mysqli_real_escape_string($conn, $editRequest['instagram']);
-        $fb         = mysqli_real_escape_string($conn, $editRequest['facebook']);
-        $ln         = mysqli_real_escape_string($conn, $editRequest['linkedin']);
-        $logo       = mysqli_real_escape_string($conn, $editRequest['logo']);
+        $conn->begin_transaction();
 
-        // تحديث جدول club
-        $updateClubSql = "
-            UPDATE club
-            SET club_name        = '$clubName',
-                description      = '$desc',
-                category         = '$category',
-                contact_email    = '$email',
-                social_media_link= '$mainLink',
-                instagram_url    = '$insta',
-                facebook_url     = '$fb',
-                linkedin_url     = '$ln',
-                logo             = '$logo'
-            WHERE club_id = $clubId
-        ";
+        try {
+            /* Update club with final values (Prepared) */
+            $stmtUp = $conn->prepare("
+                UPDATE club
+                SET club_name         = ?,
+                    description       = ?,
+                    category          = ?,
+                    contact_email     = ?,
+                    social_media_link = ?,
+                    instagram_url     = ?,
+                    facebook_url      = ?,
+                    linkedin_url      = ?,
+                    logo              = ?
+                WHERE club_id = ?
+                LIMIT 1
+            ");
+            $stmtUp->bind_param(
+                "sssssssssi",
+                $finalClubName,
+                $finalDesc,
+                $finalCategory,
+                $finalEmail,
+                $finalMainLink,
+                $finalInsta,
+                $finalFacebook,
+                $finalLinkedin,
+                $finalLogo,
+                $clubId
+            );
+            $stmtUp->execute();
+            $stmtUp->close();
 
-        mysqli_begin_transaction($conn);
-
-        if (mysqli_query($conn, $updateClubSql)) {
-
+            /* Mark request reviewed + status Approved */
             $reviewedAt = date('Y-m-d H:i:s');
-            $updateReqSql = "
+            $status = 'Approved';
+
+            $stmtReq = $conn->prepare("
                 UPDATE club_edit_request
-                SET reviewed_at = '$reviewedAt',
-                    review_admin_id = $adminId
-                WHERE request_id = $requestId
-            ";
+                SET reviewed_at = ?,
+                    review_admin_id = ?,
+                    status = ?
+                WHERE request_id = ?
+                LIMIT 1
+            ");
+            $stmtReq->bind_param("sisi", $reviewedAt, $adminId, $status, $requestId);
+            $stmtReq->execute();
+            $stmtReq->close();
 
-            if (mysqli_query($conn, $updateReqSql)) {
-                mysqli_commit($conn);
-                header('Location: clubeditreq.php');
-                exit;
-            } else {
-                mysqli_rollback($conn);
-                $errorMsg = "Error updating edit request.";
-            }
+            $conn->commit();
 
-        } else {
-            mysqli_rollback($conn);
-            $errorMsg = "Error updating club.";
+            header('Location: clubeditreq.php');
+            exit;
+
+        } catch (Exception $e) {
+            $conn->rollback();
+            $errorMsg = "Error updating club: " . $e->getMessage();
         }
 
     } elseif (isset($_POST['reject'])) {
 
-        $reviewedAt = date('Y-m-d H:i:s');
-        $updateReqSql = "
-            UPDATE club_edit_request
-            SET reviewed_at = '$reviewedAt',
-                review_admin_id = $adminId
-            WHERE request_id = $requestId
-        ";
+        try {
+            $reviewedAt = date('Y-m-d H:i:s');
+            $status = 'Rejected';
 
-        if (mysqli_query($conn, $updateReqSql)) {
+            $stmtReq = $conn->prepare("
+                UPDATE club_edit_request
+                SET reviewed_at = ?,
+                    review_admin_id = ?,
+                    status = ?
+                WHERE request_id = ?
+                LIMIT 1
+            ");
+            $stmtReq->bind_param("sisi", $reviewedAt, $adminId, $status, $requestId);
+            $stmtReq->execute();
+            $stmtReq->close();
+
             header('Location: clubeditreq.php');
             exit;
-        } else {
-            $errorMsg = "Error rejecting edit request.";
+
+        } catch (Exception $e) {
+            $errorMsg = "Error rejecting edit request: " . $e->getMessage();
         }
     }
 }
@@ -141,36 +202,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$alreadyReviewed) {
 
   --sidebarWidth:260px;
 }
-
 *{box-sizing:border-box;margin:0;padding:0}
-
 body{
   margin:0;
   background:var(--paper);
   font-family:"Raleway",system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
 }
-
 .content{
   margin-left:var(--sidebarWidth);
   padding:40px 50px 60px;
 }
-
 .page-title{
   font-size:2rem;
   font-weight:800;
   margin-bottom:25px;
   color:var(--ink);
 }
-
-/* Main box */
 .form-shell{
   background:var(--card);
   padding:32px 32px 36px;
   border-radius:var(--radius);
   box-shadow:var(--shadow);
 }
-
-/* Grid for top fields */
 .top-grid{
   display:grid;
   grid-template-columns:1fr 1fr;
@@ -178,19 +231,16 @@ body{
   row-gap:18px;
   margin-bottom:26px;
 }
-
 .field-label{
   font-weight:700;
   margin-bottom:6px;
   color:var(--ink);
 }
-
 .helper-text{
   margin-top:4px;
   font-size:.83rem;
   color:var(--muted);
 }
-
 .field-box{
   background:#f8f9fc;
   border-radius:14px;
@@ -198,13 +248,10 @@ body{
   color:var(--ink);
   font-size:.95rem;
 }
-
-/* Description */
 .description-block{
   margin-top:10px;
   margin-bottom:32px;
 }
-
 .description-area{
   background:#f8f9fc;
   border-radius:18px;
@@ -213,8 +260,6 @@ body{
   white-space:pre-wrap;
   line-height:1.5;
 }
-
-/* Section titles like IMAGES / SOCIAL LINKS */
 .section-title{
   font-size:1rem;
   letter-spacing:.12em;
@@ -223,7 +268,6 @@ body{
   margin-bottom:10px;
   color:var(--ink);
 }
-
 .section-underline{
   width:120px;
   height:3px;
@@ -231,8 +275,6 @@ body{
   background:#c6cadb;
   margin-bottom:22px;
 }
-
-/* Images grid */
 .images-grid{
   display:grid;
   grid-template-columns:1fr 1fr;
@@ -240,14 +282,12 @@ body{
   row-gap:22px;
   margin-bottom:28px;
 }
-
 .image-card{
   border-radius:18px;
   background:#f8f9fc;
   padding:16px;
   border:1px dashed #d4d7e5;
 }
-
 .image-preview{
   width:100%;
   max-height:160px;
@@ -256,19 +296,15 @@ body{
   background:#e5e7eb;
   margin-bottom:12px;
 }
-
-/* Social links */
 .social-grid{
   display:grid;
   grid-template-columns:1fr 1fr;
   column-gap:32px;
   row-gap:18px;
 }
-
 .social-grid .full-width{
   grid-column:1 / 3;
 }
-
 .social-input{
   background:#f8f9fc;
   border-radius:999px;
@@ -277,14 +313,11 @@ body{
   color:var(--ink);
   border:none;
 }
-
-/* Buttons */
 .btn-row{
   margin-top:30px;
   display:flex;
   gap:16px;
 }
-
 .action-btn{
   padding:14px 34px;
   border-radius:999px;
@@ -294,23 +327,17 @@ body{
   border:none;
   cursor:pointer;
 }
-
-.action-btn.approve{
-  background:var(--navy);
-}
-
-.action-btn.reject{
-  background:var(--coral);
-}
-
-.action-btn[disabled]{
-  opacity:0.6;
-  cursor:not-allowed;
-}
-
+.action-btn.approve{ background:var(--navy); }
+.action-btn.reject{ background:var(--coral); }
+.action-btn[disabled]{ opacity:0.6; cursor:not-allowed; }
 .error{
   margin-top:18px;
   color:var(--coral);
+  font-size:.95rem;
+}
+.info{
+  margin-top:12px;
+  color:var(--muted);
   font-size:.95rem;
 }
 </style>
@@ -329,29 +356,29 @@ body{
     <div class="top-grid">
       <div>
         <div class="field-label">Club name</div>
-        <div class="field-box"><?= $editRequest['club_name']; ?></div>
+        <div class="field-box"><?= htmlspecialchars($editRequest['club_name']) ?></div>
       </div>
 
       <div>
         <div class="field-label">Category</div>
-        <div class="field-box"><?= $editRequest['category']; ?></div>
+        <div class="field-box"><?= htmlspecialchars($editRequest['category']) ?></div>
       </div>
 
       <div>
         <div class="field-label">Contact email</div>
-        <div class="field-box"><?= $editRequest['email']; ?></div>
+        <div class="field-box"><?= htmlspecialchars($editRequest['email']) ?></div>
       </div>
 
       <div>
         <div class="field-label">Sponsor name</div>
-        <div class="field-box"><?= $editRequest['sponsor']; ?></div>
+        <div class="field-box"><?= htmlspecialchars($editRequest['sponsor']) ?></div>
       </div>
     </div>
 
     <!-- Description -->
     <div class="description-block">
       <div class="field-label">About the club</div>
-      <div class="description-area"><?= $editRequest['description']; ?></div>
+      <div class="description-area"><?= nl2br(htmlspecialchars($editRequest['description'])) ?></div>
       <div class="helper-text">Short and clear. Appears on the public club page.</div>
     </div>
 
@@ -362,13 +389,13 @@ body{
     <div class="images-grid">
       <div class="image-card">
         <div class="field-label">Logo</div>
-        <img src="<?= $editRequest['logo']; ?>" alt="Club logo" class="image-preview">
+        <img src="<?= htmlspecialchars($editRequest['logo']) ?>" alt="Club logo" class="image-preview">
         <div class="helper-text">PNG/JPG. Square ~512×512 recommended.</div>
       </div>
 
       <div class="image-card">
         <div class="field-label">Cover</div>
-        <img src="<?= $editRequest['cover']; ?>" alt="Club cover" class="image-preview">
+        <img src="<?= htmlspecialchars($editRequest['cover']) ?>" alt="Club cover" class="image-preview">
         <div class="helper-text">Wide ~1200×600 works well.</div>
       </div>
     </div>
@@ -380,43 +407,37 @@ body{
     <div class="social-grid">
       <div>
         <div class="field-label">Instagram</div>
-        <div class="social-input"><?= $editRequest['instagram']; ?></div>
+        <div class="social-input"><?= htmlspecialchars($editRequest['instagram']) ?></div>
       </div>
 
       <div>
         <div class="field-label">Facebook</div>
-        <div class="social-input"><?= $editRequest['facebook']; ?></div>
+        <div class="social-input"><?= htmlspecialchars($editRequest['facebook']) ?></div>
       </div>
 
       <div class="full-width">
         <div class="field-label">LinkedIn</div>
-        <div class="social-input"><?= $editRequest['linkedin']; ?></div>
+        <div class="social-input"><?= htmlspecialchars($editRequest['linkedin']) ?></div>
       </div>
     </div>
 
+    <?php if ($alreadyReviewed): ?>
+      <div class="info">This request was already reviewed on <?= htmlspecialchars($row['reviewed_at']) ?>.</div>
+    <?php endif; ?>
+
     <?php if (!empty($errorMsg)): ?>
-      <div class="error"><?= $errorMsg; ?></div>
+      <div class="error"><?= htmlspecialchars($errorMsg) ?></div>
     <?php endif; ?>
 
   </div>
 
   <!-- Approve / Reject buttons -->
   <form method="post" class="btn-row">
-    <button
-      type="submit"
-      name="approve"
-      class="action-btn approve"
-      <?= $alreadyReviewed ? 'disabled' : '' ?>
-    >
+    <button type="submit" name="approve" class="action-btn approve" <?= $alreadyReviewed ? 'disabled' : '' ?>>
       Approve
     </button>
 
-    <button
-      type="submit"
-      name="reject"
-      class="action-btn reject"
-      <?= $alreadyReviewed ? 'disabled' : '' ?>
-    >
+    <button type="submit" name="reject" class="action-btn reject" <?= $alreadyReviewed ? 'disabled' : '' ?>>
       Reject
     </button>
   </form>

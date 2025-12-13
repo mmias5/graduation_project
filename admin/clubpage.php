@@ -11,30 +11,96 @@ require_once '../config.php'; // عدّلي المسار إذا الملف بم�
 $clubId = isset($_GET['club_id']) ? (int)$_GET['club_id'] : 0;
 
 if ($clubId <= 0) {
-    // ما في id صحيح → رجّعيه على صفحة الكلابز
     header('Location: viewclubs.php');
     exit;
+}
+
+/* =========================
+   Handle POST Actions (DB)
+========================= */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'], $_POST['club_id'])) {
+    $action = $_POST['action'];
+    $postClubId = (int)$_POST['club_id'];
+
+    if ($postClubId <= 0) {
+        header("Location: clubpage.php?club_id=" . (int)$clubId);
+        exit;
+    }
+
+    // ✅ Delete club (connected)
+    if ($action === 'delete_club') {
+        // prevent deleting default club
+        if ($postClubId === 1) {
+            echo "<script>alert('You cannot delete the default club (ID = 1).'); window.location.href='clubpage.php?club_id={$clubId}';</script>";
+            exit;
+        }
+
+        $conn->begin_transaction();
+        try {
+            // 1) delete ranking rows
+            $stmt = $conn->prepare("DELETE FROM ranking WHERE club_id = ?");
+            $stmt->bind_param("i", $postClubId);
+            $stmt->execute();
+            $stmt->close();
+
+            // 2) delete events
+            $stmt = $conn->prepare("DELETE FROM event WHERE club_id = ?");
+            $stmt->bind_param("i", $postClubId);
+            $stmt->execute();
+            $stmt->close();
+
+            // 3) move students to default club_id=1
+            $defaultClubId = 1;
+            $stmt = $conn->prepare("UPDATE student SET club_id = ? WHERE club_id = ?");
+            $stmt->bind_param("ii", $defaultClubId, $postClubId);
+            $stmt->execute();
+            $stmt->close();
+
+            // 4) delete club
+            $stmt = $conn->prepare("DELETE FROM club WHERE club_id = ? LIMIT 1");
+            $stmt->bind_param("i", $postClubId);
+            $stmt->execute();
+
+            if ($stmt->affected_rows <= 0) {
+                $stmt->close();
+                throw new Exception("Club not found or could not be deleted.");
+            }
+            $stmt->close();
+
+            $conn->commit();
+
+            echo "<script>alert('Club deleted successfully.'); window.location.href='viewclubs.php';</script>";
+            exit;
+
+        } catch (Throwable $e) {
+            $conn->rollback();
+            echo "<script>alert('Delete failed: " . addslashes($e->getMessage()) . "'); window.location.href='clubpage.php?club_id={$clubId}';</script>";
+            exit;
+        }
+    }
 }
 
 // ====================== Fetch club from DB ======================
 $stmt = $conn->prepare("
     SELECT 
-        club_id,
-        club_name,
-        description,
-        category,
-        social_media_link,
-        facebook_url,
-        instagram_url,
-        linkedin_url,
-        logo,
-        creation_date,
-        status,
-        contact_email,
-        member_count,
-        points
-    FROM club
-    WHERE club_id = ?
+        c.club_id,
+        c.club_name,
+        c.description,
+        c.category,
+        c.social_media_link,
+        c.facebook_url,
+        c.instagram_url,
+        c.linkedin_url,
+        c.logo,
+        c.creation_date,
+        c.status,
+        c.contact_email,
+        c.member_count,
+        c.sponsor_id,
+        COALESCE(sp.company_name, '') AS sponsor_name
+    FROM club c
+    LEFT JOIN sponsor sp ON sp.sponsor_id = c.sponsor_id
+    WHERE c.club_id = ?
     LIMIT 1
 ");
 $stmt->bind_param("i", $clubId);
@@ -44,52 +110,90 @@ $row = $result->fetch_assoc();
 $stmt->close();
 
 if (!$row) {
-    // ما لقينا كلَب بهالـ id
     echo "<h2 style='font-family:system-ui;margin:40px;'>Club not found.</h2>";
     exit;
 }
 
-// نعمل mapping زي ما عملنا بصفحة all clubs
+/* ======================
+   Points from ranking (latest)
+====================== */
+$points = 0;
+$stmtPts = $conn->prepare("
+    SELECT r.total_points
+    FROM ranking r
+    WHERE r.club_id = ?
+    ORDER BY r.period_end DESC, r.period_start DESC, r.ranking_id DESC
+    LIMIT 1
+");
+$stmtPts->bind_param("i", $clubId);
+$stmtPts->execute();
+$resPts = $stmtPts->get_result();
+if ($p = $resPts->fetch_assoc()) {
+    $points = (int)($p['total_points'] ?? 0);
+}
+$stmtPts->close();
+
+/* ======================
+   Done/Past events COUNT (ending_date < NOW)
+====================== */
+$doneEventsCount = 0;
+$stmtCnt = $conn->prepare("
+    SELECT COUNT(*) AS cnt
+    FROM event
+    WHERE club_id = ?
+      AND ending_date IS NOT NULL
+      AND ending_date < NOW()
+");
+$stmtCnt->bind_param("i", $clubId);
+$stmtCnt->execute();
+$resCnt = $stmtCnt->get_result();
+if ($c = $resCnt->fetch_assoc()) {
+    $doneEventsCount = (int)($c['cnt'] ?? 0);
+}
+$stmtCnt->close();
+
+// Mapping
+$sponsorName = trim($row['sponsor_name'] ?? '');
+if ($sponsorName === '') $sponsorName = "No sponsor yet";
+
 $club = [
-    "id"             => (int)$row['club_id'],
-    "name"           => $row['club_name'],
-    "category"       => $row['category'] ?: 'Uncategorized',
-    // حالياً ما في sponsor بالجدول، فبنحط placeholder
-    "sponsor"        => "No sponsor yet",
-    // من status في الجدول (active / inactive)
-    "status"         => ($row['status'] === 'active') ? 'Active' : 'Inactive',
-    "members"        => (int)$row['member_count'],
-    // لحد ما نربط جدول events فعلياً
-    "events_count"   => 0,
-    "points"         => (int)$row['points'],
-    "president_email"=> $row['contact_email'] ?: 'no-email@unihive',
-    "description"    => $row['description'] ?: 'No description provided yet.',
-    // للّوغو
-    "logo"           => (!empty($row['logo']) ? $row['logo'] : 'assets/club_placeholder.png'),
+    "id"              => (int)$row['club_id'],
+    "name"            => $row['club_name'],
+    "category"        => ($row['category'] ?: 'Uncategorized'),
+    "sponsor"         => $sponsorName,
+    "status"          => (strtolower(trim($row['status'])) === 'active') ? 'Active' : 'Inactive',
+    "members"         => (int)($row['member_count'] ?? 0),
+    "events_count"    => $doneEventsCount, // ✅ done events only
+    "points"          => $points,          // ✅ from ranking
+    "president_email" => ($row['contact_email'] ?: 'no-email@unihive'),
+    "description"     => ($row['description'] ?: 'No description provided yet.'),
+    "logo"            => (!empty($row['logo']) ? $row['logo'] : 'assets/club_placeholder.png'),
 ];
-// ====================== Fetch upcoming events for this club ======================
+
+// ====================== Fetch DONE/Past events for this club ======================
 $events = [];
 
 $eventStmt = $conn->prepare("
     SELECT
-        event_id,
-        event_name,
-        event_location,
-        starting_date,
-        ending_date,
-        attendees_count
-    FROM event
-    WHERE club_id = ?
-      AND starting_date >= NOW()
-    ORDER BY starting_date ASC
+        e.event_id,
+        e.event_name,
+        e.event_location,
+        e.starting_date,
+        e.ending_date,
+        e.attendees_count,
+        COALESCE(s.company_name,'–') AS sponsor_name
+    FROM event e
+    LEFT JOIN sponsor s ON s.sponsor_id = e.sponsor_id
+    WHERE e.club_id = ?
+      AND e.ending_date IS NOT NULL
+      AND e.ending_date < NOW()
+    ORDER BY e.ending_date DESC
 ");
-
 $eventStmt->bind_param("i", $clubId);
 $eventStmt->execute();
 $eventResult = $eventStmt->get_result();
 
 while ($e = $eventResult->fetch_assoc()) {
-
     $start = new DateTime($e['starting_date']);
 
     $events[] = [
@@ -99,15 +203,11 @@ while ($e = $eventResult->fetch_assoc()) {
         "title"    => $e['event_name'],
         "location" => $e['event_location'],
         "time"     => $start->format('g:i A'),
-        // هاي مش موجودة بالجدول كنقاط، فنخليها عدد الحضور
-        "points"   => $e['attendees_count'] . " attending",
-        // حالياً ما في sponsor بالـ event table
-        "sponsor"  => "–"
+        "points"   => ($e['attendees_count'] ?? 0) . " attending",
+        "sponsor"  => ($e['sponsor_name'] ?? "–"),
     ];
 }
-
 $eventStmt->close();
-
 ?>
 <!doctype html>
 <html lang="en">
@@ -278,6 +378,10 @@ body{
   font-size:.85rem;
   font-weight:700;
   transition:background .15s ease, color .15s ease, transform .08s ease;
+  text-decoration:none;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
 }
 
 .btn-primary{
@@ -398,7 +502,7 @@ body{
   font-weight:800;
 }
 
-/* ===== Upcoming events ===== */
+/* ===== Events ===== */
 .section-block{
   margin-top:6px;
 }
@@ -532,7 +636,7 @@ body{
   <!-- Top club info card -->
   <div class="club-header-card">
     <div class="club-main">
-      <img src="https://img.freepik.com/free-vector/bird-colorful-gradient-design-vector_343694-2506.jpg?w=120"
+      <img src="<?= htmlspecialchars($club['logo']); ?>"
            alt="Club logo" class="club-logo">
 
       <div class="club-text">
@@ -561,10 +665,21 @@ body{
           ID #<?= $club['id']; ?>
         </span>
       </div>
+
       <div class="actions-row">
         <a href="editclub.php?club_id=<?= $club['id']; ?>" class="btn btn-outline">Edit club</a>
         <a href="viewmembers.php?club_id=<?= $club['id']; ?>" class="btn btn-primary">View members</a>
-        <button class="btn btn-danger" type="button">Delete</button>
+
+        <!-- ✅ Delete connected -->
+        <form method="POST" action="clubpage.php?club_id=<?= (int)$club['id']; ?>" style="display:inline;">
+          <input type="hidden" name="action" value="delete_club">
+          <input type="hidden" name="club_id" value="<?= (int)$club['id']; ?>">
+          <button class="btn btn-danger" type="submit"
+            onclick="return confirm('Are you sure you want to delete this club? This will delete its events & ranking and move its students to the default club.')">
+            Delete
+          </button>
+        </form>
+
       </div>
     </div>
   </div>
@@ -608,7 +723,7 @@ body{
           <div class="stat-value"><?= $club['members']; ?></div>
         </div>
         <div class="stat-item">
-          <div class="stat-label">Events</div>
+          <div class="stat-label">Events (done)</div>
           <div class="stat-value"><?= $club['events_count']; ?></div>
         </div>
         <div class="stat-item">
@@ -620,16 +735,16 @@ body{
 
   </div>
 
-  <!-- Upcoming events -->
+  <!-- DONE events -->
   <div class="card section-block">
     <div class="section-header">
-      <h2>Upcoming events</h2>
-      <span><?= count($events); ?> scheduled</span>
+      <h2>Done events</h2>
+      <span><?= count($events); ?> finished</span>
     </div>
 
     <?php if (empty($events)): ?>
       <p style="font-size:.95rem;color:var(--muted);margin:4px 0 0;">
-        No upcoming events for this club.
+        No done events for this club.
       </p>
     <?php else: ?>
       <div class="events-grid">

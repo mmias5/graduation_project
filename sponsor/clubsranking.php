@@ -55,7 +55,8 @@ if ($currentPeriodEnd !== null) {
         LEFT JOIN sponsor s ON s.sponsor_id = scs.sponsor_id
         LEFT JOIN event e
             ON e.club_id = c.club_id
-           AND (e.starting_date BETWEEN r.period_start AND r.period_end)
+           AND e.ending_date IS NOT NULL
+           AND e.ending_date < NOW()
         WHERE r.period_end = ?
         GROUP BY
             r.club_id,
@@ -96,7 +97,10 @@ if (empty($rankingClubs)) {
         FROM club c
         LEFT JOIN sponsor_club_support scs ON scs.club_id = c.club_id
         LEFT JOIN sponsor s ON s.sponsor_id = scs.sponsor_id
-        LEFT JOIN event e ON e.club_id = c.club_id
+        LEFT JOIN event e
+            ON e.club_id = c.club_id
+           AND e.ending_date IS NOT NULL
+           AND e.ending_date < NOW()
         WHERE c.club_id <> 1
         GROUP BY
             c.club_id,
