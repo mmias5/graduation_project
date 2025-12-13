@@ -180,7 +180,7 @@ body{
 
         <div class="field">
           <label class="label" for="category">Category</label>
-          <input class="input" id="category" name="category" placeholder="e.g., Technology"
+          <input class="input" id="category" name="category" placeholder="e.g., Technology" required
                  value="<?= htmlspecialchars($old['category']) ?>">
         </div>
 

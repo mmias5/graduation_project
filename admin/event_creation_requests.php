@@ -9,6 +9,7 @@ if (!isset($_SESSION['admin_id'])) {
     exit;
 }
 
+
 require_once '../config.php';
 
 function redirect_self() {

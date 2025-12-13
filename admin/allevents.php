@@ -11,14 +11,54 @@ require_once '../config.php';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_event_id'])) {
     $eventId = (int) $_POST['delete_event_id'];
 
-    $stmtDel = $conn->prepare("DELETE FROM event WHERE event_id = ?");
-    $stmtDel->bind_param("i", $eventId);
-    $stmtDel->execute();
-    $stmtDel->close();
+    $conn->begin_transaction();
 
-    header('Location: events.php'); // غيّري الاسم إذا مختلف
-    exit;
+    try {
+        // 1) Delete children first (because FKs restrict delete)
+        $stmt = $conn->prepare("DELETE FROM attendance WHERE event_id = ?");
+        $stmt->bind_param("i", $eventId);
+        $stmt->execute();
+        $stmt->close();
+
+        $stmt = $conn->prepare("DELETE FROM rating WHERE event_id = ?");
+        $stmt->bind_param("i", $eventId);
+        $stmt->execute();
+        $stmt->close();
+
+        $stmt = $conn->prepare("DELETE FROM points_ledger WHERE event_id = ?");
+        $stmt->bind_param("i", $eventId);
+        $stmt->execute();
+        $stmt->close();
+
+        $stmt = $conn->prepare("DELETE FROM event_edit_request WHERE event_id = ?");
+        $stmt->bind_param("i", $eventId);
+        $stmt->execute();
+        $stmt->close();
+
+        // 2) Now delete the event
+        $stmtDel = $conn->prepare("DELETE FROM event WHERE event_id = ?");
+        $stmtDel->bind_param("i", $eventId);
+        $stmtDel->execute();
+
+        // if nothing deleted => event_id not found
+        if ($stmtDel->affected_rows === 0) {
+            $stmtDel->close();
+            $conn->rollback();
+            die("Event not found or already deleted.");
+        }
+
+        $stmtDel->close();
+        $conn->commit();
+
+        header('Location: allevents.php');
+        exit;
+
+    } catch (Throwable $e) {
+        $conn->rollback();
+        die("Delete failed: " . htmlspecialchars($e->getMessage()));
+    }
 }
+
 
 // ============= Fetch Events from DB =============
 $sql = "
