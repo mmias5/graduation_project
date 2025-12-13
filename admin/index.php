@@ -19,16 +19,13 @@ function getSingleInt(mysqli $conn, string $sql): int {
 // Total students
 $totalStudents = getSingleInt($conn, "SELECT COUNT(*) AS cnt FROM student");
 
-// Total clubs (نحسب بس الـ active)
-$totalClubs = getSingleInt(
-    $conn,
-    "SELECT COUNT(*) AS cnt FROM club WHERE LOWER(status) = 'active'"
-);
+// ✅ Total clubs (exclude default club)
+$totalClubs = getSingleInt($conn, "SELECT COUNT(*) AS cnt FROM club WHERE club_id <> 1");
 
-// Events completed (حالياً: كل الأحداث المسجلة)
+// Total events (all events)
 $totalEvents = getSingleInt($conn, "SELECT COUNT(*) AS cnt FROM event");
 
-// Engagement = طلاب منضمّين لأي نادي غير "No Club" (club_id = 1)
+// Engagement = students joined any club other than "No Club" (club_id = 1)
 $engagedStudents = getSingleInt(
     $conn,
     "SELECT COUNT(*) AS cnt FROM student WHERE club_id IS NOT NULL AND club_id <> 1"
@@ -37,40 +34,61 @@ $engagementRate = $totalStudents > 0
     ? round(($engagedStudents * 100) / $totalStudents)
     : 0;
 
-/* ========= Clubs ranking ========= */
-/*
-  النقاط = مجموع total_points لكل الطلاب في النادي
-  الأحداث = عدد الأحداث في جدول event لهذا النادي
-  الأعضاء = club.member_count من جدول club
-  الرعاة = أي sponsors Active حسب التواريخ في sponsor_club_support
+/* ========= Clubs ranking =========
+   - rank + points from ranking table
+   - events_count from event table
+   - members_count + status from club table
+   - sponsors from sponsor_club_support + sponsor (active by date)
 */
 $clubsRanking = [];
 
 $sqlRank = "
   SELECT
+    r.rank_position,
+    r.total_points,
+
     c.club_id,
     c.club_name,
     c.logo,
-    COALESCE(c.points, 0)                         AS points,
-    COALESCE(COUNT(DISTINCT e.event_id), 0)       AS events_count,
-    COALESCE(c.member_count, 0)                   AS members_count,
-    GROUP_CONCAT(DISTINCT sp.company_name
-                 ORDER BY sp.company_name
-                 SEPARATOR ', ')                 AS sponsors
-  FROM club c
+    c.status,
+    COALESCE(c.member_count,0) AS members_count,
+
+    COALESCE(COUNT(DISTINCT e.event_id),0) AS events_count,
+
+    GROUP_CONCAT(
+      DISTINCT sp.company_name
+      ORDER BY sp.company_name
+      SEPARATOR ', '
+    ) AS sponsors
+
+  FROM ranking r
+  INNER JOIN club c
+    ON c.club_id = r.club_id
+
   LEFT JOIN event e
     ON e.club_id = c.club_id
+
   LEFT JOIN sponsor_club_support scs
     ON scs.club_id = c.club_id
    AND CURDATE() BETWEEN scs.start_date AND scs.end_date
+
   LEFT JOIN sponsor sp
     ON sp.sponsor_id = scs.sponsor_id
-  WHERE LOWER(c.status) = 'active'
-  GROUP BY c.club_id, c.club_name, c.logo, c.member_count, c.points
-  ORDER BY points DESC, c.club_name ASC
+
+  WHERE c.club_id <> 1
+
+  GROUP BY
+    r.rank_position,
+    r.total_points,
+    c.club_id,
+    c.club_name,
+    c.logo,
+    c.status,
+    c.member_count
+
+  ORDER BY r.rank_position ASC
   LIMIT 50
 ";
-
 
 $resRank = $conn->query($sqlRank);
 if ($resRank && $resRank->num_rows > 0) {
@@ -126,7 +144,7 @@ if ($resRank && $resRank->num_rows > 0) {
 
     /* ========= MAIN CONTENT ========= */
     .main{
-      margin-left:var(--sidebarWidth);      /* space for sidebar */
+      margin-left:var(--sidebarWidth);
       padding:28px 40px 40px;
       background:var(--mainBg);
       min-height:100vh;
@@ -140,7 +158,6 @@ if ($resRank && $resRank->num_rows > 0) {
       color:var(--navy);
     }
 
-    /* KPI row: 4 cards in one row on desktop */
     .kpi-row{
       display:grid;
       grid-template-columns:repeat(4,minmax(0,1fr));
@@ -230,10 +247,7 @@ if ($resRank && $resRank->num_rows > 0) {
     }
 
     /* ========= CLUBS RANKING SECTION ========= */
-
-    .rank-section{
-      margin-top:32px;
-    }
+    .rank-section{ margin-top:32px; }
 
     .rank-header{
       display:flex;
@@ -311,13 +325,8 @@ if ($resRank && $resRank->num_rows > 0) {
       background:#ffffff;
     }
 
-    .rank-table tbody tr:nth-child(even) td{
-      background:#fafbff;
-    }
-
-    .rank-table tbody tr:hover td{
-      background:#f3f4ff;
-    }
+    .rank-table tbody tr:nth-child(even) td{ background:#fafbff; }
+    .rank-table tbody tr:hover td{ background:#f3f4ff; }
 
     .col-rank{
       width:56px;
@@ -362,7 +371,23 @@ if ($resRank && $resRank->num_rows > 0) {
       font-weight:600;
       font-size:.95rem;
       color:var(--ink);
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
     }
+
+    .status-chip{
+      display:inline-flex;
+      align-items:center;
+      padding:3px 10px;
+      border-radius:999px;
+      font-size:.72rem;
+      font-weight:800;
+      border:1px solid rgba(148,163,184,.22);
+    }
+    .status-active{ background:#dcfce7; color:#166534; }
+    .status-inactive{ background:#fee2e2; color:#991b1b; }
 
     .club-sponsor{
       font-size:.78rem;
@@ -395,20 +420,15 @@ if ($resRank && $resRank->num_rows > 0) {
 
     /* ========= RESPONSIVE ========= */
     @media (max-width:1100px){
-      .kpi-row{
-        grid-template-columns:repeat(2,minmax(0,1fr));
-      }
+      .kpi-row{ grid-template-columns:repeat(2,minmax(0,1fr)); }
     }
-
     @media (max-width:700px){
       .main{
         margin-left:0;
         padding:22px 18px 28px;
         box-shadow:none;
       }
-      .kpi-row{
-        grid-template-columns:1fr;
-      }
+      .kpi-row{ grid-template-columns:1fr; }
       .rank-header{
         flex-direction:column;
         align-items:flex-start;
@@ -420,7 +440,7 @@ if ($resRank && $resRank->num_rows > 0) {
       }
       .rank-table thead th:nth-child(5),
       .rank-table tbody td:nth-child(5){
-        display:none; /* hide Members column on very small phones */
+        display:none;
       }
     }
   </style>
@@ -429,7 +449,6 @@ if ($resRank && $resRank->num_rows > 0) {
 
   <?php include 'sidebar.php'; ?>
 
-  <!-- MAIN CONTENT -->
   <main class="main">
     <!-- KPI CARDS -->
     <div class="kpi-header">KPI’s</div>
@@ -438,33 +457,25 @@ if ($resRank && $resRank->num_rows > 0) {
       <div class="kpi-card">
         <div class="kpi-pill">Overview</div>
         <div class="kpi-label">Total students</div>
-        <div class="kpi-value">
-          <?= number_format($totalStudents); ?>
-        </div>
+        <div class="kpi-value"><?= number_format($totalStudents); ?></div>
       </div>
 
       <div class="kpi-card">
         <div class="kpi-pill">Overview</div>
         <div class="kpi-label">Total clubs</div>
-        <div class="kpi-value">
-          <?= number_format($totalClubs); ?>
-        </div>
+        <div class="kpi-value"><?= number_format($totalClubs); ?></div>
       </div>
 
       <div class="kpi-card">
         <div class="kpi-pill">Events</div>
         <div class="kpi-label">Events completed</div>
-        <div class="kpi-value">
-          <?= number_format($totalEvents); ?>
-        </div>
+        <div class="kpi-value"><?= number_format($totalEvents); ?></div>
       </div>
 
       <div class="kpi-card">
         <div class="kpi-pill">Engagement</div>
         <div class="kpi-label">Engagement rate</div>
-        <div class="kpi-value">
-          <?= $engagementRate; ?>%
-        </div>
+        <div class="kpi-value"><?= $engagementRate; ?>%</div>
       </div>
     </div>
 
@@ -479,7 +490,7 @@ if ($resRank && $resRank->num_rows > 0) {
       </div>
     </section>
 
-    <!-- CLUBS RANKING TABLE (ADMIN THEME) -->
+    <!-- CLUBS RANKING TABLE -->
     <section class="rank-section">
       <div class="rank-header">
         <div class="rank-title">Clubs Ranking</div>
@@ -504,54 +515,64 @@ if ($resRank && $resRank->num_rows > 0) {
             </tr>
           </thead>
           <tbody>
-            <?php
-            if (empty($clubsRanking)): ?>
+            <?php if (empty($clubsRanking)): ?>
               <tr>
                 <td colspan="5" style="padding:14px 16px; font-size:.9rem; color:var(--muted);">
-                  No active clubs found yet.
+                  No clubs found yet.
                 </td>
               </tr>
-            <?php
-            else:
-              $rank = 1;
-              foreach ($clubsRanking as $club):
-                $clubName   = htmlspecialchars($club['club_name']);
-                $logo       = $club['logo'] ? htmlspecialchars($club['logo']) : '';
-                $points     = (int)$club['points'];
-                $eventsCnt  = (int)$club['events_count'];
-                $membersCnt = (int)$club['members_count'];
-                $sponsors   = $club['sponsors']
-                              ? htmlspecialchars($club['sponsors'])
-                              : 'No active sponsor';
-            ?>
-              <tr data-name="<?= strtolower($club['club_name']); ?>">
-                <td class="col-rank"><?= $rank; ?></td>
-                <td>
-                  <div class="clubcell">
-                    <span class="club-avatar">
-                      <?php if ($logo): ?>
-                        <img src="<?= $logo; ?>" alt="">
-                      <?php else: ?>
-                        <?= strtoupper(substr($clubName,0,1)); ?>
-                      <?php endif; ?>
-                    </span>
-                    <div class="club-meta">
-                      <span class="club-name"><?= $clubName; ?></span>
-                      <span class="club-sponsor">
-                        Sponsored by <strong><?= $sponsors; ?></strong>
+            <?php else: ?>
+              <?php foreach ($clubsRanking as $club):
+                $clubNameRaw = (string)$club['club_name'];
+                $clubName    = htmlspecialchars($clubNameRaw);
+                $logo        = !empty($club['logo']) ? htmlspecialchars($club['logo']) : '';
+
+                $rankPos     = (int)$club['rank_position'];
+                $points      = (int)$club['total_points'];
+                $eventsCnt   = (int)$club['events_count'];
+                $membersCnt  = (int)$club['members_count'];
+
+                $statusRaw   = strtolower(trim((string)$club['status']));
+                $isActive    = ($statusRaw === 'active');
+
+                $sponsors = !empty($club['sponsors'])
+                    ? htmlspecialchars($club['sponsors'])
+                    : 'No active sponsor';
+              ?>
+                <tr data-name="<?= htmlspecialchars(strtolower($clubNameRaw)); ?>">
+                  <td class="col-rank"><?= $rankPos; ?></td>
+                  <td>
+                    <div class="clubcell">
+                      <span class="club-avatar">
+                        <?php if ($logo): ?>
+                          <img src="<?= $logo; ?>" alt="">
+                        <?php else: ?>
+                          <?= strtoupper(substr($clubNameRaw,0,1)); ?>
+                        <?php endif; ?>
                       </span>
+
+                      <div class="club-meta">
+                        <span class="club-name">
+                          <?= $clubName; ?>
+                          <?php if ($isActive): ?>
+                            <span class="status-chip status-active">Active</span>
+                          <?php else: ?>
+                            <span class="status-chip status-inactive">Inactive</span>
+                          <?php endif; ?>
+                        </span>
+
+                        <span class="club-sponsor">
+                          Sponsored by <strong><?= $sponsors; ?></strong>
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                </td>
-                <td class="points-cell"><?= number_format($points); ?></td>
-                <td><span class="pill"><?= $eventsCnt; ?></span></td>
-                <td><span class="pill"><?= $membersCnt; ?></span></td>
-              </tr>
-            <?php
-              $rank++;
-              endforeach;
-            endif;
-            ?>
+                  </td>
+                  <td class="points-cell"><?= number_format($points); ?></td>
+                  <td><span class="pill"><?= $eventsCnt; ?></span></td>
+                  <td><span class="pill"><?= $membersCnt; ?></span></td>
+                </tr>
+              <?php endforeach; ?>
+            <?php endif; ?>
           </tbody>
         </table>
       </div>

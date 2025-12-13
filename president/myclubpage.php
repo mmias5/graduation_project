@@ -65,6 +65,44 @@ if (!$logo_url) {
     $logo_url = "tools/pics/social_life.png";
 }
 
+/* =========================
+   Helper: Sponsor initials
+========================= */
+function makeInitials(string $name): string {
+    $name = trim(preg_replace('/\s+/', ' ', $name));
+    if ($name === '' || strtolower($name) === 'no sponsor yet') return 'SP';
+    $parts = explode(' ', $name);
+    $first = mb_substr($parts[0], 0, 1, 'UTF-8');
+    $second = '';
+    if (count($parts) > 1) {
+        $second = mb_substr($parts[1], 0, 1, 'UTF-8');
+    } else {
+        $second = mb_substr($parts[0], 1, 1, 'UTF-8');
+    }
+    $ini = mb_strtoupper($first . $second, 'UTF-8');
+    return $ini !== '' ? $ini : 'SP';
+}
+
+/* =========================
+   NEW: Fetch CLUB sponsor (club.sponsor_id)
+========================= */
+$sponsorName = 'No sponsor yet';
+$sponsorInitials = 'SP';
+
+$clubSponsorId = (int)($club['sponsor_id'] ?? 0);
+if ($clubSponsorId > 0) {
+    $stmtSp = $conn->prepare("SELECT company_name FROM sponsor WHERE sponsor_id = ? LIMIT 1");
+    $stmtSp->bind_param("i", $clubSponsorId);
+    $stmtSp->execute();
+    $resSp = $stmtSp->get_result();
+    if ($resSp && $resSp->num_rows > 0) {
+        $sp = $resSp->fetch_assoc();
+        $sponsorName = $sp['company_name'] ?? $sponsorName;
+    }
+    $stmtSp->close();
+}
+$sponsorInitials = makeInitials((string)$sponsorName);
+
 // ===== Members count (for displayed club) =====
 $membersCount = 0;
 $stmt = $conn->prepare("SELECT COUNT(*) AS c FROM student WHERE club_id = ?");
@@ -182,6 +220,12 @@ body{
   border:1px solid rgba(255,255,255,.7);
   border-radius:20px; padding:12px 14px; color:#1d244d;
 }
+.circle{
+  width:42px;height:42px;border-radius:50%;
+  background:radial-gradient(circle at 30% 30%, #fff, #b9ccff);
+  display:grid; place-items:center; font-weight:800; font-size:14px; color:#1d244d;
+  border:2px solid rgba(255,255,255,.8);
+}
 .h-title{
   font-size:34px; letter-spacing:.35em; text-transform:uppercase; margin:34px 0 12px;
   text-align:left; color:#2b2f55;
@@ -261,9 +305,13 @@ body{
             </div>
           </div>
 
+          <!-- UPDATED PILL: Sponsor -->
           <div class="pill">
-            <div style="font-size:12px;opacity:.8">club id</div>
-            <strong><?php echo (int)$display_club_id; ?></strong>
+            <div class="circle"><?php echo htmlspecialchars($sponsorInitials); ?></div>
+            <div>
+              <div style="font-size:12px;opacity:.8">sponsor name</div>
+              <strong><?php echo htmlspecialchars($sponsorName); ?></strong>
+            </div>
           </div>
         </div>
 

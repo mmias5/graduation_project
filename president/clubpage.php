@@ -47,6 +47,24 @@ if ($clubId === 1) {
 }
 
 /* =========================
+   Helper: Sponsor initials
+========================= */
+function makeInitials(string $name): string {
+    $name = trim(preg_replace('/\s+/', ' ', $name));
+    if ($name === '' || strtolower($name) === 'no sponsor yet') return 'SP';
+    $parts = explode(' ', $name);
+    $first = mb_substr($parts[0], 0, 1, 'UTF-8');
+    $second = '';
+    if (count($parts) > 1) {
+        $second = mb_substr($parts[1], 0, 1, 'UTF-8');
+    } else {
+        $second = mb_substr($parts[0], 1, 1, 'UTF-8');
+    }
+    $ini = mb_strtoupper($first . $second, 'UTF-8');
+    return $ini !== '' ? $ini : 'SP';
+}
+
+/* =========================
    3) Handle JOIN (POST)
    - Save reason
    - Prevent duplicate pending for same club
@@ -65,9 +83,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'join'
         exit;
     }
 
-   // ✅ always trust the club_id from URL
-$postedClubId = $clubId;
+    // ✅ always trust the club_id from URL
+    $postedClubId = $clubId;
 
+    // ✅ FIX: reason was missing
+    $reason = trim((string)($_POST['reason'] ?? ''));
 
     if ($reason === '') {
         $_SESSION['flash'] = [
@@ -86,7 +106,7 @@ $postedClubId = $clubId;
         WHERE club_id = ? AND student_id = ? AND status = 'pending'
         LIMIT 1
     ");
-    $stmtCheck->bind_param("ii", $clubId, $studentId);
+    $stmtCheck->bind_param("ii", $postedClubId, $studentId);
     $stmtCheck->execute();
     $resCheck = $stmtCheck->get_result();
     $hasPending = ($resCheck && $resCheck->num_rows > 0);
@@ -107,7 +127,7 @@ $postedClubId = $clubId;
         INSERT INTO club_membership_request (club_id, student_id, reason, status, submitted_at)
         VALUES (?, ?, ?, 'pending', NOW())
     ");
-    $stmtIns->bind_param("iis", $clubId, $studentId, $reason);
+    $stmtIns->bind_param("iis", $postedClubId, $studentId, $reason);
     $stmtIns->execute();
     $stmtIns->close();
 
@@ -144,6 +164,27 @@ $instagramUrl    = !empty($club['instagram_url']) ? $club['instagram_url'] : "#"
 $linkedinUrl     = !empty($club['linkedin_url']) ? $club['linkedin_url'] : "#";
 $memberCount     = (int)($club['member_count'] ?? 0);
 $clubPoints      = (int)($club['points'] ?? 0);
+
+/* =========================
+   4.5) Fetch CLUB Sponsor (from club.sponsor_id)
+   - each club has ONE sponsor
+========================= */
+$sponsorName = 'No sponsor yet';
+$sponsorInitials = 'SP';
+
+$clubSponsorId = (int)($club['sponsor_id'] ?? 0);
+if ($clubSponsorId > 0) {
+    $stmtSp = $conn->prepare("SELECT company_name FROM sponsor WHERE sponsor_id = ? LIMIT 1");
+    $stmtSp->bind_param("i", $clubSponsorId);
+    $stmtSp->execute();
+    $resSp = $stmtSp->get_result();
+    if ($resSp && $resSp->num_rows > 0) {
+        $sp = $resSp->fetch_assoc();
+        $sponsorName = $sp['company_name'] ?? $sponsorName;
+    }
+    $stmtSp->close();
+}
+$sponsorInitials = makeInitials((string)$sponsorName);
 
 /* =========================
    5) Last request status for this club (for button label)
@@ -322,11 +363,12 @@ body{
           </div>
         </div>
 
+        <!-- UPDATED pill: sponsor -->
         <div class="pill">
-          <div class="circle"><?php echo (int)$memberCount; ?></div>
+          <div class="circle"><?php echo htmlspecialchars($sponsorInitials); ?></div>
           <div>
-            <div style="font-size:12px;opacity:.8">active members</div>
-            <strong><?php echo htmlspecialchars($clubName); ?> Community</strong>
+            <div style="font-size:12px;opacity:.8">sponsor name</div>
+            <strong><?php echo htmlspecialchars($sponsorName); ?></strong>
           </div>
         </div>
       </div>

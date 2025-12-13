@@ -1,10 +1,10 @@
 <?php
-
 session_start();
 
-if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
+/* ✅ Student-only access (Rewards page for student) */
+if (!isset($_SESSION['student_id']) || ($_SESSION['role'] ?? '') !== 'student') {
     if (isset($_SESSION['role']) && $_SESSION['role'] === 'club_president') {
-        header('Location: ../president/rewards.php');
+        header('Location: ../president/index.php');
         exit;
     }
     header('Location: ../login.php');
@@ -69,10 +69,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['redeem_submit'])) {
         if ($itemId <= 0 || $code === '') {
             $redeemError = 'Please choose a reward and enter its code.';
         } else {
-            // جلب الـ reward من DB
+            // ✅ جلب الـ reward من DB (ACTIVE ONLY)
             $sql = "SELECT item_id, item_name, value, code, picture
                     FROM items_to_redeem
-                    WHERE item_id = ? LIMIT 1";
+                    WHERE item_id = ? AND is_active = 1
+                    LIMIT 1";
             $stmt = $conn->prepare($sql);
             $stmt->bind_param("i", $itemId);
             $stmt->execute();
@@ -80,7 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['redeem_submit'])) {
             $stmt->close();
 
             if (!$item) {
-                $redeemError = 'Reward not found.';
+                $redeemError = 'Reward not found (or it is no longer available).';
             } elseif (strcasecmp($code, $item['code']) !== 0) {
                 $redeemError = 'Invalid code for this reward.';
             } else {
@@ -92,7 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['redeem_submit'])) {
                 } elseif ($currentPoints < $costPoints) {
                     $redeemError = 'You do not have enough points to redeem this reward.';
                 } else {
-                    // ✅ Transaction: يا بخصم + بسجّل redemption يا بيرجع ولا كأنّه صار شي
+                    // ✅ Transaction: خصم + تسجيل redemption
                     try {
                         $conn->begin_transaction();
 
@@ -128,7 +129,11 @@ $progressRatio  = $progressTarget > 0 ? min(1, $currentPoints / $progressTarget)
 
 $rewards = [];
 if (isset($conn) && $conn instanceof mysqli) {
-    $sql = "SELECT item_id, item_name, value, code, picture FROM items_to_redeem ORDER BY value ASC";
+    // ✅ ACTIVE ONLY
+    $sql = "SELECT item_id, item_name, value, code, picture
+            FROM items_to_redeem
+            WHERE is_active = 1
+            ORDER BY value ASC";
     $res = $conn->query($sql);
     if ($res) {
         while ($row = $res->fetch_assoc()) {
@@ -198,7 +203,7 @@ if (isset($conn) && $conn instanceof mysqli) {
     --progress: .35;
     --h: 38px;
     position: relative;
-    margin: 0 auto 28px;
+    margin: 0 auto 18px;
     width: min(620px, 92%);
     height: var(--h);
     border-radius: calc(var(--h) / 2);
@@ -231,6 +236,42 @@ if (isset($conn) && $conn instanceof mysqli) {
     color:#14532d;
     border:1px solid #bbf7d0;
   }
+
+  /* ✅ Search bar */
+  .search-wrap{
+    width:min(520px, 92%);
+    margin: 0 auto 22px;
+    display:flex;
+    gap:10px;
+    align-items:center;
+    justify-content:center;
+  }
+  .search-input{
+    width:100%;
+    height: 44px;
+    border-radius: 999px;
+    border: 2px solid #E5E9F5;
+    outline: none;
+    padding: 0 14px;
+    font-size: 14px;
+    box-shadow: var(--shadow-soft);
+    background:#fff;
+  }
+  .search-input:focus{
+    border-color: rgba(72,113,219,.65);
+  }
+  .search-clear{
+    height:44px;
+    padding:0 14px;
+    border-radius:999px;
+    border:none;
+    cursor:pointer;
+    font-weight:800;
+    background:#EEF2FA;
+    color:#1f2a45;
+    box-shadow: var(--shadow-soft);
+  }
+  .search-clear:hover{ filter:brightness(.98); }
 
   .rewards{ display:grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
 
@@ -265,6 +306,18 @@ if (isset($conn) && $conn instanceof mysqli) {
   }
   .rc-cta:hover{ filter:saturate(1.05);background:#4871DB; color:#fff; }
   .rc-cta:active{ transform: translateY(1px); }
+
+  .no-results{
+    grid-column: 1 / -1;
+    background: rgba(255,255,255,.75);
+    border: 1px solid #e5e7eb;
+    border-radius: 16px;
+    padding: 18px;
+    text-align:center;
+    color:#65708A;
+    box-shadow: var(--shadow-soft);
+    display:none;
+  }
 
   .modal-backdrop{
     position: fixed; inset: 0; display:none;
@@ -307,6 +360,7 @@ if (isset($conn) && $conn instanceof mysqli) {
 <body>
 
 <?php include 'header.php'; ?>
+
 <section class="loyalty" aria-labelledby="loyalty-heading">
   <div class="container">
 
@@ -325,28 +379,52 @@ if (isset($conn) && $conn instanceof mysqli) {
       <div class="fill"></div>
     </div>
 
+    <!-- ✅ Search bar -->
+    <div class="search-wrap">
+      <input id="rewardSearch" class="search-input" type="text" placeholder="Search reward by name..." autocomplete="off">
+      <button id="clearSearch" class="search-clear" type="button">Clear</button>
+    </div>
+
     <!-- Rewards grid -->
-    <div class="rewards">
-      <?php foreach ($rewards as $r): ?>
-        <?php $cost = (int)$r['value']; ?>
-        <article class="reward-card">
-          <div class="rc-photo">
-            <img src="<?php echo escapeH($r['picture']); ?>" alt="<?php echo escapeH($r['item_name']); ?>" loading="lazy">
-          </div>
-          <div class="rc-body">
-            <h3 class="rc-title"><?php echo escapeH($r['item_name']); ?></h3>
-            <p class="rc-sub"><?php echo $cost; ?> Points</p>
-            <button
-              class="rc-cta redeem-btn"
-              type="button"
-              data-reward="<?php echo escapeH($r['item_name']); ?>"
-              data-item-id="<?php echo (int)$r['item_id']; ?>"
-            >
-              Redeem
-            </button>
-          </div>
-        </article>
-      <?php endforeach; ?>
+    <div class="rewards" id="rewardsGrid">
+      <?php if (empty($rewards)): ?>
+        <div class="no-results" style="display:block;">No rewards available right now.</div>
+      <?php else: ?>
+        <?php foreach ($rewards as $r): ?>
+          <?php
+            $cost = (int)$r['value'];
+            $pic  = trim((string)($r['picture'] ?? ''));
+
+            // ✅ Ensure correct relative path for student folder
+            $imgSrc = '';
+            if ($pic !== '') {
+                $imgSrc = '../' . ltrim($pic, '/');
+            }
+          ?>
+          <article class="reward-card" data-name="<?php echo escapeH(mb_strtolower((string)$r['item_name'])); ?>">
+            <div class="rc-photo">
+              <?php if ($imgSrc !== ''): ?>
+                <img src="<?php echo escapeH($imgSrc); ?>" alt="<?php echo escapeH($r['item_name']); ?>" loading="lazy">
+              <?php else: ?>
+                <img src="../assets/rewards/default_reward.jpg" alt="<?php echo escapeH($r['item_name']); ?>" loading="lazy" onerror="this.style.display='none'">
+              <?php endif; ?>
+            </div>
+            <div class="rc-body">
+              <h3 class="rc-title"><?php echo escapeH($r['item_name']); ?></h3>
+              <p class="rc-sub"><?php echo $cost; ?> Points</p>
+              <button
+                class="rc-cta redeem-btn"
+                type="button"
+                data-reward="<?php echo escapeH($r['item_name']); ?>"
+                data-item-id="<?php echo (int)$r['item_id']; ?>"
+              >
+                Redeem
+              </button>
+            </div>
+          </article>
+        <?php endforeach; ?>
+        <div class="no-results" id="noResults">No rewards match your search.</div>
+      <?php endif; ?>
     </div>
   </div>
 </section>
@@ -374,6 +452,7 @@ if (isset($conn) && $conn instanceof mysqli) {
 </div>
 
 <script>
+  // ===== Redeem modal =====
   const modal = document.getElementById('redeemModal');
   const backdrop = document.getElementById('redeemBackdrop');
   const rewardNameEl = document.getElementById('rewardName').querySelector('strong');
@@ -402,6 +481,39 @@ if (isset($conn) && $conn instanceof mysqli) {
   document.getElementById('btnCancel').addEventListener('click', closeModal);
   backdrop.addEventListener('click', closeModal);
   window.addEventListener('keydown', e => { if(e.key === 'Escape') closeModal(); });
+
+  // ===== Search filter =====
+  const searchInput = document.getElementById('rewardSearch');
+  const clearBtn = document.getElementById('clearSearch');
+  const cards = Array.from(document.querySelectorAll('.reward-card'));
+  const noResults = document.getElementById('noResults');
+
+  function applyFilter(){
+    const q = (searchInput.value || '').trim().toLowerCase();
+    let shown = 0;
+
+    cards.forEach(card => {
+      const name = (card.dataset.name || '');
+      const match = (q === '' || name.includes(q));
+      card.style.display = match ? '' : 'none';
+      if (match) shown++;
+    });
+
+    if (noResults) {
+      noResults.style.display = (shown === 0 && cards.length > 0) ? 'block' : 'none';
+    }
+  }
+
+  if (searchInput) {
+    searchInput.addEventListener('input', applyFilter);
+  }
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      searchInput.value = '';
+      applyFilter();
+      searchInput.focus();
+    });
+  }
 </script>
 
 <?php include 'footer.php'; ?>

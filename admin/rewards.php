@@ -5,7 +5,7 @@ require_once 'admin_auth.php';
 
 $currentPage = basename($_SERVER['PHP_SELF']);
 
-// ===== Helper: generate code like COFFEE70 / random =====
+// ===== Helper: generate code like UH-ABCDE =====
 function generateRewardCode(): string {
     $prefix = 'UH';
     $chars  = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -16,7 +16,7 @@ function generateRewardCode(): string {
     return $prefix . '-' . $middle;
 }
 
-// ===== Handle POST (add / delete) =====
+// ===== Handle POST (add / delete=archive) =====
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
@@ -44,19 +44,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $fileName = basename($_FILES['reward_image']['name']);
             $ext      = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
 
-            $newName  = 'reward_' . time() . '_' . rand(1000, 9999) . '.' . $ext;
-            $target   = $uploadDir . $newName;
+            // basic allowlist
+            $allowed = ['jpg','jpeg','png','webp','gif'];
+            if (in_array($ext, $allowed, true)) {
+                $newName  = 'reward_' . time() . '_' . rand(1000, 9999) . '.' . $ext;
+                $target   = $uploadDir . $newName;
 
-            if (move_uploaded_file($fileTmp, $target)) {
-                $imagePath = 'assets/rewards/' . $newName; // مثل القيم اللي عندك
+                if (move_uploaded_file($fileTmp, $target)) {
+                    $imagePath = 'assets/rewards/' . $newName; // stored in DB
+                }
             }
         }
 
         $code = generateRewardCode();
 
-        $sql = "INSERT INTO items_to_redeem (item_name, value, code, picture)
-                VALUES (?, ?, ?, ?)";
+        // NOTE: assumes items_to_redeem has: item_name, value, code, picture, is_active (default 1)
+        $sql = "INSERT INTO items_to_redeem (item_name, value, code, picture, is_active)
+                VALUES (?, ?, ?, ?, 1)";
         $stmt = $conn->prepare($sql);
+        if (!$stmt) {
+            $_SESSION['flash_error'] = 'DB error: ' . $conn->error;
+            header('Location: rewards.php');
+            exit;
+        }
+
         $stmt->bind_param("siss", $name, $points, $code, $imagePath);
 
         if ($stmt->execute()) {
@@ -65,11 +76,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['flash_error'] = 'Error adding reward: ' . $stmt->error;
         }
 
+        $stmt->close();
         header('Location: rewards.php');
         exit;
     }
 
-    // ---- Delete reward ----
+    // ---- Delete reward (Archive) ----
     if ($action === 'delete') {
         $id = (int)($_POST['item_id'] ?? 0);
 
@@ -79,27 +91,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
-        // نجيب الصورة عشان نحذفها من المجلد
-        $sel = $conn->prepare("SELECT picture FROM items_to_redeem WHERE item_id = ? LIMIT 1");
-        $sel->bind_param("i", $id);
-        $sel->execute();
-        $res = $sel->get_result();
-        if ($row = $res->fetch_assoc()) {
-            $pic = $row['picture'];
-            if (!empty($pic) && file_exists('../' . $pic)) {
-                @unlink('../' . $pic);
-            }
+        // ✅ Archive instead of hard delete (keep redemption history)
+        $upd = $conn->prepare("UPDATE items_to_redeem SET is_active = 0 WHERE item_id = ? LIMIT 1");
+        if (!$upd) {
+            $_SESSION['flash_error'] = 'DB error: ' . $conn->error;
+            header('Location: rewards.php');
+            exit;
         }
 
-        $del = $conn->prepare("DELETE FROM items_to_redeem WHERE item_id = ?");
-        $del->bind_param("i", $id);
+        $upd->bind_param("i", $id);
 
-        if ($del->execute()) {
-            $_SESSION['flash_success'] = 'Reward deleted successfully.';
+        if ($upd->execute()) {
+            $_SESSION['flash_success'] = 'Reward archived successfully (hidden from students).';
         } else {
-            $_SESSION['flash_error'] = 'Error deleting reward: ' . $del->error;
+            $_SESSION['flash_error'] = 'Error archiving reward: ' . $upd->error;
         }
 
+        $upd->close();
+        header('Location: rewards.php');
+        exit;
+    }
+
+    // (Optional) Restore archived reward
+    if ($action === 'restore') {
+        $id = (int)($_POST['item_id'] ?? 0);
+
+        if ($id <= 0) {
+            $_SESSION['flash_error'] = 'Invalid reward id.';
+            header('Location: rewards.php');
+            exit;
+        }
+
+        $upd = $conn->prepare("UPDATE items_to_redeem SET is_active = 1 WHERE item_id = ? LIMIT 1");
+        if (!$upd) {
+            $_SESSION['flash_error'] = 'DB error: ' . $conn->error;
+            header('Location: rewards.php');
+            exit;
+        }
+
+        $upd->bind_param("i", $id);
+
+        if ($upd->execute()) {
+            $_SESSION['flash_success'] = 'Reward restored successfully.';
+        } else {
+            $_SESSION['flash_error'] = 'Error restoring reward: ' . $upd->error;
+        }
+
+        $upd->close();
         header('Location: rewards.php');
         exit;
     }
@@ -107,7 +145,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // ===== Fetch rewards from DB =====
 $rewards = [];
-$res = $conn->query("SELECT * FROM items_to_redeem ORDER BY item_id DESC");
+$res = $conn->query("SELECT * FROM items_to_redeem ORDER BY is_active DESC, item_id DESC");
 if ($res && $res->num_rows > 0) {
     while ($row = $res->fetch_assoc()) {
         $rewards[] = $row;
@@ -138,9 +176,7 @@ if ($res && $res->num_rows > 0) {
       --radius-lg:26px;
     }
 
-    *{
-      box-sizing:border-box;
-    }
+    *{ box-sizing:border-box; }
 
     body{
       margin:0;
@@ -149,10 +185,7 @@ if ($res && $res->num_rows > 0) {
       color:var(--ink);
     }
 
-    .admin-layout{
-      display:flex;
-      min-height:100vh;
-    }
+    .admin-layout{ display:flex; min-height:100vh; }
 
     .admin-main{
       margin-left:var(--sidebarWidth);
@@ -226,15 +259,9 @@ if ($res && $res->num_rows > 0) {
       font-size:.9rem;
     }
 
-    .form-group label{
-      font-weight:600;
-      color:var(--navy);
-    }
+    .form-group label{ font-weight:600; color:var(--navy); }
 
-    .form-group small{
-      font-size:.8rem;
-      color:var(--muted);
-    }
+    .form-group small{ font-size:.8rem; color:var(--muted); }
 
     .input-text,
     .input-number{
@@ -291,14 +318,8 @@ if ($res && $res->num_rows > 0) {
       box-shadow:0 16px 40px rgba(248,113,113,.65);
     }
 
-    .btn-ghost{
-      background:transparent;
-      color:var(--royal);
-    }
-
-    .btn-ghost:hover{
-      background:rgba(72,113,219,.08);
-    }
+    .btn-ghost{ background:transparent; color:var(--royal); }
+    .btn-ghost:hover{ background:rgba(72,113,219,.08); }
 
     .btn-danger{
       border:1px solid rgba(248,113,113,.7);
@@ -307,27 +328,47 @@ if ($res && $res->num_rows > 0) {
       padding:7px 12px;
       font-size:.8rem;
     }
+    .btn-danger:hover{ background:#fee2e2; }
 
-    .btn-danger:hover{
-      background:#fee2e2;
+    .btn-restore{
+      border:1px solid rgba(72,113,219,.45);
+      color:#1d3a8a;
+      background:#edf2ff;
+      padding:7px 12px;
+      font-size:.8rem;
     }
+    .btn-restore:hover{ background:#dbe7ff; }
 
-    .table-wrapper{
-      overflow-x:auto;
+    /* ✅ Search bar */
+    .search-wrap{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      width:min(520px,100%);
     }
-
-    table{
+    .search-input{
       width:100%;
-      border-collapse:collapse;
+      border-radius:999px;
+      border:1px solid #d1d5db;
+      padding:9px 14px;
+      font-family:inherit;
       font-size:.9rem;
+      outline:none;
+      background:#f9fafb;
+    }
+    .search-input:focus{
+      border-color:var(--royal);
+      box-shadow:0 0 0 1px rgba(72,113,219,.3);
+      background:#ffffff;
     }
 
-    thead{
-      background:#f7f8fd;
-    }
+    .table-wrapper{ overflow-x:auto; }
 
-    th,
-    td{
+    table{ width:100%; border-collapse:collapse; font-size:.9rem; }
+
+    thead{ background:#f7f8fd; }
+
+    th, td{
       padding:10px 12px;
       text-align:left;
       white-space:nowrap;
@@ -367,16 +408,9 @@ if ($res && $res->num_rows > 0) {
       border:1px solid #e5e7eb;
     }
 
-    .reward-name{
-      font-weight:600;
-      color:var(--navy);
-      margin-bottom:2px;
-    }
+    .reward-name{ font-weight:600; color:var(--navy); margin-bottom:2px; }
 
-    .reward-meta{
-      font-size:.8rem;
-      color:var(--muted);
-    }
+    .reward-meta{ font-size:.8rem; color:var(--muted); }
 
     .points-chip{
       display:inline-flex;
@@ -400,6 +434,17 @@ if ($res && $res->num_rows > 0) {
       letter-spacing:.06em;
     }
 
+    .status-chip{
+      display:inline-flex;
+      align-items:center;
+      padding:4px 10px;
+      border-radius:999px;
+      font-size:.78rem;
+      font-weight:700;
+    }
+    .status-active{ background:#dcfce7; color:#166534; }
+    .status-arch{ background:#fee2e2; color:#991b1b; }
+
     .table-actions{
       display:flex;
       align-items:center;
@@ -413,27 +458,21 @@ if ($res && $res->num_rows > 0) {
       border-radius:12px;
       font-size:.9rem;
     }
-    .flash.success{
-      background:#dcfce7;
-      color:#166534;
-    }
-    .flash.error{
-      background:#fee2e2;
-      color:#991b1b;
+    .flash.success{ background:#dcfce7; color:#166534; }
+    .flash.error{ background:#fee2e2; color:#991b1b; }
+
+    .no-results{
+      text-align:center;
+      color:#6b7280;
+      padding:18px 10px;
+      display:none;
     }
 
     @media (max-width:900px){
-      .admin-main{
-        margin-left:0;
-        padding:20px 16px 28px;
-      }
-      .form-grid{
-        grid-template-columns:1fr;
-      }
-      .page-header{
-        flex-direction:column;
-        align-items:flex-start;
-      }
+      .admin-main{ margin-left:0; padding:20px 16px 28px; }
+      .form-grid{ grid-template-columns:1fr; }
+      .page-header{ flex-direction:column; align-items:flex-start; }
+      .search-wrap{ width:100%; }
     }
   </style>
 </head>
@@ -509,18 +548,25 @@ if ($res && $res->num_rows > 0) {
         <div>
           <h2 class="card-title">All rewards</h2>
           <p class="card-subtitle">
-            Showing <?php echo count($rewards); ?> reward(s) from <code>items_to_redeem</code>.
+            Showing <span id="shownCount"><?php echo count($rewards); ?></span> reward(s) from <code>items_to_redeem</code>.
           </p>
+        </div>
+
+        <!-- ✅ Search bar -->
+        <div class="search-wrap">
+          <input id="rewardSearch" class="search-input" type="text" placeholder="Search reward by name..." autocomplete="off">
+          <button id="clearSearch" type="button" class="btn btn-ghost">Clear</button>
         </div>
       </div>
 
       <div class="table-wrapper">
-        <table>
+        <table id="rewardsTable">
           <thead>
             <tr>
               <th>Reward</th>
               <th>Points</th>
               <th>Code</th>
+              <th>Status</th>
               <th>Created at</th>
               <th style="text-align:right;">Actions</th>
             </tr>
@@ -528,69 +574,79 @@ if ($res && $res->num_rows > 0) {
           <tbody>
             <?php if (empty($rewards)): ?>
               <tr>
-                <td colspan="5" style="text-align:center; padding:18px 10px; color:#6b7280;">
+                <td colspan="6" style="text-align:center; padding:18px 10px; color:#6b7280;">
                   No rewards yet. Use the form above to add one.
                 </td>
               </tr>
             <?php else: ?>
               <?php foreach ($rewards as $reward): ?>
-                <tr>
-                  <!-- Reward cell (image + name + ID) -->
+                <?php
+                  $isActive = (int)($reward['is_active'] ?? 1);
+                  $createdAt = $reward['created_at'] ?? null; // may not exist
+                ?>
+                <tr class="reward-tr" data-name="<?php echo htmlspecialchars(mb_strtolower((string)$reward['item_name'])); ?>">
+                  <!-- Reward cell -->
                   <td>
                     <div class="reward-row">
                       <?php if (!empty($reward['picture'])): ?>
-                        <img src="../<?php echo htmlspecialchars($reward['picture']); ?>"
-                             alt="" class="reward-img">
+                        <img src="../<?php echo htmlspecialchars($reward['picture']); ?>" alt="" class="reward-img">
                       <?php else: ?>
                         <div class="reward-img"></div>
                       <?php endif; ?>
 
                       <div>
-                        <div class="reward-name">
-                          <?php echo htmlspecialchars($reward['item_name']); ?>
-                        </div>
-                        <div class="reward-meta">
-                          ID #<?php echo (int)$reward['item_id']; ?>
-                        </div>
+                        <div class="reward-name"><?php echo htmlspecialchars($reward['item_name']); ?></div>
+                        <div class="reward-meta">ID #<?php echo (int)$reward['item_id']; ?></div>
                       </div>
                     </div>
                   </td>
 
-                  <!-- Points -->
                   <td>
-                    <span class="points-chip">
-                      <?php echo (int)$reward['value']; ?> pts
+                    <span class="points-chip"><?php echo (int)$reward['value']; ?> pts</span>
+                  </td>
+
+                  <td>
+                    <span class="code-chip"><?php echo htmlspecialchars($reward['code']); ?></span>
+                  </td>
+
+                  <td>
+                    <?php if ($isActive === 1): ?>
+                      <span class="status-chip status-active">Active</span>
+                    <?php else: ?>
+                      <span class="status-chip status-arch">Archived</span>
+                    <?php endif; ?>
+                  </td>
+
+                  <td>
+                    <span class="reward-meta">
+                      <?php echo $createdAt ? htmlspecialchars((string)$createdAt) : '—'; ?>
                     </span>
                   </td>
 
-                  <!-- Code -->
-                  <td>
-                    <span class="code-chip">
-                      <?php echo htmlspecialchars($reward['code']); ?>
-                    </span>
-                  </td>
-
-                  <!-- Created at (no column in DB, so just “—”) -->
-                  <td>
-  <span class="reward-meta">
-    <?php echo htmlspecialchars($reward['created_at']); ?>
-  </span>
-</td>
-
-
-                  <!-- Actions -->
                   <td>
                     <div class="table-actions">
-                      <form action="rewards.php" method="post"
-                            onsubmit="return confirm('Delete reward &quot;<?php echo htmlspecialchars($reward['item_name']); ?>&quot;?');">
-                        <input type="hidden" name="action" value="delete">
-                        <input type="hidden" name="item_id" value="<?php echo (int)$reward['item_id']; ?>">
-                        <button type="submit" class="btn btn-danger">Delete</button>
-                      </form>
+                      <?php if ($isActive === 1): ?>
+                        <form action="rewards.php" method="post"
+                              onsubmit="return confirm('Archive reward &quot;<?php echo htmlspecialchars($reward['item_name']); ?>&quot;?');">
+                          <input type="hidden" name="action" value="delete">
+                          <input type="hidden" name="item_id" value="<?php echo (int)$reward['item_id']; ?>">
+                          <button type="submit" class="btn btn-danger">Archive</button>
+                        </form>
+                      <?php else: ?>
+                        <form action="rewards.php" method="post"
+                              onsubmit="return confirm('Restore reward &quot;<?php echo htmlspecialchars($reward['item_name']); ?>&quot;?');">
+                          <input type="hidden" name="action" value="restore">
+                          <input type="hidden" name="item_id" value="<?php echo (int)$reward['item_id']; ?>">
+                          <button type="submit" class="btn btn-restore">Restore</button>
+                        </form>
+                      <?php endif; ?>
                     </div>
                   </td>
                 </tr>
               <?php endforeach; ?>
+              <tr id="noResultsRow">
+                <td colspan="6" class="no-results">No rewards match your search.</td>
+              </tr>
             <?php endif; ?>
           </tbody>
         </table>
@@ -599,6 +655,45 @@ if ($res && $res->num_rows > 0) {
 
   </main>
 </div>
+
+<script>
+  const searchInput = document.getElementById('rewardSearch');
+  const clearBtn = document.getElementById('clearSearch');
+  const rows = Array.from(document.querySelectorAll('.reward-tr'));
+  const noResultsRow = document.getElementById('noResultsRow');
+  const shownCountEl = document.getElementById('shownCount');
+
+  function applyFilter(){
+    const q = (searchInput.value || '').trim().toLowerCase();
+    let shown = 0;
+
+    rows.forEach(r => {
+      const name = (r.dataset.name || '');
+      const match = (q === '' || name.includes(q));
+      r.style.display = match ? '' : 'none';
+      if (match) shown++;
+    });
+
+    if (shownCountEl) shownCountEl.textContent = shown;
+
+    if (noResultsRow) {
+      noResultsRow.style.display = (rows.length > 0 && shown === 0) ? '' : 'none';
+    }
+  }
+
+  if (searchInput) searchInput.addEventListener('input', applyFilter);
+
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      searchInput.value = '';
+      applyFilter();
+      searchInput.focus();
+    });
+  }
+
+  // initial
+  if (noResultsRow) noResultsRow.style.display = 'none';
+</script>
 
 </body>
 </html>

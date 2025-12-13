@@ -14,12 +14,29 @@ require_once __DIR__ . '/../config.php';
 // ======= Get club id from URL =======
 $clubId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 if ($clubId <= 0) {
-    // لو ما في id نرجع على discoverclubs
     header('Location: discoverclubs.php');
     exit;
 }
 
-// ======= Fetch club from DB =======
+/* =========================
+   Helper: initials for sponsor pill
+========================= */
+function makeInitials(string $name): string {
+    $name = trim(preg_replace('/\s+/', ' ', $name));
+    if ($name === '' || strtolower($name) === 'no sponsor yet') return 'SP';
+    $parts = explode(' ', $name);
+    $first = mb_substr($parts[0], 0, 1, 'UTF-8');
+    $second = '';
+    if (count($parts) > 1) {
+        $second = mb_substr($parts[1], 0, 1, 'UTF-8');
+    } else {
+        $second = mb_substr($parts[0], 1, 1, 'UTF-8');
+    }
+    $ini = mb_strtoupper($first . $second, 'UTF-8');
+    return $ini !== '' ? $ini : 'SP';
+}
+
+// ======= Fetch club from DB (WITH sponsor) =======
 $sql = "
     SELECT 
         c.club_id,
@@ -33,8 +50,12 @@ $sql = "
         c.instagram_url,
         c.facebook_url,
         c.linkedin_url,
+        c.sponsor_id,
+        sp.company_name AS club_sponsor_name,
         COALESCE(e.total_events, 0) AS total_events
     FROM club c
+    LEFT JOIN sponsor sp
+        ON sp.sponsor_id = c.sponsor_id
     LEFT JOIN (
         SELECT club_id, COUNT(*) AS total_events
         FROM event
@@ -43,7 +64,6 @@ $sql = "
     WHERE c.club_id = ?
     LIMIT 1
 ";
-
 
 $stmt = $conn->prepare($sql);
 if (!$stmt) {
@@ -67,15 +87,20 @@ $logo          = $club['logo']            ?? '';
 $memberCount   = isset($club['member_count']) ? (int)$club['member_count'] : 0;
 $points        = isset($club['points'])        ? (int)$club['points']        : 0;
 $totalEvents   = isset($club['total_events'])  ? (int)$club['total_events']  : 0;
-$university    = 'University of Jordan'; // placeholder ثابت لحد ما نقرر من وين نجيب اسم الجامعة
+
+$university    = 'University of Jordan'; // placeholder
 $contactEmail  = $club['contact_email']   ?? '';
 
 $instagramUrl  = $club['instagram_url']   ?? '';
 $facebookUrl   = $club['facebook_url']    ?? '';
 $linkedinUrl   = $club['linkedin_url']    ?? '';
 
-// Sponsor name from session (لو مخزن)
-$sponsorName   = $_SESSION['sponsor_name'] ?? 'Sponsor';
+// ✅ Sponsor for THIS CLUB from DB
+$clubSponsorName = $club['club_sponsor_name'] ?? '';
+if (trim($clubSponsorName) === '') {
+    $clubSponsorName = 'No sponsor yet';
+}
+$sponsorInitials = makeInitials($clubSponsorName);
 
 ?>
 <!doctype html>
@@ -85,11 +110,9 @@ $sponsorName   = $_SESSION['sponsor_name'] ?? 'Sponsor';
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Campus Clubs Hub — <?php echo htmlspecialchars($name); ?></title>
 
-<!-- Font -->
 <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;600;700;800&display=swap" rel="stylesheet">
 
 <style>
-/* ========= Brand Tokens ========= */
 :root{
   --navy: #242751;
   --royal: #4871db;
@@ -111,90 +134,22 @@ body{
   line-height:1.5;
 }
 
-/* ========= Top Nav ========= */
-.nav{
-  position:sticky;
-  top:0;
-  z-index:50;
-  background:var(--navy);
-  color:#fff;
-  box-shadow:var(--shadow);
-}
-.nav-inner{
-  max-width:1100px;
-  margin:0 auto;
-  padding:16px 20px;
-  display:flex;
-  align-items:center;
-  gap:16px;
-  justify-content:space-between;
-}
-.brand{
-  display:flex;
-  align-items:center;
-  gap:12px;
-  color:#fff;
-  text-decoration:none;
-}
-.brand-mark{
-  width:40px;height:40px;border-radius:50%;
-  background:conic-gradient(from 90deg at 50% 50%, #ff6a6a, #ffd36b, #7ad3ff, #9af0b2, #ff6a6a);
-  box-shadow:0 4px 12px rgba(0,0,0,.2);
-}
-.brand h1{
-  font-size:18px;
-  letter-spacing:.12em;
-  margin:0;
-  text-transform:uppercase
-}
-.nav-links{
-  display:flex;
-  gap:28px;
-  align-items:center;
-}
-.nav-links a{
-  color:#e8edff;
-  text-decoration:none;
-  font-weight:700;
-  font-size:15px;
-  opacity:.9;
-}
-.nav-links a:hover{
-  opacity:1;
-  text-decoration:underline
-}
-.user-badge{
-  display:flex;
-  align-items:center;
-  gap:8px;
-  color:#fff;
-  font-weight:700;
-}
-.user-dot{width:10px; height:10px; background:#ff6a6a; border-radius:50%}
-
 /* ========= Container helpers ========= */
 .section{padding:24px 20px}
 .wrap{max-width:1100px; margin:0 auto}
 
 /* ========= HERO ========= */
-.hero{
-  padding-top:36px; /* space under header */
-  padding-bottom:28px;
-}
+.hero{ padding-top:36px; padding-bottom:28px; }
 .hero-card{
-  position:relative;
-  overflow:hidden;
-  border-radius:28px;
+  position:relative; overflow:hidden; border-radius:28px;
   box-shadow:var(--shadow);
   min-height:320px;
-  display:flex;
-  align-items:flex-end;
+  display:flex; align-items:flex-end;
   background:none;
 }
 .hero-card::before{
   content:"";
-  position:absolute;
-  inset:0;
+  position:absolute; inset:0;
   background-image: var(--hero-bg, url("tools/pics/social_life.png"));
   background-size: cover;
   background-position: center;
@@ -204,26 +159,14 @@ body{
 }
 .hero-card::after{
   content:"";
-  position:absolute;
-  inset:0;
+  position:absolute; inset:0;
   background: linear-gradient(180deg, rgba(36,39,81,.15) 0%, rgba(36,39,81,.35) 60%, rgba(36,39,81,.55) 100%);
   pointer-events:none;
 }
 .hero-top{
-  position:absolute;
-  left:24px;
-  right:24px;
-  top:20px;
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  color:#fff;
-  text-shadow:0 8px 26px rgba(0,0,0,.35);
-}
-.hero-top h1{
-  margin:0;
-  letter-spacing:.35em;
-  font-size:32px
+  position:absolute; left:24px; right:24px; top:20px;
+  display:flex; justify-content:space-between; align-items:center;
+  color:#fff; text-shadow:0 8px 26px rgba(0,0,0,.35);
 }
 .tag{
   background:var(--gold);
@@ -252,6 +195,13 @@ body{
   border-radius:20px;
   padding:12px 14px;
   color:#1d244d;
+}
+.circle{
+  width:42px;height:42px;border-radius:50%;
+  background:radial-gradient(circle at 30% 30%, #fff, #b9ccff);
+  display:flex;align-items:center;justify-content:center;
+  font-weight:900;color:#1d244d;
+  border:2px solid rgba(255,255,255,.8);
 }
 
 /* ========= Headings ========= */
@@ -287,7 +237,6 @@ body{
   margin:0 0 18px;
 }
 
-/* ========= GOLD CONTACT STRIP INSIDE ========= */
 .contact-strip{
   background:#ffffff;
   border-radius:18px;
@@ -299,19 +248,14 @@ body{
   color:var(--navy);
   box-shadow:0 10px 24px rgba(15,23,42,0.16);
 }
-.contact-strip svg{
-  flex:0 0 22px;
-}
+.contact-strip svg{flex:0 0 22px}
 .contact-strip a{
   color:var(--navy);
   text-decoration:none;
   border-bottom:1px dashed rgba(36,39,81,.4);
 }
-.contact-strip a:hover{
-  border-bottom-style:solid;
-}
+.contact-strip a:hover{border-bottom-style:solid}
 
-/* ========= LINK TILES ========= */
 .link-grid{
   display:grid;
   grid-template-columns:repeat(3,1fr);
@@ -331,10 +275,7 @@ body{
   text-decoration:none;
 }
 .link-tile svg{flex:0 0 22px}
-.links{
-  font-weight:700;
-  color:var(--navy);
-}
+.links{font-weight:700;color:var(--navy)}
 .link-tile:hover{
   background: var(--gold);
   transform: translateY(-10px);
@@ -344,7 +285,7 @@ body{
 /* ========= STATS ========= */
 .stats{
   margin-top:18px;
-  margin-bottom:60px; /* space before footer */
+  margin-bottom:60px;
   display:grid;
   grid-template-columns:repeat(3,1fr);
   gap:18px;
@@ -406,7 +347,6 @@ body{
   box-shadow:0 16px 34px rgba(10,23,60,.45);
 }
 
-/* ========= Responsive ========= */
 @media (max-width:900px){
   .link-grid{grid-template-columns:1fr 1fr}
   .stats{grid-template-columns:1fr}
@@ -437,13 +377,13 @@ body{
         <!-- Club pill -->
         <div class="pill">
           <?php if (!empty($logo)): ?>
-            <img 
-              src="<?php echo htmlspecialchars($logo); ?>" 
+            <img
+              src="<?php echo htmlspecialchars($logo); ?>"
               alt="<?php echo htmlspecialchars($name); ?> logo"
-              style="width:42px; height:42px; border-radius:50%; object-fit:cover; border:2px solid rgba(255,255,255,.8)" 
+              style="width:42px; height:42px; border-radius:50%; object-fit:cover; border:2px solid rgba(255,255,255,.8)"
             />
           <?php else: ?>
-            <div style="width:42px;height:42px;border-radius:50%;background:#e5e7eb;display:flex;align-items:center;justify-content:center;font-weight:800;">
+            <div class="circle">
               <?php echo htmlspecialchars(mb_strtoupper(mb_substr($name,0,2))); ?>
             </div>
           <?php endif; ?>
@@ -453,15 +393,12 @@ body{
           </div>
         </div>
 
-        <!-- Sponsor pill -->
+        <!-- ✅ Sponsor pill (FROM DB club.sponsor_id) -->
         <div class="pill">
-          <!-- تقدر لاحقاً تربط لوجو السبو nsor من DB -->
-          <div style="width:42px;height:42px;border-radius:50%;background:#e5e7eb;display:flex;align-items:center;justify-content:center;font-weight:800;">
-            <?php echo htmlspecialchars(mb_strtoupper(mb_substr($sponsorName,0,2))); ?>
-          </div>
+          <div class="circle"><?php echo htmlspecialchars($sponsorInitials); ?></div>
           <div>
             <div style="font-size:12px;opacity:.8">sponsor name</div>
-            <strong><?php echo htmlspecialchars($sponsorName); ?></strong>
+            <strong><?php echo htmlspecialchars($clubSponsorName); ?></strong>
           </div>
         </div>
 
@@ -477,11 +414,8 @@ body{
     <div class="hr"></div>
 
     <div class="about">
-      <p>
-        <?php echo nl2br(htmlspecialchars($description)); ?>
-      </p>
+      <p><?php echo nl2br(htmlspecialchars($description)); ?></p>
 
-      <!-- GOLD CONTACT STRIP -->
       <div class="contact-strip">
         <svg viewBox='0 0 24 24' width='22' height='22' fill='none' stroke='#242751' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>
           <path d='M4 4h16v16H4z' stroke='none'/>
@@ -506,7 +440,6 @@ body{
         </div>
       </div>
 
-      <!-- LINKS -->
       <h4 style="letter-spacing:.4em; text-transform:uppercase; margin:8px 0 8px; color: var(--navy)">
         Links
       </h4>
@@ -551,15 +484,10 @@ body{
   </div>
 </section>
 
-<!-- ========== EVENTS & STATS ========== -->
 <section class="section">
   <div class="wrap">
-    <div class="past-events-container">
-      Want to see what this club has already done?
-    </div>
-    <a href="pastevents.php?club_id=<?php echo $clubId; ?>" class="past-events-btn">
-      📅 View Past Events
-    </a>
+    <div class="past-events-container">Want to see what this club has already done?</div>
+    <a href="pastevents.php?club_id=<?php echo $clubId; ?>" class="past-events-btn">📅 View Past Events</a>
 
     <div class="stats">
       <div class="stat">
