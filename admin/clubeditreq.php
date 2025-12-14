@@ -31,6 +31,7 @@ $sql = "
     JOIN club c ON c.club_id = cer.club_id
     LEFT JOIN student s ON s.student_id = cer.requested_by_student_id
     WHERE cer.reviewed_at IS NULL
+    AND cer.status = 'Pending'
     ORDER BY cer.submitted_at DESC
 ";
 
