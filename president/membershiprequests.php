@@ -203,6 +203,13 @@ function renderGrid(){
 }
 
 function cardHTML(m){
+  const reason = (m.reason || '').trim();
+  const reasonHtml = reason
+    ? `<div class="meta" style="margin-top:8px">
+         <strong>Reason:</strong> ${escapeHtml(reason)}
+       </div>`
+    : '';
+
   return `
   <div class="card" data-request="${m.request_id}">
     <img class="avatar" src="${m.avatar}" alt="${escapeHtml(m.name)}">
@@ -210,6 +217,7 @@ function cardHTML(m){
       <div class="name">${escapeHtml(m.name)}</div>
       <div class="meta">${escapeHtml(m.email)}</div>
       <div class="meta">${escapeHtml(m.major)} • Request sent ${escapeHtml(m.submitted)}</div>
+      ${reasonHtml}
       <span class="role-badge">Pending request</span>
     </div>
     <div class="actions">

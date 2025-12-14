@@ -556,11 +556,6 @@ if ($res) {
                 <span class="field-value"><?php echo htmlspecialchars($origSponsorShow); ?></span>
               </div>
 
-              <div class="field-row <?php echo $maxChanged ? 'changed-field' : ''; ?>">
-                <span class="field-label">Max attendees</span>
-                <span class="field-value"><?php echo htmlspecialchars((string)$origMax); ?></span>
-              </div>
-
               <div class="field-row <?php echo $dateChanged ? 'changed-field' : ''; ?>">
                 <span class="field-label">Date & Time</span>
                 <span class="field-value">
@@ -607,11 +602,6 @@ if ($res) {
               <div class="field-row <?php echo $sponsorChanged ? 'changed-field' : ''; ?>">
                 <span class="field-label">Sponsored by</span>
                 <span class="field-value"><?php echo htmlspecialchars($propSponsorShow); ?></span>
-              </div>
-
-              <div class="field-row <?php echo $maxChanged ? 'changed-field' : ''; ?>">
-                <span class="field-label">Max attendees</span>
-                <span class="field-value"><?php echo htmlspecialchars((string)$propMax); ?></span>
               </div>
 
               <div class="field-row <?php echo $dateChanged ? 'changed-field' : ''; ?>">

@@ -418,9 +418,7 @@ $today = date('Y-m-d');
               <span><span class="meta-label">Location:</span>
                 <?php echo htmlspecialchars($event['event_location']); ?>
               </span>
-              <span><span class="meta-label">Max attendees:</span>
-                <?php echo (int)$event['max_attendees']; ?>
-              </span>
+    ‏
             </div>
           </div>
 

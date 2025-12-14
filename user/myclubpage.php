@@ -486,7 +486,6 @@ $eventsDone = count($events);
             </div>
             <div>
               <div class="topline">
-                <span class="badge">Max <?php echo $maxAtt; ?> seats</span>
                 <span class="chip sponsor">Club Event</span>
               </div>
               <div class="title"><?php echo htmlspecialchars($ev['event_name'] ?? 'Event'); ?></div>
