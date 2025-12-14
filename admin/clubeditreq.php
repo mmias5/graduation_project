@@ -4,234 +4,492 @@ if (!isset($_SESSION['admin_id'])) {
     header('Location: login.php');
     exit;
 }
+require_once '../config.php';
 
-require_once '../config.php'; // اتصال DB
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
-// جلب طلبات التعديل (غير المراجَعة) مع اسم الطالب
+/* ===============================
+   Fetch PENDING club edit requests
+   =============================== */
+
+$editRequests = [];
+
 $sql = "
-    SELECT 
-        cer.request_id,
-        cer.new_club_name,
-        cer.new_logo,
-        s.student_name
+    SELECT
+        cer.*,
+        c.club_name         AS current_club_name,
+        c.category          AS current_category,
+        c.contact_email     AS current_contact_email,
+        c.description       AS current_description,
+        c.social_media_link AS current_social_media_link,
+        c.instagram_url     AS current_instagram,
+        c.facebook_url      AS current_facebook,
+        c.linkedin_url      AS current_linkedin,
+        c.logo              AS current_logo,
+        s.student_name      AS requested_by_name
     FROM club_edit_request cer
-    JOIN student s 
-        ON cer.requested_by_student_id = s.student_id
+    JOIN club c ON c.club_id = cer.club_id
+    LEFT JOIN student s ON s.student_id = cer.requested_by_student_id
     WHERE cer.reviewed_at IS NULL
     ORDER BY cer.submitted_at DESC
 ";
 
-$result = mysqli_query($conn, $sql);
 
-$editRequests = [];
-if ($result && mysqli_num_rows($result) > 0) {
-    while ($row = mysqli_fetch_assoc($result)) {
-        $editRequests[] = [
-            'id'        => $row['request_id'],
-            'club_name' => $row['new_club_name'],
-            'applicant' => $row['student_name'],  // اسم الطالب
-            'logo'      => $row['new_logo'] ?: 'assets/club-placeholder.png'
-        ];
-    }
+$res = $conn->query($sql);
+while ($res && ($row = $res->fetch_assoc())) {
+    $editRequests[] = $row;
+}
+
+/* helpers */
+function pickValue($newVal, $oldVal){
+    if ($newVal === null) return $oldVal;
+    if (is_string($newVal) && trim($newVal) === '') return $oldVal;
+    return $newVal;
+}
+function isChanged($newVal, $oldVal){
+    $n = trim((string)$newVal);
+    $o = trim((string)$oldVal);
+    if ($n === '') return false;
+    return strcasecmp($n, $o) !== 0;
 }
 ?>
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<title>UniHive — Club Edit Requests</title>
-<link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>UniHive — Club Edit Requests (Admin)</title>
 
-<style>
-:root{
-  --navy:#242751;
-  --coral:#ff5e5e;
-  --paper:#eef2f7;
-  --card:#ffffff;
-  --ink:#0e1228;
-  --muted:#6b7280;
-  --radius:22px;
-  --shadow:0 14px 34px rgba(10,23,60,.12);
+  <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
-  --sidebarWidth:260px; /* used by sidebar.php */
-}
+  <style>
+    :root{
+      --sidebarWidth:240px;
+      --navy:#242751;
+      --royal:#4871db;
+      --coral:#ff5e5e;
+      --paper:#eef2f7;
+      --card:#ffffff;
+      --ink:#0e1228;
+      --muted:#6b7280;
+      --shadow:0 18px 38px rgba(12,22,60,.16);
+      --radius-lg:20px;
+      --radius-pill:999px;
+    }
 
-*{box-sizing:border-box;margin:0;padding:0}
+    *{box-sizing:border-box;margin:0;padding:0}
 
-body{
-  margin:0;
-  background:var(--paper);
-  font-family:"Raleway",system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
-}
+    body{
+      margin:0;
+      font-family:"Raleway",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      background:var(--paper);
+      color:var(--ink);
+    }
 
-/* ===== Main content (sidebar is in sidebar.php) ===== */
-.content{
-  margin-left:var(--sidebarWidth);
-  padding:40px 50px;
-}
+    .page-shell{
+      margin-left:var(--sidebarWidth);
+      min-height:100vh;
+      padding:32px 40px 40px;
+    }
 
-.page-title{
-  font-size:2rem;
-  font-weight:800;
-  margin-bottom:20px;
-  color:var(--ink);
-}
+    .page-header{
+      display:flex;
+      align-items:flex-end;
+      justify-content:space-between;
+      gap:16px;
+      margin-bottom:24px;
+    }
 
-/* ===== Search row ===== */
-.search-row{
-  margin-bottom:24px;
-}
+    .page-title{
+      font-size:1.6rem;
+      font-weight:800;
+      letter-spacing:.02em;
+      color:var(--navy);
+    }
 
-.search-input{
-  width:320px;
-  max-width:100%;
-  padding:11px 14px;
-  border-radius:999px;
-  border:none;
-  outline:none;
-  font-size:.95rem;
-  background:#ffffff;
-  box-shadow:0 8px 22px rgba(15,23,42,.12);
-  color:var(--ink);
-}
+    .page-subtitle{
+      font-size:.97rem;
+      color:var(--muted);
+      margin-top:4px;
+    }
 
-.search-input::placeholder{
-  color:#9ca3af;
-}
+    .badge-pill{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:6px 12px;
+      border-radius:999px;
+      font-size:.8rem;
+      font-weight:600;
+      background:rgba(255,94,94,.06);
+      color:var(--coral);
+      white-space:nowrap;
+    }
 
-/* ===== Request cards ===== */
-.request-card{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  background:var(--card);
-  padding:18px 26px;
-  border-radius:var(--radius);
-  box-shadow:var(--shadow);
-  margin-bottom:18px;
-}
+    .chip-icon{
+      width:6px;
+      height:6px;
+      border-radius:50%;
+      background:var(--coral);
+    }
 
-.request-left{
-  display:flex;
-  align-items:center;
-  gap:20px;
-}
+    .toolbar{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:16px;
+      margin-bottom:24px;
+    }
 
-.club-logo{
-  width:60px;
-  height:60px;
-  border-radius:18px;
-  object-fit:cover;
-  background:#f3f4f6;
-}
+    .search-input{
+      flex:1;
+      position:relative;
+    }
 
-.request-text{
-  max-width:420px;
-  color:var(--ink);
-  line-height:1.4;
-}
+    .search-input input{
+      width:100%;
+      padding:10px 14px;
+      border-radius:999px;
+      border:1px solid rgba(15,23,42,.08);
+      background:#f9fafb;
+      font-size:.93rem;
+      outline:none;
+    }
 
-.request-text .club-name{
-  font-weight:700;
-  margin-bottom:4px;
-}
+    .search-input input:focus{
+      border-color:var(--coral);
+      box-shadow:0 0 0 1px rgba(255,94,94,.18);
+      background:#ffffff;
+    }
 
-.request-text .applicant-line{
-  font-size:.94rem;
-  color:var(--muted);
-}
+    .requests-grid{
+      display:flex;
+      flex-direction:column;
+      gap:18px;
+    }
 
-.request-text .applicant-name{
-  font-weight:600;
-}
+    .request-card{
+      background:var(--card);
+      border-radius:var(--radius-lg);
+      box-shadow:var(--shadow);
+      padding:18px 20px 16px;
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+    }
 
-.divider{
-  width:1px;
-  height:50px;
-  background:#d2d5db;
-}
+    .request-header{
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+    }
 
-/* View button */
-.view-btn{
-  background:var(--navy);
-  color:#fff;
-  padding:13px 34px;
-  min-width:110px;
-  text-align:center;
-  border-radius:999px;
-  font-weight:600;
-  font-size:.98rem;
-  text-decoration:none;
-  border:none;
-  cursor:pointer;
-  transition:background .18s ease, transform .12s ease;
-}
+    .request-title{
+      font-size:1.05rem;
+      font-weight:700;
+      color:var(--navy);
+    }
 
-.view-btn:hover{
-  background:#1b1e42;
-  transform:translateY(-1px);
-}
-</style>
+    .request-meta-top{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      font-size:.8rem;
+      color:var(--muted);
+      margin-top:4px;
+    }
+
+    .request-meta-top span strong{
+      font-weight:700;
+      color:var(--ink);
+    }
+
+    .compare-grid{
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:14px;
+      font-size:.83rem;
+    }
+
+    .compare-column{
+      background:#f9fafb;
+      border-radius:14px;
+      padding:10px 12px;
+    }
+
+    .column-title{
+      font-size:.8rem;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:.04em;
+      margin-bottom:6px;
+      color:var(--muted);
+    }
+
+    .field-row{
+      padding:5px 6px;
+      border-radius:10px;
+      margin-bottom:2px;
+    }
+
+    .field-label{
+      font-size:.78rem;
+      font-weight:600;
+      color:var(--muted);
+      display:block;
+      margin-bottom:2px;
+    }
+
+    .field-value{
+      font-size:.84rem;
+      color:var(--ink);
+      word-break:break-word;
+    }
+
+    .changed-field{
+      background:#fff1f2;
+      border-left:3px solid var(--coral);
+    }
+
+    .actions-row{
+      display:flex;
+      justify-content:flex-end;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+
+    .btn{
+      padding:8px 18px;
+      border-radius:var(--radius-pill);
+      border:1px solid transparent;
+      font-size:.86rem;
+      font-weight:600;
+      cursor:pointer;
+      transition:.18s ease all;
+      font-family:inherit;
+      text-decoration:none;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+    }
+
+    .btn-view{
+      background:var(--coral);
+      color:#ffffff;
+      box-shadow:0 10px 20px rgba(255,94,94,.35);
+    }
+
+    .btn-view:hover{
+      transform:translateY(-1px);
+      box-shadow:0 12px 26px rgba(255,94,94,.45);
+    }
+
+    .empty-state{
+      text-align:center;
+      margin-top:40px;
+      color:var(--muted);
+      font-size:.95rem;
+    }
+
+    @media (max-width:900px){
+      .page-shell{ margin-left:0; padding:20px 16px 28px; }
+      .compare-grid{ grid-template-columns:1fr; }
+      .actions-row{ justify-content:flex-start; }
+    }
+  </style>
 </head>
-
 <body>
 
 <?php include 'sidebar.php'; ?>
 
-<div class="content">
-  <div class="page-title">Club Edit Requests</div>
+<div class="page-shell">
+  <header class="page-header">
+    <div>
+      <h1 class="page-title">Club Edit Requests</h1>
+      <p class="page-subtitle">Review requested edits to existing clubs and open each request to approve or reject.</p>
+    </div>
+    <span class="badge-pill"><span class="chip-icon"></span> Pending edit requests</span>
+  </header>
 
-  <!-- Search by applicant name -->
-  <div class="search-row">
-    <input
-      type="text"
-      id="searchApplicant"
-      class="search-input"
-      placeholder="Search by applicant name..."
-    >
+  <div class="toolbar">
+    <div class="search-input">
+      <input type="text" id="searchBox" placeholder="Search by club name or applicant…" onkeyup="filterRequests()">
+    </div>
   </div>
 
-  <?php foreach($editRequests as $r): ?>
-    <div class="request-card">
-      <div class="request-left">
-        <img src="<?= htmlspecialchars($r['logo']) ?>" alt="Club logo" class="club-logo">
+  <section class="requests-grid" id="requestsList">
+    <?php if (!empty($editRequests)): ?>
+      <?php foreach($editRequests as $row): ?>
+        <?php
+          $clubName    = $row['current_club_name'] ?: '—';
+          $requestedBy = $row['requested_by_name'] ?: ('Student #'.$row['requested_by_student_id']);
+          $searchText  = strtolower($clubName.' '.$requestedBy);
 
-        <div class="request-text">
-          <div class="club-name"><?= htmlspecialchars($r['club_name']) ?></div>
-          <div class="applicant-line">
-            Applicant:
-            <span class="applicant-name"><?= htmlspecialchars($r['applicant']) ?></span>
+          // current
+          $origName   = $row['current_club_name'];
+          $origCat    = $row['current_category'];
+          $origEmail  = $row['current_contact_email'];
+          $origDesc   = $row['current_description'];
+          $origInsta  = $row['current_instagram'];
+          $origFb     = $row['current_facebook'];
+          $origLi     = $row['current_linkedin'];
+          $origLogo   = $row['current_logo'];
+
+          // requested (final preview)
+          $propName  = pickValue($row['new_club_name'], $origName);
+          $propCat   = pickValue($row['new_category'], $origCat);
+          $propEmail = pickValue($row['new_contact_email'], $origEmail);
+          $propDesc  = pickValue($row['new_description'], $origDesc);
+          $propInsta = pickValue($row['instagram'], $origInsta);
+          $propFb    = pickValue($row['facebook'], $origFb);
+          $propLi    = pickValue($row['linkedin'], $origLi);
+          $propLogo  = pickValue($row['new_logo'], $origLogo);
+
+          // change flags (only if request has value)
+          $nameChanged  = isChanged($row['new_club_name'], $origName);
+          $catChanged   = isChanged($row['new_category'], $origCat);
+          $emailChanged = isChanged($row['new_contact_email'], $origEmail);
+          $descChanged  = isChanged($row['new_description'], $origDesc);
+          $instaChanged = isChanged($row['instagram'], $origInsta);
+          $fbChanged    = isChanged($row['facebook'], $origFb);
+          $liChanged    = isChanged($row['linkedin'], $origLi);
+          $logoChanged  = isChanged($row['new_logo'], $origLogo);
+
+          $origCatShow   = trim((string)$origCat) === '' ? '—' : $origCat;
+          $propCatShow   = trim((string)$propCat) === '' ? '—' : $propCat;
+
+          $origEmailShow = trim((string)$origEmail) === '' ? '—' : $origEmail;
+          $propEmailShow = trim((string)$propEmail) === '' ? '—' : $propEmail;
+
+          $origLogoShow  = trim((string)$origLogo) === '' ? '—' : $origLogo;
+          $propLogoShow  = trim((string)$propLogo) === '' ? '—' : $propLogo;
+        ?>
+
+        <article class="request-card" data-search="<?php echo htmlspecialchars($searchText, ENT_QUOTES); ?>">
+          <div class="request-header">
+            <div>
+              <div class="request-title"><?php echo htmlspecialchars($clubName); ?></div>
+              <div class="request-meta-top">
+                <span>Requested by: <strong><?php echo htmlspecialchars($requestedBy); ?></strong></span>
+                <span>Requested on: <?php echo htmlspecialchars(date('d M Y', strtotime($row['submitted_at']))); ?></span>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
 
-      <div class="divider"></div>
+          <div class="compare-grid">
+            <!-- Current Club -->
+            <div class="compare-column">
+              <div class="column-title">Current Club</div>
 
-      <a href="editform.php?id=<?= (int)$r['id'] ?>" class="view-btn">View</a>
-    </div>
-  <?php endforeach; ?>
+              <div class="field-row <?php echo $nameChanged ? 'changed-field' : ''; ?>">
+                <span class="field-label">Club name</span>
+                <span class="field-value"><?php echo htmlspecialchars($origName ?: '—'); ?></span>
+              </div>
 
+              <div class="field-row <?php echo $catChanged ? 'changed-field' : ''; ?>">
+                <span class="field-label">Category</span>
+                <span class="field-value"><?php echo htmlspecialchars($origCatShow); ?></span>
+              </div>
+
+              <div class="field-row <?php echo $emailChanged ? 'changed-field' : ''; ?>">
+                <span class="field-label">Contact email</span>
+                <span class="field-value"><?php echo htmlspecialchars($origEmailShow); ?></span>
+              </div>
+
+              <div class="field-row <?php echo $descChanged ? 'changed-field' : ''; ?>">
+                <span class="field-label">Description</span>
+                <span class="field-value"><?php echo nl2br(htmlspecialchars($origDesc ?: '—')); ?></span>
+              </div>
+
+              <div class="field-row <?php echo $logoChanged ? 'changed-field' : ''; ?>">
+                <span class="field-label">Logo path</span>
+                <span class="field-value"><?php echo htmlspecialchars($origLogoShow); ?></span>
+              </div>
+
+              <div class="field-row <?php echo $instaChanged ? 'changed-field' : ''; ?>">
+                <span class="field-label">Instagram</span>
+                <span class="field-value"><?php echo htmlspecialchars($origInsta ?: '—'); ?></span>
+              </div>
+
+              <div class="field-row <?php echo $fbChanged ? 'changed-field' : ''; ?>">
+                <span class="field-label">Facebook</span>
+                <span class="field-value"><?php echo htmlspecialchars($origFb ?: '—'); ?></span>
+              </div>
+
+              <div class="field-row <?php echo $liChanged ? 'changed-field' : ''; ?>">
+                <span class="field-label">LinkedIn</span>
+                <span class="field-value"><?php echo htmlspecialchars($origLi ?: '—'); ?></span>
+              </div>
+            </div>
+
+            <!-- Requested Changes -->
+            <div class="compare-column">
+              <div class="column-title">Requested Changes</div>
+
+              <div class="field-row <?php echo $nameChanged ? 'changed-field' : ''; ?>">
+                <span class="field-label">Club name</span>
+                <span class="field-value"><?php echo htmlspecialchars($propName ?: '—'); ?></span>
+              </div>
+
+              <div class="field-row <?php echo $catChanged ? 'changed-field' : ''; ?>">
+                <span class="field-label">Category</span>
+                <span class="field-value"><?php echo htmlspecialchars($propCatShow); ?></span>
+              </div>
+
+              <div class="field-row <?php echo $emailChanged ? 'changed-field' : ''; ?>">
+                <span class="field-label">Contact email</span>
+                <span class="field-value"><?php echo htmlspecialchars($propEmailShow); ?></span>
+              </div>
+
+              <div class="field-row <?php echo $descChanged ? 'changed-field' : ''; ?>">
+                <span class="field-label">Description</span>
+                <span class="field-value"><?php echo nl2br(htmlspecialchars($propDesc ?: '—')); ?></span>
+              </div>
+
+              <div class="field-row <?php echo $logoChanged ? 'changed-field' : ''; ?>">
+                <span class="field-label">Logo path</span>
+                <span class="field-value"><?php echo htmlspecialchars($propLogoShow); ?></span>
+              </div>
+
+              <div class="field-row <?php echo $instaChanged ? 'changed-field' : ''; ?>">
+                <span class="field-label">Instagram</span>
+                <span class="field-value"><?php echo htmlspecialchars($propInsta ?: '—'); ?></span>
+              </div>
+
+              <div class="field-row <?php echo $fbChanged ? 'changed-field' : ''; ?>">
+                <span class="field-label">Facebook</span>
+                <span class="field-value"><?php echo htmlspecialchars($propFb ?: '—'); ?></span>
+              </div>
+
+              <div class="field-row <?php echo $liChanged ? 'changed-field' : ''; ?>">
+                <span class="field-label">LinkedIn</span>
+                <span class="field-value"><?php echo htmlspecialchars($propLi ?: '—'); ?></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="actions-row">
+            <a href="editform.php?id=<?php echo (int)$row['request_id']; ?>" class="btn btn-view">
+              Review & Decide
+            </a>
+          </div>
+        </article>
+      <?php endforeach; ?>
+    <?php else: ?>
+      <p class="empty-state">There are no pending club edit requests right now.</p>
+    <?php endif; ?>
+  </section>
 </div>
 
 <script>
-// Simple client-side search by applicant name
-const searchInput = document.getElementById('searchApplicant');
-const cards = document.querySelectorAll('.request-card');
-
-searchInput.addEventListener('input', function () {
-  const query = this.value.toLowerCase().trim();
-
-  cards.forEach(card => {
-    const applicantEl = card.querySelector('.applicant-name');
-    const applicantName = applicantEl ? applicantEl.textContent.toLowerCase() : '';
-
-    if (!query || applicantName.includes(query)) {
-      card.style.display = 'flex';
-    } else {
-      card.style.display = 'none';
-    }
-  });
-});
+  function filterRequests(){
+    const q = document.getElementById('searchBox').value.toLowerCase();
+    const cards = document.querySelectorAll('#requestsList .request-card');
+    cards.forEach(card => {
+      const text = (card.getAttribute('data-search') || '').toLowerCase();
+      card.style.display = text.includes(q) ? 'flex' : 'none';
+    });
+  }
 </script>
 
 </body>

@@ -6,8 +6,6 @@ if (!isset($_SESSION['admin_id'])) {
 }
 
 require_once '../config.php';
-
-/* ✅ Exceptions + strict */
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
 $adminId   = (int)$_SESSION['admin_id'];
@@ -18,8 +16,21 @@ if ($requestId <= 0) {
     exit;
 }
 
+/* helpers */
+function pickValue($newVal, $oldVal){
+    if ($newVal === null) return $oldVal;
+    if (is_string($newVal) && trim($newVal) === '') return $oldVal;
+    return $newVal;
+}
+function isChanged($newVal, $oldVal){
+    $n = trim((string)$newVal);
+    $o = trim((string)$oldVal);
+    if ($n === '') return false;
+    return strcasecmp($n, $o) !== 0;
+}
+
 /* =========================
-   1) Fetch edit request (Prepared)
+   1) Fetch edit request
 ========================= */
 $stmt = $conn->prepare("SELECT * FROM club_edit_request WHERE request_id = ? LIMIT 1");
 $stmt->bind_param("i", $requestId);
@@ -36,7 +47,7 @@ $alreadyReviewed = !is_null($row['reviewed_at']);
 $errorMsg = "";
 
 /* =========================
-   2) Fetch current club (to avoid overwriting with NULL)
+   2) Fetch current club
 ========================= */
 $clubId = (int)$row['club_id'];
 
@@ -51,54 +62,65 @@ if (!$currentClub) {
     exit;
 }
 
-/* =========================
-   3) Helper: choose new value if not empty, else keep old
-========================= */
-function pickValue($newVal, $oldVal) {
-    // إذا كانت NULL أو فاضية أو spaces => رجّع القديم
-    if ($newVal === null) return $oldVal;
-    if (is_string($newVal) && trim($newVal) === '') return $oldVal;
-    return $newVal;
-}
+/* current values */
+$origName   = $currentClub['club_name'] ?? '';
+$origCat    = $currentClub['category'] ?? '';
+$origEmail  = $currentClub['contact_email'] ?? '';
+$origDesc   = $currentClub['description'] ?? '';
+$origMain   = $currentClub['social_media_link'] ?? '';
+$origInsta  = $currentClub['instagram_url'] ?? '';
+$origFb     = $currentClub['facebook_url'] ?? '';
+$origLi     = $currentClub['linkedin_url'] ?? '';
+$origLogo   = $currentClub['logo'] ?? '';
+
+/* requested values (raw) */
+$reqName   = $row['new_club_name'] ?? '';
+$reqCat    = $row['new_category'] ?? '';
+$reqEmail  = $row['new_contact_email'] ?? '';
+$reqDesc   = $row['new_description'] ?? '';
+$reqMain   = $row['new_social_media_link'] ?? '';
+$reqInsta  = $row['instagram'] ?? '';
+$reqFb     = $row['facebook'] ?? '';
+$reqLi     = $row['linkedin'] ?? '';
+$reqLogo   = $row['new_logo'] ?? '';
+
+/* final preview (what will apply) */
+$finalName  = pickValue($reqName,  $origName);
+$finalCat   = pickValue($reqCat,   $origCat);
+$finalEmail = pickValue($reqEmail, $origEmail);
+$finalDesc  = pickValue($reqDesc,  $origDesc);
+$finalMain  = pickValue($reqMain,  $origMain);
+$finalInsta = pickValue($reqInsta, $origInsta);
+$finalFb    = pickValue($reqFb,    $origFb);
+$finalLi    = pickValue($reqLi,    $origLi);
+$finalLogo  = pickValue($reqLogo,  $origLogo);
+
+/* change flags */
+$nameChanged  = isChanged($reqName,  $origName);
+$catChanged   = isChanged($reqCat,   $origCat);
+$emailChanged = isChanged($reqEmail, $origEmail);
+$descChanged  = isChanged($reqDesc,  $origDesc);
+$mainChanged  = isChanged($reqMain,  $origMain);
+$instaChanged = isChanged($reqInsta, $origInsta);
+$fbChanged    = isChanged($reqFb,    $origFb);
+$liChanged    = isChanged($reqLi,    $origLi);
+$logoChanged  = isChanged($reqLogo,  $origLogo);
+
+$anythingChanged = $nameChanged || $catChanged || $emailChanged || $descChanged || $mainChanged || $instaChanged || $fbChanged || $liChanged || $logoChanged;
+
+$placeholderLogo = 'assets/club-placeholder.png';
+$origLogoShow = trim((string)$origLogo) !== '' ? $origLogo : $placeholderLogo;
+$reqLogoShow  = trim((string)$reqLogo) !== '' ? $reqLogo : $origLogoShow;
 
 /* =========================
-   4) Prepare values for UI (preview)
-========================= */
-$finalClubName   = pickValue($row['new_club_name'],        $currentClub['club_name']        ?? '');
-$finalCategory   = pickValue($row['new_category'],         $currentClub['category']         ?? '');
-$finalEmail      = pickValue($row['new_contact_email'],    $currentClub['contact_email']    ?? '');
-$finalDesc       = pickValue($row['new_description'],      $currentClub['description']      ?? '');
-$finalMainLink   = pickValue($row['new_social_media_link'], $currentClub['social_media_link'] ?? '');
-$finalInsta      = pickValue($row['instagram'],            $currentClub['instagram_url']    ?? '');
-$finalFacebook   = pickValue($row['facebook'],             $currentClub['facebook_url']     ?? '');
-$finalLinkedin   = pickValue($row['linkedin'],             $currentClub['linkedin_url']     ?? '');
-$finalLogo       = pickValue($row['new_logo'],             $currentClub['logo']             ?? '');
-
-/* نفس فكرة الواجهة القديمة */
-$editRequest = [
-    "club_name"   => $finalClubName,
-    "category"    => $finalCategory,
-    "email"       => $finalEmail,
-    "sponsor"     => "", // ما عندك sponsor column هون
-    "description" => $finalDesc,
-    "logo"        => $finalLogo,
-    "cover"       => $finalLogo, // ما في cover column، فخليه logo
-    "instagram"   => $finalInsta,
-    "facebook"    => $finalFacebook,
-    "linkedin"    => $finalLinkedin
-];
-
-/* =========================
-   5) Approve / Reject
+   3) Approve / Reject (POST)
 ========================= */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$alreadyReviewed) {
 
     if (isset($_POST['approve'])) {
 
         $conn->begin_transaction();
-
         try {
-            /* Update club with final values (Prepared) */
             $stmtUp = $conn->prepare("
                 UPDATE club
                 SET club_name         = ?,
@@ -115,21 +137,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$alreadyReviewed) {
             ");
             $stmtUp->bind_param(
                 "sssssssssi",
-                $finalClubName,
+                $finalName,
                 $finalDesc,
-                $finalCategory,
+                $finalCat,
                 $finalEmail,
-                $finalMainLink,
+                $finalMain,
                 $finalInsta,
-                $finalFacebook,
-                $finalLinkedin,
+                $finalFb,
+                $finalLi,
                 $finalLogo,
                 $clubId
             );
             $stmtUp->execute();
             $stmtUp->close();
 
-            /* Mark request reviewed + status Approved */
             $reviewedAt = date('Y-m-d H:i:s');
             $status = 'Approved';
 
@@ -146,8 +167,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$alreadyReviewed) {
             $stmtReq->close();
 
             $conn->commit();
-
-            header('Location: clubeditreq.php');
+            header('Location: clubeditreq.php?msg=approved');
             exit;
 
         } catch (Exception $e) {
@@ -173,7 +193,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$alreadyReviewed) {
             $stmtReq->execute();
             $stmtReq->close();
 
-            header('Location: clubeditreq.php');
+            header('Location: clubeditreq.php?msg=rejected');
             exit;
 
         } catch (Exception $e) {
@@ -185,263 +205,399 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$alreadyReviewed) {
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<title>UniHive — Review Club Edit Request</title>
-<link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>UniHive — Review Club Edit Request</title>
 
-<style>
-:root{
-  --navy:#242751;
-  --coral:#ff5e5e;
-  --paper:#eef2f7;
-  --card:#ffffff;
-  --ink:#0e1228;
-  --muted:#6b7280;
-  --radius:22px;
-  --shadow:0 14px 34px rgba(10,23,60,.12);
+  <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
-  --sidebarWidth:260px;
-}
-*{box-sizing:border-box;margin:0;padding:0}
-body{
-  margin:0;
-  background:var(--paper);
-  font-family:"Raleway",system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
-}
-.content{
-  margin-left:var(--sidebarWidth);
-  padding:40px 50px 60px;
-}
-.page-title{
-  font-size:2rem;
-  font-weight:800;
-  margin-bottom:25px;
-  color:var(--ink);
-}
-.form-shell{
-  background:var(--card);
-  padding:32px 32px 36px;
-  border-radius:var(--radius);
-  box-shadow:var(--shadow);
-}
-.top-grid{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  column-gap:32px;
-  row-gap:18px;
-  margin-bottom:26px;
-}
-.field-label{
-  font-weight:700;
-  margin-bottom:6px;
-  color:var(--ink);
-}
-.helper-text{
-  margin-top:4px;
-  font-size:.83rem;
-  color:var(--muted);
-}
-.field-box{
-  background:#f8f9fc;
-  border-radius:14px;
-  padding:12px 16px;
-  color:var(--ink);
-  font-size:.95rem;
-}
-.description-block{
-  margin-top:10px;
-  margin-bottom:32px;
-}
-.description-area{
-  background:#f8f9fc;
-  border-radius:18px;
-  padding:14px 16px;
-  min-height:110px;
-  white-space:pre-wrap;
-  line-height:1.5;
-}
-.section-title{
-  font-size:1rem;
-  letter-spacing:.12em;
-  font-weight:800;
-  margin-top:8px;
-  margin-bottom:10px;
-  color:var(--ink);
-}
-.section-underline{
-  width:120px;
-  height:3px;
-  border-radius:999px;
-  background:#c6cadb;
-  margin-bottom:22px;
-}
-.images-grid{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  column-gap:32px;
-  row-gap:22px;
-  margin-bottom:28px;
-}
-.image-card{
-  border-radius:18px;
-  background:#f8f9fc;
-  padding:16px;
-  border:1px dashed #d4d7e5;
-}
-.image-preview{
-  width:100%;
-  max-height:160px;
-  border-radius:14px;
-  object-fit:cover;
-  background:#e5e7eb;
-  margin-bottom:12px;
-}
-.social-grid{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  column-gap:32px;
-  row-gap:18px;
-}
-.social-grid .full-width{
-  grid-column:1 / 3;
-}
-.social-input{
-  background:#f8f9fc;
-  border-radius:999px;
-  padding:11px 16px;
-  font-size:.95rem;
-  color:var(--ink);
-  border:none;
-}
-.btn-row{
-  margin-top:30px;
-  display:flex;
-  gap:16px;
-}
-.action-btn{
-  padding:14px 34px;
-  border-radius:999px;
-  font-weight:700;
-  color:#fff;
-  text-decoration:none;
-  border:none;
-  cursor:pointer;
-}
-.action-btn.approve{ background:var(--navy); }
-.action-btn.reject{ background:var(--coral); }
-.action-btn[disabled]{ opacity:0.6; cursor:not-allowed; }
-.error{
-  margin-top:18px;
-  color:var(--coral);
-  font-size:.95rem;
-}
-.info{
-  margin-top:12px;
-  color:var(--muted);
-  font-size:.95rem;
-}
-</style>
+  <style>
+    :root{
+      --sidebarWidth:240px;
+      --navy:#242751;
+      --coral:#ff5e5e;
+      --paper:#eef2f7;
+      --card:#ffffff;
+      --ink:#0e1228;
+      --muted:#6b7280;
+      --shadow:0 18px 38px rgba(12,22,60,.16);
+      --radius-lg:20px;
+      --radius-pill:999px;
+    }
+
+    *{box-sizing:border-box;margin:0;padding:0}
+
+    body{
+      margin:0;
+      font-family:"Raleway",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      background:var(--paper);
+      color:var(--ink);
+    }
+
+    .page-shell{
+      margin-left:var(--sidebarWidth);
+      min-height:100vh;
+      padding:32px 40px 40px;
+    }
+
+    .page-header{
+      display:flex;
+      align-items:flex-end;
+      justify-content:space-between;
+      gap:16px;
+      margin-bottom:18px;
+    }
+
+    .page-title{
+      font-size:1.6rem;
+      font-weight:800;
+      letter-spacing:.02em;
+      color:var(--navy);
+    }
+
+    .page-subtitle{
+      font-size:.97rem;
+      color:var(--muted);
+      margin-top:4px;
+    }
+
+    .badge-pill{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:6px 12px;
+      border-radius:999px;
+      font-size:.8rem;
+      font-weight:700;
+      background:rgba(255,94,94,.06);
+      color:var(--coral);
+      white-space:nowrap;
+    }
+    .chip-icon{ width:6px; height:6px; border-radius:50%; background:var(--coral); }
+
+    .request-card{
+      background:var(--card);
+      border-radius:var(--radius-lg);
+      box-shadow:var(--shadow);
+      padding:18px 20px 16px;
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+    }
+
+    .meta-line{
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
+      font-size:.86rem;
+      color:var(--muted);
+    }
+    .meta-line strong{ color:var(--ink); }
+
+    .compare-grid{
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:14px;
+      font-size:.83rem;
+    }
+
+    .compare-column{
+      background:#f9fafb;
+      border-radius:14px;
+      padding:10px 12px;
+    }
+
+    .column-title{
+      font-size:.8rem;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:.04em;
+      margin-bottom:6px;
+      color:var(--muted);
+    }
+
+    .field-row{
+      padding:5px 6px;
+      border-radius:10px;
+      margin-bottom:2px;
+    }
+
+    .field-label{
+      font-size:.78rem;
+      font-weight:700;
+      color:var(--muted);
+      display:block;
+      margin-bottom:2px;
+    }
+
+    .field-value{
+      font-size:.84rem;
+      color:var(--ink);
+      word-break:break-word;
+    }
+
+    .changed-field{
+      background:#fff1f2;
+      border-left:3px solid var(--coral);
+    }
+
+    .img-row{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:12px;
+      margin-top:6px;
+    }
+
+    .img-box{
+      background:#fff;
+      border-radius:14px;
+      padding:10px;
+      border:1px solid rgba(15,23,42,.08);
+    }
+
+    .img-box.changed{
+      border-color:rgba(255,94,94,.35);
+      background:#fff1f2;
+    }
+
+    .img-box .mini-title{
+      font-size:.78rem;
+      font-weight:900;
+      color:var(--muted);
+      letter-spacing:.08em;
+      margin-bottom:8px;
+      text-transform:uppercase;
+    }
+
+    .img{
+      width:100%;
+      max-height:180px;
+      border-radius:12px;
+      object-fit:cover;
+      background:#e5e7eb;
+    }
+
+    .actions-row{
+      display:flex;
+      justify-content:flex-end;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top:6px;
+    }
+
+    .btn{
+      padding:8px 18px;
+      border-radius:var(--radius-pill);
+      border:1px solid transparent;
+      font-size:.86rem;
+      font-weight:700;
+      cursor:pointer;
+      transition:.18s ease all;
+      font-family:inherit;
+      text-decoration:none;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+    }
+
+    .btn-approve{
+      background:var(--coral);
+      color:#ffffff;
+      box-shadow:0 10px 20px rgba(255,94,94,.35);
+    }
+    .btn-approve:hover{
+      transform:translateY(-1px);
+      box-shadow:0 12px 26px rgba(255,94,94,.45);
+    }
+
+    .btn-reject{
+      background:#ffffff;
+      color:#b91c1c;
+      border-color:rgba(185,28,28,.2);
+    }
+    .btn-reject:hover{ background:#fef2f2; }
+
+    .btn[disabled]{ opacity:.6; cursor:not-allowed; }
+
+    .error{
+      padding:10px 12px;
+      border-radius:14px;
+      background:#fff;
+      border:1px solid rgba(255,94,94,.25);
+      color:#b91c1c;
+      font-weight:800;
+    }
+    .info{
+      padding:10px 12px;
+      border-radius:14px;
+      background:#fff;
+      border:1px solid rgba(15,23,42,.08);
+      color:var(--muted);
+      font-weight:800;
+    }
+
+    @media (max-width:900px){
+      .page-shell{ margin-left:0; padding:20px 16px 28px; }
+      .compare-grid{ grid-template-columns:1fr; }
+      .actions-row{ justify-content:flex-start; }
+    }
+  </style>
 </head>
-
 <body>
 
 <?php include 'sidebar.php'; ?>
 
-<div class="content">
-  <div class="page-title">Review Club Edit Request</div>
+<div class="page-shell">
+  <header class="page-header">
+    <div>
+      <h1 class="page-title">Review Club Edit Request</h1>
+      <p class="page-subtitle">Compare current club details vs requested changes, then approve or reject.</p>
+    </div>
+    <span class="badge-pill">
+      <span class="chip-icon"></span>
+      <?php echo $anythingChanged ? 'Changes detected' : 'No changes detected'; ?>
+    </span>
+  </header>
 
-  <div class="form-shell">
-
-    <!-- Top fields -->
-    <div class="top-grid">
-      <div>
-        <div class="field-label">Club name</div>
-        <div class="field-box"><?= htmlspecialchars($editRequest['club_name']) ?></div>
-      </div>
-
-      <div>
-        <div class="field-label">Category</div>
-        <div class="field-box"><?= htmlspecialchars($editRequest['category']) ?></div>
-      </div>
-
-      <div>
-        <div class="field-label">Contact email</div>
-        <div class="field-box"><?= htmlspecialchars($editRequest['email']) ?></div>
-      </div>
-
-      <div>
-        <div class="field-label">Sponsor name</div>
-        <div class="field-box"><?= htmlspecialchars($editRequest['sponsor']) ?></div>
-      </div>
+  <div class="request-card">
+    <div class="meta-line">
+      <span>Club: <strong><?php echo htmlspecialchars($origName ?: '—'); ?></strong></span>
+      <span>Request ID: <strong><?php echo (int)$requestId; ?></strong></span>
+      <span>Submitted at: <strong><?php echo htmlspecialchars($row['submitted_at'] ?? '—'); ?></strong></span>
     </div>
 
-    <!-- Description -->
-    <div class="description-block">
-      <div class="field-label">About the club</div>
-      <div class="description-area"><?= nl2br(htmlspecialchars($editRequest['description'])) ?></div>
-      <div class="helper-text">Short and clear. Appears on the public club page.</div>
-    </div>
+    <div class="compare-grid">
+      <!-- Current -->
+      <div class="compare-column">
+        <div class="column-title">Current Club</div>
 
-    <!-- Images section -->
-    <div class="section-title">IMAGES</div>
-    <div class="section-underline"></div>
+        <div class="field-row <?php echo $nameChanged ? 'changed-field' : ''; ?>">
+          <span class="field-label">Club name</span>
+          <span class="field-value"><?php echo htmlspecialchars($origName ?: '—'); ?></span>
+        </div>
 
-    <div class="images-grid">
-      <div class="image-card">
-        <div class="field-label">Logo</div>
-        <img src="<?= htmlspecialchars($editRequest['logo']) ?>" alt="Club logo" class="image-preview">
-        <div class="helper-text">PNG/JPG. Square ~512×512 recommended.</div>
+        <div class="field-row <?php echo $catChanged ? 'changed-field' : ''; ?>">
+          <span class="field-label">Category</span>
+          <span class="field-value"><?php echo htmlspecialchars(trim($origCat) === '' ? '—' : $origCat); ?></span>
+        </div>
+
+        <div class="field-row <?php echo $emailChanged ? 'changed-field' : ''; ?>">
+          <span class="field-label">Contact email</span>
+          <span class="field-value"><?php echo htmlspecialchars(trim($origEmail) === '' ? '—' : $origEmail); ?></span>
+        </div>
+
+        <div class="field-row <?php echo $mainChanged ? 'changed-field' : ''; ?>">
+          <span class="field-label">Main social link</span>
+          <span class="field-value"><?php echo htmlspecialchars(trim($origMain) === '' ? '—' : $origMain); ?></span>
+        </div>
+
+        <div class="field-row <?php echo $descChanged ? 'changed-field' : ''; ?>">
+          <span class="field-label">Description</span>
+          <span class="field-value"><?php echo nl2br(htmlspecialchars($origDesc ?: '—')); ?></span>
+        </div>
+
+        <div class="field-row <?php echo $logoChanged ? 'changed-field' : ''; ?>">
+          <span class="field-label">Logo (preview)</span>
+          <div class="img-row">
+            <div class="img-box">
+              <div class="mini-title">Current</div>
+              <img src="<?php echo htmlspecialchars($origLogoShow); ?>" class="img" alt="Current logo">
+            </div>
+            <div class="img-box <?php echo $logoChanged ? 'changed' : ''; ?>">
+              <div class="mini-title">Requested</div>
+              <img src="<?php echo htmlspecialchars($reqLogoShow); ?>" class="img" alt="Requested logo">
+            </div>
+          </div>
+        </div>
+
+        <div class="field-row <?php echo $instaChanged ? 'changed-field' : ''; ?>">
+          <span class="field-label">Instagram</span>
+          <span class="field-value"><?php echo htmlspecialchars(trim($origInsta) === '' ? '—' : $origInsta); ?></span>
+        </div>
+
+        <div class="field-row <?php echo $fbChanged ? 'changed-field' : ''; ?>">
+          <span class="field-label">Facebook</span>
+          <span class="field-value"><?php echo htmlspecialchars(trim($origFb) === '' ? '—' : $origFb); ?></span>
+        </div>
+
+        <div class="field-row <?php echo $liChanged ? 'changed-field' : ''; ?>">
+          <span class="field-label">LinkedIn</span>
+          <span class="field-value"><?php echo htmlspecialchars(trim($origLi) === '' ? '—' : $origLi); ?></span>
+        </div>
       </div>
 
-      <div class="image-card">
-        <div class="field-label">Cover</div>
-        <img src="<?= htmlspecialchars($editRequest['cover']) ?>" alt="Club cover" class="image-preview">
-        <div class="helper-text">Wide ~1200×600 works well.</div>
-      </div>
-    </div>
+      <!-- Requested -->
+      <div class="compare-column">
+        <div class="column-title">Requested Changes</div>
 
-    <!-- Social links section -->
-    <div class="section-title">SOCIAL LINKS</div>
-    <div class="section-underline"></div>
+        <div class="field-row <?php echo $nameChanged ? 'changed-field' : ''; ?>">
+          <span class="field-label">Club name</span>
+          <span class="field-value"><?php echo htmlspecialchars($finalName ?: '—'); ?></span>
+        </div>
 
-    <div class="social-grid">
-      <div>
-        <div class="field-label">Instagram</div>
-        <div class="social-input"><?= htmlspecialchars($editRequest['instagram']) ?></div>
-      </div>
+        <div class="field-row <?php echo $catChanged ? 'changed-field' : ''; ?>">
+          <span class="field-label">Category</span>
+          <span class="field-value"><?php echo htmlspecialchars(trim($finalCat) === '' ? '—' : $finalCat); ?></span>
+        </div>
 
-      <div>
-        <div class="field-label">Facebook</div>
-        <div class="social-input"><?= htmlspecialchars($editRequest['facebook']) ?></div>
-      </div>
+        <div class="field-row <?php echo $emailChanged ? 'changed-field' : ''; ?>">
+          <span class="field-label">Contact email</span>
+          <span class="field-value"><?php echo htmlspecialchars(trim($finalEmail) === '' ? '—' : $finalEmail); ?></span>
+        </div>
 
-      <div class="full-width">
-        <div class="field-label">LinkedIn</div>
-        <div class="social-input"><?= htmlspecialchars($editRequest['linkedin']) ?></div>
+        <div class="field-row <?php echo $mainChanged ? 'changed-field' : ''; ?>">
+          <span class="field-label">Main social link</span>
+          <span class="field-value"><?php echo htmlspecialchars(trim($finalMain) === '' ? '—' : $finalMain); ?></span>
+        </div>
+
+        <div class="field-row <?php echo $descChanged ? 'changed-field' : ''; ?>">
+          <span class="field-label">Description</span>
+          <span class="field-value"><?php echo nl2br(htmlspecialchars($finalDesc ?: '—')); ?></span>
+        </div>
+
+        <div class="field-row <?php echo $logoChanged ? 'changed-field' : ''; ?>">
+          <span class="field-label">Logo (path)</span>
+          <span class="field-value"><?php echo htmlspecialchars(trim($finalLogo) === '' ? '—' : $finalLogo); ?></span>
+        </div>
+
+        <div class="field-row <?php echo $instaChanged ? 'changed-field' : ''; ?>">
+          <span class="field-label">Instagram</span>
+          <span class="field-value"><?php echo htmlspecialchars(trim($finalInsta) === '' ? '—' : $finalInsta); ?></span>
+        </div>
+
+        <div class="field-row <?php echo $fbChanged ? 'changed-field' : ''; ?>">
+          <span class="field-label">Facebook</span>
+          <span class="field-value"><?php echo htmlspecialchars(trim($finalFb) === '' ? '—' : $finalFb); ?></span>
+        </div>
+
+        <div class="field-row <?php echo $liChanged ? 'changed-field' : ''; ?>">
+          <span class="field-label">LinkedIn</span>
+          <span class="field-value"><?php echo htmlspecialchars(trim($finalLi) === '' ? '—' : $finalLi); ?></span>
+        </div>
       </div>
     </div>
 
     <?php if ($alreadyReviewed): ?>
-      <div class="info">This request was already reviewed on <?= htmlspecialchars($row['reviewed_at']) ?>.</div>
+      <div class="info">This request was already reviewed on <?php echo htmlspecialchars($row['reviewed_at']); ?>.</div>
     <?php endif; ?>
 
     <?php if (!empty($errorMsg)): ?>
-      <div class="error"><?= htmlspecialchars($errorMsg) ?></div>
+      <div class="error"><?php echo htmlspecialchars($errorMsg); ?></div>
     <?php endif; ?>
 
+    <form method="post" class="actions-row">
+      <button type="submit" name="approve" class="btn btn-approve" <?php echo $alreadyReviewed ? 'disabled' : ''; ?>>
+        Approve edit
+      </button>
+
+      <button type="submit" name="reject" class="btn btn-reject"
+              <?php echo $alreadyReviewed ? 'disabled' : ''; ?>
+              onclick="return confirm('Are you sure you want to reject this edit request?');">
+        Reject edit
+      </button>
+    </form>
+
   </div>
-
-  <!-- Approve / Reject buttons -->
-  <form method="post" class="btn-row">
-    <button type="submit" name="approve" class="action-btn approve" <?= $alreadyReviewed ? 'disabled' : '' ?>>
-      Approve
-    </button>
-
-    <button type="submit" name="reject" class="action-btn reject" <?= $alreadyReviewed ? 'disabled' : '' ?>>
-      Reject
-    </button>
-  </form>
-
 </div>
 
 </body>
