@@ -197,7 +197,17 @@ body{
     <?php foreach($requests as $r): ?>
       <div class="request-card">
         <div class="request-left">
-          <img src="<?= htmlspecialchars($r['logo']) ?>" alt="Club logo" class="club-logo">
+<?php
+$logo = trim((string)($r['logo'] ?? ''));
+if ($logo === '') {
+  $logoSrc = 'assets/club_placeholder.png';
+} elseif (strpos($logo, 'uploads/') === 0) {
+  $logoSrc = '/project/graduation_project/' . ltrim($logo, '/');
+} else {
+  $logoSrc = $logo; // لو كان assets/... أو رابط كامل
+}
+?>
+<img src="<?= htmlspecialchars($logoSrc) ?>" alt="Club logo" class="club-logo">
 
           <div class="request-text">
             <div class="club-name"><?= htmlspecialchars($r['club_name']) ?></div>

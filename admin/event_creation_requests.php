@@ -176,8 +176,21 @@ if ($result && $result->num_rows > 0) {
         $eventRequests[] = $row;
     }
 }
-?>
+function assetUrl(string $path): string {
+  $path = trim($path);
+  if ($path === '') return '';
+  if (preg_match('~^https?://~i', $path)) return $path;     // رابط كامل
+  if ($path[0] === '/') return $path;                       // مسار يبدأ بـ /
 
+  // uploads/... -> لازم يمر عبر project root
+  if (strpos($path, 'uploads/') === 0) {
+    return '/project/graduation_project/' . $path;
+  }
+
+  // غير هيك خليّه كما هو (مثلاً assets/.. داخل نفس البورتال)
+  return $path;
+}
+?>
 <!doctype html>
 <html lang="en">
 <head>
@@ -492,7 +505,7 @@ if ($result && $result->num_rows > 0) {
           <div class="request-side">
             <div class="cover-thumb">
               <?php if(!empty($row['cover_image'])): ?>
-                <img src="<?php echo htmlspecialchars($row['cover_image']); ?>" alt="Cover image">
+<img src="<?php echo htmlspecialchars(assetUrl((string)$row['cover_image'])); ?>" alt="Cover image">
               <?php else: ?>
                 No cover image
               <?php endif; ?>

@@ -9,26 +9,99 @@ $errors = [];
 $success = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $name     = trim($_POST['sponsor_name']    ?? '');
-    $email    = trim($_POST['sponsor_email']   ?? '');
-    $phone    = trim($_POST['sponsor_phone']   ?? '');
-    $password = trim($_POST['sponsor_password']?? '');
+    $name     = trim($_POST['sponsor_name']     ?? '');
+    $email    = trim($_POST['sponsor_email']    ?? '');
+    $phone    = trim($_POST['sponsor_phone']    ?? '');
+    $password = trim($_POST['sponsor_password'] ?? '');
 
-    if ($name === '')   { $errors[] = 'Sponsor name is required.'; }
-    if ($email === '')  { $errors[] = 'Sponsor email is required.'; }
+    if ($name === '')     { $errors[] = 'Sponsor name is required.'; }
+    if ($email === '')    { $errors[] = 'Sponsor email is required.'; }
     if ($password === '') { $errors[] = 'Initial password is required.'; }
 
+    // ===== Logo upload handling =====
+    $logoPath = 'assets/sponsor_default.png'; // default if no upload
+
+    // Only process upload if user selected a file
+    if (isset($_FILES['sponsor_logo']) && $_FILES['sponsor_logo']['error'] !== UPLOAD_ERR_NO_FILE) {
+
+        if ($_FILES['sponsor_logo']['error'] !== UPLOAD_ERR_OK) {
+            $errors[] = 'Failed to upload logo (upload error).';
+        } else {
+            $tmpName = $_FILES['sponsor_logo']['tmp_name'];
+            $size    = (int)$_FILES['sponsor_logo']['size'];
+
+            // Basic size limit (2MB)
+            if ($size > 2 * 1024 * 1024) {
+                $errors[] = 'Logo file is too large. Max 2MB.';
+            }
+
+            // Validate image type using mime
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            $mime  = $finfo ? finfo_file($finfo, $tmpName) : '';
+            if ($finfo) finfo_close($finfo);
+
+            $allowed = [
+                'image/jpeg' => 'jpg',
+                'image/png'  => 'png',
+                'image/webp' => 'webp',
+            ];
+
+            if (!isset($allowed[$mime])) {
+                $errors[] = 'Invalid logo format. Allowed: JPG, PNG, WEBP.';
+            }
+
+            // If valid, move to uploads folder
+            if (empty($errors)) {
+                $ext = $allowed[$mime];
+
+                // Create upload dir if not exists
+                $uploadDir = __DIR__ . '/uploads/sponsors/';
+                if (!is_dir($uploadDir)) {
+                    @mkdir($uploadDir, 0755, true);
+                }
+
+                if (!is_dir($uploadDir)) {
+                    $errors[] = 'Upload folder is missing and could not be created.';
+                } else {
+                    // Safe unique file name
+                    $safeBase = preg_replace('/[^a-zA-Z0-9_-]+/', '-', strtolower($name));
+                    $safeBase = trim($safeBase, '-');
+                    if ($safeBase === '') $safeBase = 'sponsor';
+
+                    $fileName = $safeBase . '-' . date('YmdHis') . '-' . bin2hex(random_bytes(4)) . '.' . $ext;
+                    $destAbs  = $uploadDir . $fileName;
+
+                    if (move_uploaded_file($tmpName, $destAbs)) {
+                        // Save relative path (from admin/)
+                        $logoPath = 'uploads/sponsors/' . $fileName;
+                    } else {
+                        $errors[] = 'Could not save logo file on server.';
+                    }
+                }
+            }
+        }
+    }
+
+    // ===== Insert sponsor =====
     if (empty($errors)) {
-        $logoPath = 'assets/sponsor_default.png'; // غيّريها لو عندك لوجو افتراضي آخر
 
         $stmt = $conn->prepare("
           INSERT INTO sponsor (company_name, email, phone, logo, password)
           VALUES (?, ?, ?, ?, ?)
         ");
+
         if ($stmt) {
-            $stmt->bind_param("sssss", $name, $email, $phone, $logoPath, $password);
+            // ملاحظة: إذا نظام تسجيل الدخول عندك يعتمد على password_hash، بدّل السطر التالي:
+            // $passwordToStore = password_hash($password, PASSWORD_DEFAULT);
+            // وإذا عندك تسجيل الدخول يقارن نص بنص خليه زي ما هو:
+            $passwordToStore = $password;
+
+            $stmt->bind_param("sssss", $name, $email, $phone, $logoPath, $passwordToStore);
+
             if ($stmt->execute()) {
                 $success = 'Sponsor created successfully.';
+                // clear post values after success
+                $_POST = [];
             } else {
                 $errors[] = 'Database error while inserting sponsor.';
             }
@@ -153,6 +226,26 @@ body{
   grid-column:1 / 3;
 }
 
+/* Logo upload box */
+.upload-wrap{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  padding:12px 14px;
+  border:1px dashed #d1d5db;
+  border-radius:14px;
+  background:#fafbff;
+}
+
+.logo-preview{
+  width:56px;
+  height:56px;
+  border-radius:14px;
+  border:1px solid #e5e7eb;
+  background:#fff;
+  object-fit:cover;
+}
+
 /* Submit button */
 .actions-row{
   margin-top:24px;
@@ -223,7 +316,8 @@ body{
     </div>
   <?php endif; ?>
 
-  <form method="post" action="addsponsor.php">
+  <!-- IMPORTANT: enctype for file upload -->
+  <form method="post" action="addsponsor.php" enctype="multipart/form-data">
     <div class="form-shell">
 
       <div class="form-grid">
@@ -278,6 +372,30 @@ body{
           </div>
         </div>
 
+        <!-- Logo upload (full width) -->
+        <div class="full-width">
+          <div class="field-label">Sponsor logo (optional)</div>
+
+          <div class="upload-wrap">
+            <img
+              id="logoPreview"
+              class="logo-preview"
+              src="assets/sponsor_default.png"
+              alt="Logo preview"
+            >
+            <div style="flex:1">
+              <input
+                type="file"
+                name="sponsor_logo"
+                id="sponsor_logo"
+                class="input-field"
+                accept="image/png,image/jpeg,image/webp"
+              >
+              <div class="helper-text">Allowed: JPG, PNG, WEBP — Max 2MB.</div>
+            </div>
+          </div>
+        </div>
+
       </div>
 
       <div class="actions-row">
@@ -291,6 +409,31 @@ body{
   </form>
 
 </div>
+
+<script>
+// Simple preview
+const input = document.getElementById('sponsor_logo');
+const preview = document.getElementById('logoPreview');
+
+if (input) {
+  input.addEventListener('change', function () {
+    const file = this.files && this.files[0];
+    if (!file) return;
+
+    const ok = ['image/jpeg','image/png','image/webp'].includes(file.type);
+    if (!ok) {
+      alert('Invalid logo format. Allowed: JPG, PNG, WEBP.');
+      this.value = '';
+      preview.src = 'assets/sponsor_default.png';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => preview.src = e.target.result;
+    reader.readAsDataURL(file);
+  });
+}
+</script>
 
 </body>
 </html>

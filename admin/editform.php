@@ -16,6 +16,22 @@ if ($requestId <= 0) {
     exit;
 }
 
+/* ✅ helper for image src (project root) */
+function uiImgSrc(string $path): string {
+    $path = trim($path);
+
+    // placeholder داخل admin
+    if ($path === '') return 'assets/club-placeholder.png';
+
+    // uploads from DB => absolute with project prefix
+    if (strpos($path, 'uploads/') === 0) {
+        return '/project/graduation_project/' . ltrim($path, '/');
+    }
+
+    // anything else (assets/...) stays as-is
+    return $path;
+}
+
 /* helpers */
 function pickValue($newVal, $oldVal){
     if ($newVal === null) return $oldVal;
@@ -501,11 +517,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$alreadyReviewed) {
           <div class="img-row">
             <div class="img-box">
               <div class="mini-title">Current</div>
-              <img src="<?php echo htmlspecialchars($origLogoShow); ?>" class="img" alt="Current logo">
+              <img src="<?php echo htmlspecialchars(uiImgSrc($origLogoShow)); ?>" class="img" alt="Current logo">
             </div>
             <div class="img-box <?php echo $logoChanged ? 'changed' : ''; ?>">
               <div class="mini-title">Requested</div>
-              <img src="<?php echo htmlspecialchars($reqLogoShow); ?>" class="img" alt="Requested logo">
+              <img src="<?php echo htmlspecialchars(uiImgSrc($reqLogoShow)); ?>" class="img" alt="Requested logo">
             </div>
           </div>
         </div>

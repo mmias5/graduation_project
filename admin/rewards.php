@@ -588,12 +588,18 @@ if ($res && $res->num_rows > 0) {
                   <!-- Reward cell -->
                   <td>
                     <div class="reward-row">
-                      <?php if (!empty($reward['picture'])): ?>
-                        <img src="../<?php echo htmlspecialchars($reward['picture']); ?>" alt="" class="reward-img">
-                      <?php else: ?>
-                        <div class="reward-img"></div>
-                      <?php endif; ?>
-
+                      <?php
+                          $pic = trim((string)($reward['picture'] ?? ''));
+                          $picUrl = '';
+                          if ($pic !== '') {
+                            $picUrl = ($pic[0] === '/') ? $pic : ('../' . $pic);
+                          }
+                          ?>
+                          <?php if ($picUrl): ?>
+                            <img src="<?php echo htmlspecialchars($picUrl); ?>" alt="" class="reward-img">
+                          <?php else: ?>
+                            <div class="reward-img"></div>
+                          <?php endif; ?>
                       <div>
                         <div class="reward-name"><?php echo htmlspecialchars($reward['item_name']); ?></div>
                         <div class="reward-meta">ID #<?php echo (int)$reward['item_id']; ?></div>

@@ -5,7 +5,7 @@ if (!isset($_SESSION['admin_id'])) {
     exit;
 }
 
-require_once '../config.php'; // عدّل المسار إذا مختلف عندك
+require_once '../config.php';
 
 /* =========================
    Optional flash message
@@ -20,7 +20,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'], $_POST['clu
     $action = $_POST['action'];
     $clubId = (int)$_POST['club_id'];
 
-    // Prevent messing with invalid ids
     if ($clubId <= 0) {
         $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Invalid club id.'];
         header("Location: viewclubs.php");
@@ -41,50 +40,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'], $_POST['clu
         exit;
     }
 
-    /* ===== Delete club (CONNECTED TO DB) ===== */
+    /* ===== Delete club ===== */
     if ($action === 'delete_club') {
 
-        // ✅ Prevent deleting default club
         if ($clubId === 1) {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => 'You cannot delete the default club (ID = 1).'];
             header("Location: viewclubs.php");
             exit;
         }
 
-        // Safety: transaction
         $conn->begin_transaction();
 
         try {
-            // 1) Delete ranking rows for this club (your project uses ranking table)
+            // 1) Delete ranking rows
             $stmt = $conn->prepare("DELETE FROM ranking WHERE club_id = ?");
             $stmt->bind_param("i", $clubId);
             $stmt->execute();
             $stmt->close();
 
-            // 2) Delete events for this club (important before deleting club)
+            // 2) Delete events for this club
             $stmt = $conn->prepare("DELETE FROM event WHERE club_id = ?");
             $stmt->bind_param("i", $clubId);
             $stmt->execute();
             $stmt->close();
 
-            // 3) Move students who belong to this club to default club_id = 1
+            // 3) Move students to default club_id = 1
             $defaultClubId = 1;
             $stmt = $conn->prepare("UPDATE student SET club_id = ? WHERE club_id = ?");
             $stmt->bind_param("ii", $defaultClubId, $clubId);
             $stmt->execute();
             $stmt->close();
 
-            // 4) Finally delete the club
+            // 4) Delete the club
             $stmt = $conn->prepare("DELETE FROM club WHERE club_id = ? LIMIT 1");
             $stmt->bind_param("i", $clubId);
             $stmt->execute();
 
-            // if nothing deleted => maybe not found
             if ($stmt->affected_rows <= 0) {
                 $stmt->close();
                 throw new Exception("Club not found or could not be deleted.");
             }
-
             $stmt->close();
 
             $conn->commit();
@@ -106,12 +101,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'], $_POST['clu
 $clubs = [];
 $categories = [];
 
-/*
-  ✅ Points now come from ranking.total_points (latest record per club)
-  club.sponsor_id موجود عندك
-  sponsor.company_name موجود عندك
-  events count = past/done only (ending_date < NOW())
-*/
 $sql = "
     SELECT 
         c.club_id,
@@ -157,6 +146,11 @@ if ($result = $conn->query($sql)) {
             $sponsorName = "No sponsor yet";
         }
 
+        $logoFromDb = trim((string)($row['logo'] ?? ''));
+        if ($logoFromDb === '') {
+            $logoFromDb = 'assets/club_placeholder.png';
+        }
+
         $club = [
             "id"          => (int)$row['club_id'],
             "name"        => $row['club_name'],
@@ -165,8 +159,8 @@ if ($result = $conn->query($sql)) {
             "description" => $row['description'] ?? '',
             "members"     => (int)($row['member_count'] ?? 0),
             "events"      => (int)($row['total_events'] ?? 0),
-            "points"      => (int)($row['ranking_points'] ?? 0), // ✅ from ranking table
-            "logo"        => (!empty($row['logo'])) ? $row['logo'] : 'assets/club_placeholder.png',
+            "points"      => (int)($row['ranking_points'] ?? 0),
+            "logo"        => $logoFromDb,
             "active"      => $isActive,
             "status"      => $isActive ? 'active' : 'inactive',
         ];
@@ -181,6 +175,29 @@ if ($result = $conn->query($sql)) {
 
 $categories = array_values(array_unique($categories));
 sort($categories);
+
+/**
+ * Helper: make image src correct from admin folder
+ * - If it's "uploads/..." => use "/uploads/..." (absolute from root)
+ * - Else (assets/...) => keep as-is (relative to admin)
+ */
+function uiImgSrc(string $path): string {
+    $path = trim($path);
+
+    // placeholder داخل admin
+    if ($path === '') {
+        return 'assets/club_placeholder.png';
+    }
+
+    // uploads from project root
+    if (strpos($path, 'uploads/') === 0) {
+        return '/project/graduation_project/' . ltrim($path, '/');
+    }
+
+    // any other relative asset
+    return $path;
+}
+
 ?>
 <!doctype html>
 <html lang="en">
@@ -244,13 +261,7 @@ body{margin:0;background:var(--paper);font-family:"Raleway",system-ui,-apple-sys
 .btn-view-members{background:var(--navy);color:#ffffff;text-decoration:none;}
 .btn-view-members:hover{background:#191c3a;transform:translateY(-1px);}
 .inline-form{display:inline;}
-.flash{
-  margin-bottom:16px;
-  padding:12px 16px;
-  border-radius:14px;
-  font-weight:700;
-  box-shadow:0 10px 24px rgba(15,23,42,.12);
-}
+.flash{margin-bottom:16px;padding:12px 16px;border-radius:14px;font-weight:700;box-shadow:0 10px 24px rgba(15,23,42,.12);}
 .flash.success{background:#e9f9ee;color:#166534;border:1px solid #86efac;}
 .flash.error{background:#ffecec;color:#991b1b;border:1px solid #fecaca;}
 </style>
@@ -304,7 +315,7 @@ body{margin:0;background:var(--paper);font-family:"Raleway",system-ui,-apple-sys
 
         <div class="card-top">
           <div class="card-main">
-            <img src="<?= htmlspecialchars($club['logo']); ?>" alt="Club logo" class="club-logo">
+            <img src="<?= htmlspecialchars(uiImgSrc($club['logo'])); ?>" alt="Club logo" class="club-logo">
             <div class="club-text">
               <div class="club-name"><?= htmlspecialchars($club['name']); ?></div>
               <div class="club-sponsor">
@@ -328,14 +339,12 @@ body{margin:0;background:var(--paper);font-family:"Raleway",system-ui,-apple-sys
         <div class="actions-row">
           <div class="btn-group-left">
 
-            <!-- ✅ DELETE connected to DB -->
             <form class="inline-form delete-form" method="POST" action="viewclubs.php">
               <input type="hidden" name="action" value="delete_club">
               <input type="hidden" name="club_id" value="<?= (int)$club['id']; ?>">
               <button class="card-btn btn-delete" type="submit">Delete</button>
             </form>
 
-            <!-- ✅ Status toggle connected to DB -->
             <form class="inline-form status-form" method="POST" action="viewclubs.php">
               <input type="hidden" name="action" value="toggle_status">
               <input type="hidden" name="club_id" value="<?= (int)$club['id']; ?>">
@@ -393,12 +402,10 @@ document.querySelectorAll('.category-option').forEach(btn => {
   });
 });
 
-// prevent overlay click
 document.querySelectorAll('.actions-row, .actions-row *').forEach(el => {
   el.addEventListener('click', (e) => e.stopPropagation());
 });
 
-// confirm status
 document.querySelectorAll('.status-form').forEach(form => {
   form.addEventListener('submit', (e) => {
     const btn = form.querySelector('button');
@@ -407,7 +414,6 @@ document.querySelectorAll('.status-form').forEach(form => {
   });
 });
 
-// ✅ confirm delete
 document.querySelectorAll('.delete-form').forEach(form => {
   form.addEventListener('submit', (e) => {
     const clubId = form.querySelector('input[name="club_id"]')?.value || '';

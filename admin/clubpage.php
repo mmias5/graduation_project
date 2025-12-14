@@ -5,7 +5,23 @@ if (!isset($_SESSION['admin_id'])) {
     exit;
 }
 
-require_once '../config.php'; // عدّلي المسار إذا الملف بمكان ثاني
+require_once '../config.php';
+
+// ✅ helper for image src (project root)
+function uiImgSrc(string $path): string {
+    $path = trim($path);
+
+    // placeholder داخل admin
+    if ($path === '') return 'assets/club_placeholder.png';
+
+    // uploads from DB => absolute with project prefix
+    if (strpos($path, 'uploads/') === 0) {
+        return '/project/graduation_project/' . ltrim($path, '/');
+    }
+
+    // assets/... stays relative to admin
+    return $path;
+}
 
 // ====================== Get club_id from URL ======================
 $clubId = isset($_GET['club_id']) ? (int)$_GET['club_id'] : 0;
@@ -163,8 +179,8 @@ $club = [
     "sponsor"         => $sponsorName,
     "status"          => (strtolower(trim($row['status'])) === 'active') ? 'Active' : 'Inactive',
     "members"         => (int)($row['member_count'] ?? 0),
-    "events_count"    => $doneEventsCount, // ✅ done events only
-    "points"          => $points,          // ✅ from ranking
+    "events_count"    => $doneEventsCount,
+    "points"          => $points,
     "president_email" => ($row['contact_email'] ?: 'no-email@unihive'),
     "description"     => ($row['description'] ?: 'No description provided yet.'),
     "logo"            => (!empty($row['logo']) ? $row['logo'] : 'assets/club_placeholder.png'),
@@ -636,8 +652,7 @@ body{
   <!-- Top club info card -->
   <div class="club-header-card">
     <div class="club-main">
-      <img src="<?= htmlspecialchars($club['logo']); ?>"
-           alt="Club logo" class="club-logo">
+      <img src="<?= htmlspecialchars(uiImgSrc($club['logo'])); ?>" alt="Club logo" class="club-logo">
 
       <div class="club-text">
         <div class="club-name"><?= htmlspecialchars($club['name']); ?></div>
@@ -670,7 +685,6 @@ body{
         <a href="editclub.php?club_id=<?= $club['id']; ?>" class="btn btn-outline">Edit club</a>
         <a href="viewmembers.php?club_id=<?= $club['id']; ?>" class="btn btn-primary">View members</a>
 
-        <!-- ✅ Delete connected -->
         <form method="POST" action="clubpage.php?club_id=<?= (int)$club['id']; ?>" style="display:inline;">
           <input type="hidden" name="action" value="delete_club">
           <input type="hidden" name="club_id" value="<?= (int)$club['id']; ?>">
@@ -684,10 +698,8 @@ body{
     </div>
   </div>
 
-  <!-- Main layout: about + stats -->
   <div class="layout">
 
-    <!-- About + president contact -->
     <div class="card">
       <div class="card-title">About this club</div>
       <div class="card-subtitle">Description provided by the club president.</div>
@@ -712,7 +724,6 @@ body{
       </div>
     </div>
 
-    <!-- Stats -->
     <div class="card">
       <div class="card-title">Overview</div>
       <div class="card-subtitle">Key numbers for this club.</div>
@@ -735,7 +746,6 @@ body{
 
   </div>
 
-  <!-- DONE events -->
   <div class="card section-block">
     <div class="section-header">
       <h2>Done events</h2>

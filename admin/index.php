@@ -96,6 +96,21 @@ if ($resRank && $resRank->num_rows > 0) {
         $clubsRanking[] = $row;
     }
 }
+function assetUrl(string $path): string {
+  $path = trim($path);
+  if ($path === '') return '';
+  // إذا كان رابط كامل
+  if (preg_match('~^https?://~i', $path)) return $path;
+
+  // إذا كان uploads/.. خليه under project root
+  if (strpos($path, 'uploads/') === 0) {
+    return '/project/graduation_project/' . ltrim($path, '/');
+  }
+
+  // إذا كان assets/.. (داخل admin) خلّيه زي ما هو
+  return $path;
+}
+
 ?>
 <!doctype html>
 <html lang="en">
@@ -525,7 +540,8 @@ if ($resRank && $resRank->num_rows > 0) {
               <?php foreach ($clubsRanking as $club):
                 $clubNameRaw = (string)$club['club_name'];
                 $clubName    = htmlspecialchars($clubNameRaw);
-                $logo        = !empty($club['logo']) ? htmlspecialchars($club['logo']) : '';
+$logoPath = (string)($club['logo'] ?? '');
+$logo     = $logoPath !== '' ? htmlspecialchars(assetUrl($logoPath)) : '';
 
                 $rankPos     = (int)$club['rank_position'];
                 $points      = (int)$club['total_points'];
