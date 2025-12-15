@@ -18,7 +18,46 @@ $studentId = (int) $_SESSION['student_id'];
 $successMessage = '';
 $errorMessage   = '';
 
-// ---------- جلب بيانات الطالب ----------
+/* =========================
+   Helpers (paths)
+========================= */
+
+// مسارات URL (للـ <img> بالمتصفح) — بما إن الملف داخل /student/
+$DEFAULT_AVATAR_URL = '../tools/pics/default-avatar.png';   // ✅ صح (بدل tools/..)
+$UPLOADS_URL_DIR    = '../uploads/students/';               // ✅ للعرض
+
+// مسارات السيرفر (للحفظ/الحذف)
+$UPLOADS_FS_DIR = __DIR__ . '/../uploads/students/';        // ✅ على الدسك
+
+// يبني URL للصورة سواء مخزّن اسم ملف أو مسار
+function buildPhotoUrl(?string $dbValue, string $uploadsUrlDir, string $defaultUrl): string {
+    $v = trim((string)$dbValue);
+    if ($v === '') return $defaultUrl;
+
+    // إذا القيمة فيها slash معناها غالباً مسار كامل/نسبي — نخليها كما هي لكن نضمن ../ بالبداية لو كانت داخل uploads/
+    if (strpos($v, '/') !== false || strpos($v, '\\') !== false) {
+        $v = str_replace('\\', '/', $v);
+        // لو كانت "uploads/students/..." حولها لـ "../uploads/students/..."
+        if (strpos($v, 'uploads/') === 0) return '../' . $v;
+        if (strpos($v, './uploads/') === 0) return '../' . ltrim($v, './');
+        return $v; // مسار جاهز
+    }
+
+    // اسم ملف فقط
+    return $uploadsUrlDir . $v;
+}
+
+// يرجع اسم الملف فقط (حتى لو DB فيها path)
+function normalizePhotoFilename(?string $dbValue): ?string {
+    $v = trim((string)$dbValue);
+    if ($v === '') return null;
+    $v = str_replace('\\', '/', $v);
+    return basename($v);
+}
+
+/* =========================
+   Fetch student
+========================= */
 $stmt = $conn->prepare("
     SELECT student_id, student_name, email, major, role, profile_photo
     FROM student
@@ -32,7 +71,6 @@ $student = $result->fetch_assoc();
 $stmt->close();
 
 if (!$student) {
-    // لو صار اشي غلط
     $errorMessage = 'Student not found.';
     $student = [
         'student_id'    => $studentId,
@@ -44,31 +82,36 @@ if (!$student) {
     ];
 }
 
-// مسارات الصور
-$defaultAvatarUrl = 'tools/pics/default-avatar.png'; // حطي صورة افتراضية بهالمسار
-$avatarUrl        = !empty($student['profile_photo'])
-    ? '../uploads/students/' . $student['profile_photo']
-    : $defaultAvatarUrl;
+// ✅ مسار العرض (SHOW)
+$avatarUrl = buildPhotoUrl($student['profile_photo'] ?? null, $UPLOADS_URL_DIR, $DEFAULT_AVATAR_URL);
 
-// ---------- معالجة الفورم (رفع / إزالة الصورة) ----------
+/* =========================
+   Handle form (UPDATE/REMOVE)
+========================= */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_profile'])) {
 
-    // تحديث بيانات من DB من جديد (للتأكد من آخر صورة)
-    $currentPhoto = $student['profile_photo'];
+    // لازم نجيب آخر قيمة من DB قبل التحديث (مشان ما نعتمد على $student القديم)
+    $stmt = $conn->prepare("SELECT profile_photo FROM student WHERE student_id = ? LIMIT 1");
+    $stmt->bind_param("i", $studentId);
+    $stmt->execute();
+    $stmt->bind_result($currentPhotoRaw);
+    $stmt->fetch();
+    $stmt->close();
+
+    $currentPhoto = normalizePhotoFilename($currentPhotoRaw);
 
     $removePhoto = isset($_POST['remove_photo']) && $_POST['remove_photo'] === '1';
     $hasFile     = isset($_FILES['profile_photo']) && $_FILES['profile_photo']['error'] !== UPLOAD_ERR_NO_FILE;
 
-    // مجلد الرفع
-    $uploadDir = __DIR__ . '/../uploads/students/';
-    if (!is_dir($uploadDir)) {
-        @mkdir($uploadDir, 0775, true);
+    // تأكد مجلد الرفع موجود
+    if (!is_dir($UPLOADS_FS_DIR)) {
+        @mkdir($UPLOADS_FS_DIR, 0775, true);
     }
 
-    // لو المستخدم اختار إزالة الصورة
+    // -------- remove photo --------
     if ($removePhoto) {
         if ($currentPhoto) {
-            $oldPath = $uploadDir . $currentPhoto;
+            $oldPath = $UPLOADS_FS_DIR . $currentPhoto;
             if (is_file($oldPath)) {
                 @unlink($oldPath);
             }
@@ -80,57 +123,70 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_profile'])) {
         $stmt->close();
 
         $student['profile_photo'] = null;
-        $avatarUrl = $defaultAvatarUrl;
+        $avatarUrl = $DEFAULT_AVATAR_URL; // ✅ show path بعد الحذف
         $successMessage = 'Profile photo removed successfully.';
     }
-    // لو في صورة جديدة مرفوعة
+
+    // -------- upload new photo --------
     elseif ($hasFile) {
-        $file     = $_FILES['profile_photo'];
-        $allowed  = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
-        $maxSize  = 2 * 1024 * 1024; // 2MB
+        $file    = $_FILES['profile_photo'];
+        $maxSize = 2 * 1024 * 1024; // 2MB
+
+        // فحص الميم تايب الحقيقي (مش بس $_FILES['type'])
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mime  = $finfo ? finfo_file($finfo, $file['tmp_name']) : ($file['type'] ?? '');
+        if ($finfo) finfo_close($finfo);
+
+        $allowed = [
+            'image/jpeg' => 'jpg',
+            'image/png'  => 'png',
+            'image/webp' => 'webp'
+        ];
 
         if ($file['error'] !== UPLOAD_ERR_OK) {
             $errorMessage = 'Error uploading file.';
-        } elseif (!array_key_exists($file['type'], $allowed)) {
+        } elseif (!isset($allowed[$mime])) {
             $errorMessage = 'Only JPG, PNG, or WEBP images are allowed.';
         } elseif ($file['size'] > $maxSize) {
             $errorMessage = 'File is too large. Max size is 2MB.';
         } else {
-            $ext      = $allowed[$file['type']];
-            $newName  = 'student_' . $studentId . '_' . time() . '.' . $ext;
-            $destPath = $uploadDir . $newName;
+            $ext     = $allowed[$mime];
+            $newName = 'student_' . $studentId . '_' . time() . '.' . $ext;
+            $dest    = $UPLOADS_FS_DIR . $newName;
 
-            if (move_uploaded_file($file['tmp_name'], $destPath)) {
-                // احذف القديمة لو موجودة
+            if (move_uploaded_file($file['tmp_name'], $dest)) {
+
+                // احذف القديمة
                 if ($currentPhoto) {
-                    $oldPath = $uploadDir . $currentPhoto;
+                    $oldPath = $UPLOADS_FS_DIR . $currentPhoto;
                     if (is_file($oldPath)) {
                         @unlink($oldPath);
                     }
                 }
 
-                // حدّث DB
+                // خزّن بالـ DB اسم الملف فقط (أفضل)
                 $stmt = $conn->prepare("UPDATE student SET profile_photo = ? WHERE student_id = ?");
                 $stmt->bind_param("si", $newName, $studentId);
                 $stmt->execute();
                 $stmt->close();
 
                 $student['profile_photo'] = $newName;
-                $avatarUrl = '../uploads/students/' . $newName;
+                $avatarUrl = $UPLOADS_URL_DIR . $newName; // ✅ show path بعد التحديث
                 $successMessage = 'Profile photo updated successfully.';
             } else {
                 $errorMessage = 'Could not save uploaded file.';
             }
         }
-    } else {
-        // لو كبس Save بدون ما يغيّر اشي
+    }
+
+    else {
         $successMessage = 'Nothing to update.';
     }
 }
 
 // role label
-$roleLabel = ($student['role'] === 'club_president') ? 'Club President' : 'Student Member';
-$joinedLabel = 'Joined — ' . date('Y'); // ما عنا عمود join_date فاستعملنا السنة الحالية
+$roleLabel   = ($student['role'] === 'club_president') ? 'Club President' : 'Student Member';
+$joinedLabel = 'Joined — ' . date('Y');
 ?>
 
 <!doctype html>
@@ -156,10 +212,7 @@ body{
     radial-gradient(900px 700px at 110% 60%, rgba(72,113,219,.20), transparent 60%),
     var(--paper);
 }
-
 .wrap{max-width:var(--maxw); margin:28px auto 80px; padding:0 18px}
-
-/* hero card */
 .hero{
   position:relative;border-radius:26px;overflow:hidden;
   background:#4871db;
@@ -180,8 +233,6 @@ body{
 @media (max-width:720px){
   .hero-inner{grid-template-columns:1fr;justify-items:center;text-align:center}
 }
-
-/* avatar + edit controls */
 .avatar-wrap{
   position:relative;
   display:flex;
@@ -189,141 +240,66 @@ body{
   align-items:center;
   gap:10px;
 }
-
-/* PERFECT BALANCED AVATAR SIZE */
 .avatar{
-  width:160px;
-  height:160px;
-  border-radius:26px;
-  object-fit:cover;
+  width:160px;height:160px;border-radius:26px;object-fit:cover;
   border:4px solid rgba(255,255,255,.9);
   background:#dfe5ff;
   box-shadow:0 12px 26px rgba(0,0,0,.18);
 }
-
-.avatar-actions{
-  display:flex;
-  gap:8px;
-  flex-wrap:wrap;
-  justify-content:center;
-}
+.avatar-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;}
 .chip-btn{
-  appearance:none;
-  border-radius:999px;
+  appearance:none;border-radius:999px;
   border:1px solid rgba(255,255,255,.75);
   background:rgba(255,255,255,.12);
-  color:#fff;
-  padding:6px 12px;
-  font-size:12px;
-  font-weight:800;
-  letter-spacing:.03em;
-  text-transform:uppercase;
-  cursor:pointer;
+  color:#fff;padding:6px 12px;font-size:12px;font-weight:800;
+  letter-spacing:.03em;text-transform:uppercase;cursor:pointer;
   backdrop-filter:blur(6px);
 }
-.chip-btn.secondary{
-  background:transparent;
-  border-style:dashed;
-}
-
-/* text area */
+.chip-btn.secondary{background:transparent;border-style:dashed;}
 .name{font-size:30px;font-weight:900;margin:0}
 .sub{opacity:.95;font-weight:700;margin-top:4px}
 .badges{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 .role{
   display:inline-flex;align-items:center;gap:8px;
   background:#fff7e6;border:1px solid #ffecb5;
-  color:#8a5b00;font-weight:900;
-  border-radius:999px;padding:6px 12px;font-size:12px;
+  color:#8a5b00;font-weight:900;border-radius:999px;
+  padding:6px 12px;font-size:12px;
 }
 .joined{
   display:inline-flex;align-items:center;gap:8px;
   background:#f2f5ff;border:1px solid #e6e8f2;
-  color:#1f2a6b;font-weight:900;
-  border-radius:999px;padding:6px 12px;font-size:12px;
+  color:#1f2a6b;font-weight:900;border-radius:999px;
+  padding:6px 12px;font-size:12px;
 }
-
-/* content */
 .card{
-  background:var(--card);
-  border:1px solid #e6e8f2;
-  border-radius:18px;
-  box-shadow:var(--shadow);
-  padding:20px;
-  margin-top:20px;
+  background:var(--card);border:1px solid #e6e8f2;
+  border-radius:18px;box-shadow:var(--shadow);
+  padding:20px;margin-top:20px;
 }
 .card h3{margin:0 0 14px;font-size:18px;color:var(--navy)}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media (max-width:620px){ .grid{grid-template-columns:1fr} }
-
 .kv{
-  background:#f6f8ff;
-  border:1px solid #e7ecff;
-  border-radius:14px;
-  padding:12px;
+  background:#f6f8ff;border:1px solid #e7ecff;
+  border-radius:14px;padding:12px;
 }
-.kv b{
-  display:block;
-  font-size:12px;
-  color:#596180;
-  margin-bottom:4px;
-}
-.kv span{
-  font-size:15px;
-  color:#1a1f36;
-  font-weight:700;
-}
-
-/* alerts */
-.alert{
-  margin-bottom:16px;
-  padding:10px 14px;
-  border-radius:12px;
-  font-size:14px;
-}
-.alert-success{
-  background:#ecfdf3;
-  border:1px solid #bbf7d0;
-  color:#166534;
-}
-.alert-error{
-  background:#fef2f2;
-  border:1px solid #fecaca;
-  color:#991b1b;
-}
-
-/* bottom actions */
-.form-actions{
-  display:flex;
-  justify-content:flex-end;
-  gap:10px;
-  margin-top:18px;
-  flex-wrap:wrap;
-}
+.kv b{display:block;font-size:12px;color:#596180;margin-bottom:4px;}
+.kv span{font-size:15px;color:#1a1f36;font-weight:700;}
+.alert{margin-bottom:16px;padding:10px 14px;border-radius:12px;font-size:14px;}
+.alert-success{background:#ecfdf3;border:1px solid #bbf7d0;color:#166534;}
+.alert-error{background:#fef2f2;border:1px solid #fecaca;color:#991b1b;}
+.form-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;flex-wrap:wrap;}
 .btn{
-  appearance:none;
-  border-radius:12px;
-  padding:10px 16px;
-  font-weight:800;
-  border:1px solid #d5dbea;
-  background:#fff;
-  color:#1a1f36;
-  cursor:pointer;
+  appearance:none;border-radius:12px;padding:10px 16px;font-weight:800;
+  border:1px solid #d5dbea;background:#fff;color:#1a1f36;cursor:pointer;
 }
-.btn.primary{
-  border:0;
-  background:linear-gradient(135deg,#5d7ff2,#3664e9);
-  color:#fff;
-  box-shadow:0 8px 20px rgba(54,100,233,.22);
-}
-.btn.ghost{
-  background:transparent;
-}
+.btn.primary{border:0;background:linear-gradient(135deg,#5d7ff2,#3664e9);color:#fff;box-shadow:0 8px 20px rgba(54,100,233,.22);}
+.btn.ghost{background:transparent;}
 </style>
 </head>
 <body>
 
-<?php include 'header.php'; ?>
+<?php include __DIR__ . '/header.php'; ?>
 
 <div class="wrap">
 
@@ -336,7 +312,6 @@ body{
   <?php endif; ?>
 
   <form action="editprofile.php" method="post" enctype="multipart/form-data">
-    <!-- HERO -->
     <section class="hero">
       <div class="hero-inner">
         <div class="avatar-wrap">
@@ -354,32 +329,23 @@ body{
         </div>
 
         <div>
-          <h2 id="name" class="name">
-            <?php echo htmlspecialchars($student['student_name']); ?>
-          </h2>
-          <div id="email" class="sub">
-            <?php echo htmlspecialchars($student['email']); ?>
-          </div>
+          <h2 class="name"><?php echo htmlspecialchars($student['student_name']); ?></h2>
+          <div class="sub"><?php echo htmlspecialchars($student['email']); ?></div>
           <div class="badges">
-            <span id="role" class="role">
-              <?php echo htmlspecialchars($roleLabel); ?>
-            </span>
-            <span id="joined" class="joined">
-              <?php echo htmlspecialchars($joinedLabel); ?>
-            </span>
+            <span class="role"><?php echo htmlspecialchars($roleLabel); ?></span>
+            <span class="joined"><?php echo htmlspecialchars($joinedLabel); ?></span>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- ABOUT INFO -->
     <section class="card">
       <h3>Member Info</h3>
       <div class="grid">
-        <div class="kv"><b>Full name</b><span id="aboutName"><?php echo htmlspecialchars($student['student_name']); ?></span></div>
-        <div class="kv"><b>Email</b><span id="aboutEmail"><?php echo htmlspecialchars($student['email']); ?></span></div>
-        <div class="kv"><b>Major</b><span id="major"><?php echo htmlspecialchars($student['major'] ?: '—'); ?></span></div>
-        <div class="kv"><b>Student ID</b><span id="studentId"><?php echo htmlspecialchars($student['student_id']); ?></span></div>
+        <div class="kv"><b>Full name</b><span><?php echo htmlspecialchars($student['student_name']); ?></span></div>
+        <div class="kv"><b>Email</b><span><?php echo htmlspecialchars($student['email']); ?></span></div>
+        <div class="kv"><b>Major</b><span><?php echo htmlspecialchars($student['major'] ?: '—'); ?></span></div>
+        <div class="kv"><b>Student ID</b><span><?php echo htmlspecialchars($student['student_id']); ?></span></div>
       </div>
 
       <div class="form-actions">
@@ -387,12 +353,11 @@ body{
         <button type="submit" name="save_profile" class="btn primary">Save Changes</button>
       </div>
     </section>
-
   </form>
 
 </div>
 
-<?php include 'footer.php'; ?>
+<?php include __DIR__ . '/footer.php'; ?>
 
 <script>
 const avatarEl      = document.getElementById('avatar');
@@ -400,12 +365,12 @@ const changeBtn     = document.getElementById('changePhotoBtn');
 const removeBtn     = document.getElementById('removePhotoBtn');
 const fileInput     = document.getElementById('photoInput');
 const removeFlag    = document.getElementById('removePhotoFlag');
-const defaultAvatar = "<?php echo addslashes($defaultAvatarUrl); ?>";
+
+// ✅ default avatar URL مضبوط بالنسبة لمجلد student/
+const defaultAvatar = "<?php echo addslashes($DEFAULT_AVATAR_URL); ?>";
 
 // افتح اختيار ملف
-changeBtn.addEventListener('click', () => {
-  fileInput.click();
-});
+changeBtn.addEventListener('click', () => fileInput.click());
 
 // معاينة الصورة الجديدة
 fileInput.addEventListener('change', () => {
@@ -415,7 +380,7 @@ fileInput.addEventListener('change', () => {
   const reader = new FileReader();
   reader.onload = e => {
     avatarEl.src = e.target.result;
-    removeFlag.value = "0"; // أكيد ما عاد بدنا remove
+    removeFlag.value = "0";
   };
   reader.readAsDataURL(file);
 });
