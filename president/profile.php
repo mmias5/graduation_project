@@ -1,27 +1,40 @@
 <?php
 session_start();
 
-if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
+if (!isset($_SESSION['student_id']) || ($_SESSION['role'] ?? '') !== 'club_president') {
     header('Location: ../login.php');
     exit;
 }
 
-require_once '../config.php';
+require_once __DIR__ . '/../config.php';
 
 $president_id = (int)$_SESSION['student_id'];
 $member_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+
 if ($member_id <= 0) {
     header('Location: memberspage.php');
     exit;
+}
+
+/* helpers */
+function esc($v): string {
+    return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
+}
+function media_url(?string $path): string {
+    $p = trim((string)$path);
+    if ($p === '') return '';
+    if (preg_match('~^https?://~i', $p)) return $p;
+    if (strpos($p, '/') === 0) return $p;
+    return '../' . ltrim($p, '/'); // because this page is in /president/
 }
 
 /* get president club_id */
 $stmt = $conn->prepare("SELECT club_id FROM student WHERE student_id=? AND role='club_president' LIMIT 1");
 $stmt->bind_param("i", $president_id);
 $stmt->execute();
-$res = $stmt->get_result();
-$pres = $res->fetch_assoc();
+$pres = $stmt->get_result()->fetch_assoc();
 $stmt->close();
+
 $club_id = isset($pres['club_id']) ? (int)$pres['club_id'] : 1;
 
 if ($club_id <= 1) {
@@ -29,32 +42,32 @@ if ($club_id <= 1) {
     exit;
 }
 
-/* check permission:
+/* permission:
    - member is in same club OR
    - member has Pending request to same club
 */
 $allowed = false;
 
+/* check member current club */
 $stmt = $conn->prepare("SELECT club_id FROM student WHERE student_id=? LIMIT 1");
 $stmt->bind_param("i", $member_id);
 $stmt->execute();
-$r = $stmt->get_result();
-$memClub = $r->fetch_assoc();
+$memClub = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
 if ($memClub && (int)$memClub['club_id'] === $club_id) {
     $allowed = true;
 } else {
+    /* check pending request (case-insensitive) */
     $stmt = $conn->prepare("
         SELECT 1
         FROM club_membership_request
-        WHERE student_id=? AND club_id=? AND status='Pending'
+        WHERE student_id=? AND club_id=? AND LOWER(status)='pending'
         LIMIT 1
     ");
     $stmt->bind_param("ii", $member_id, $club_id);
     $stmt->execute();
-    $rr = $stmt->get_result();
-    $allowed = (bool)$rr->fetch_row();
+    $allowed = (bool)$stmt->get_result()->fetch_row();
     $stmt->close();
 }
 
@@ -72,8 +85,7 @@ $stmt = $conn->prepare("
 ");
 $stmt->bind_param("i", $member_id);
 $stmt->execute();
-$res = $stmt->get_result();
-$m = $res->fetch_assoc();
+$m = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
 if (!$m) {
@@ -81,26 +93,32 @@ if (!$m) {
     exit;
 }
 
-$avatar = $m['profile_photo'];
-if (!$avatar) $avatar = "https://i.pravatar.cc/200?u=" . urlencode("profile_" . $member_id);
+/* avatar */
+$avatar = trim((string)($m['profile_photo'] ?? ''));
+if ($avatar === '') {
+    $avatar = "https://i.pravatar.cc/200?u=" . urlencode("profile_" . $member_id);
+} else {
+    $avatar = media_url($avatar);
+}
 
 /* role badge */
 $role = ($member_id === $president_id) ? 'President' : 'Member';
 
-/* joined date from approved request */
+/* joined date from approved request (case-insensitive) */
 $joined = '—';
 $stmt = $conn->prepare("
     SELECT MAX(COALESCE(decided_at, submitted_at)) AS joined_at
     FROM club_membership_request
-    WHERE student_id=? AND club_id=? AND status='Approved'
+    WHERE student_id=? AND club_id=? AND LOWER(status)='approved'
 ");
 $stmt->bind_param("ii", $member_id, $club_id);
 $stmt->execute();
-$res = $stmt->get_result();
-$j = $res->fetch_assoc();
+$j = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
-if ($j && $j['joined_at']) $joined = date('Y-m-d', strtotime($j['joined_at']));
+if ($j && !empty($j['joined_at'])) {
+    $joined = date('Y-m-d', strtotime($j['joined_at']));
+}
 ?>
 <!doctype html>
 <html lang="en">
@@ -142,7 +160,7 @@ body{
   background:radial-gradient(600px 300px at 10% 10%,rgba(255,255,255,.18),transparent 60%);
 }
 
-/* UPDATED: Perfectly balanced image + spacing */
+/* balanced spacing */
 .hero-inner{
   position:relative;z-index:1;width:100%;
   display:grid;grid-template-columns:170px 1fr;
@@ -152,20 +170,16 @@ body{
   .hero-inner{grid-template-columns:1fr;justify-items:center;text-align:center}
 }
 
-/* UPDATED: Balanced avatar size */
+/* avatar */
 .avatar{
-  width:160px;
-  height:160px;
-  border-radius:24px;
-  object-fit:cover;
-  border:4px solid rgba(255,255,255,.9);
-  background:#dfe5ff;
-  box-shadow:0 12px 26px rgba(0,0,0,.18);
+  width:160px;height:160px;border-radius:24px;
+  object-fit:cover;border:4px solid rgba(255,255,255,.9);
+  background:#dfe5ff;box-shadow:0 12px 26px rgba(0,0,0,.18);
 }
 
 .name{font-size:30px;font-weight:900;margin:0}
 .sub{opacity:.95;font-weight:700;margin-top:4px}
-.badges{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.badges{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px; align-items:center}
 .role{
   display:inline-flex;align-items:center;gap:8px;
   background:#fff7e6;border:1px solid #ffecb5;
@@ -193,22 +207,10 @@ body{
 @media (max-width:620px){ .grid{grid-template-columns:1fr} }
 
 .kv{
-  background:#f6f8ff;
-  border:1px solid #e7ecff;
-  border-radius:14px;
-  padding:12px;
+  background:#f6f8ff;border:1px solid #e7ecff;border-radius:14px;padding:12px;
 }
-.kv b{
-  display:block;
-  font-size:12px;
-  color:#596180;
-  margin-bottom:4px;
-}
-.kv span{
-  font-size:15px;
-  color:#1a1f36;
-  font-weight:700;
-}
+.kv b{display:block;font-size:12px;color:#596180;margin-bottom:4px}
+.kv span{font-size:15px;color:#1a1f36;font-weight:800}
 </style>
 </head>
 <body>
@@ -217,27 +219,26 @@ body{
 
 <div class="wrap">
 
-  <!-- HERO -->
   <section class="hero">
     <div class="hero-inner">
-      <img class="avatar" src="<?php echo htmlspecialchars($avatar); ?>" alt="Member avatar">
+      <img class="avatar" src="<?php echo esc($avatar); ?>" alt="Member avatar">
       <div>
-        <h2 class="name"><?php echo htmlspecialchars($m['student_name']); ?></h2>
-        <div class="sub"><?php echo htmlspecialchars($m['email']); ?></div>
+        <h2 class="name"><?php echo esc($m['student_name']); ?></h2>
+        <div class="sub"><?php echo esc($m['email']); ?></div>
         <div class="badges">
-          <span class="role"><?php echo htmlspecialchars($role); ?></span>
+          <span class="role"><?php echo esc($role); ?></span>
+          <span class="joined">Joined: <?php echo esc($joined); ?></span>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ABOUT ONLY -->
   <section class="card">
     <h3>Member Info</h3>
     <div class="grid">
-      <div class="kv"><b>Full name</b><span><?php echo htmlspecialchars($m['student_name']); ?></span></div>
-      <div class="kv"><b>Email</b><span><?php echo htmlspecialchars($m['email']); ?></span></div>
-      <div class="kv"><b>Major</b><span><?php echo htmlspecialchars($m['major'] ?: '—'); ?></span></div>
+      <div class="kv"><b>Full name</b><span><?php echo esc($m['student_name']); ?></span></div>
+      <div class="kv"><b>Email</b><span><?php echo esc($m['email']); ?></span></div>
+      <div class="kv"><b>Major</b><span><?php echo esc($m['major'] ?: '—'); ?></span></div>
       <div class="kv"><b>Student ID</b><span><?php echo (int)$m['student_id']; ?></span></div>
     </div>
   </section>

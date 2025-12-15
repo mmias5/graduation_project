@@ -1,7 +1,8 @@
 <?php
 session_start();
+
 // president file
-if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
+if (!isset($_SESSION['student_id']) || ($_SESSION['role'] ?? '') !== 'club_president') {
     header('Location: ../login.php');
     exit;
 }
@@ -10,7 +11,31 @@ require_once __DIR__ . '/../config.php';
 
 $presidentId = (int)$_SESSION['student_id'];
 
-// ===== Get president club_id (his own club) =====
+/* =========================
+   Helpers
+========================= */
+function esc($v): string {
+    return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
+}
+
+/**
+ * Make a usable URL for stored paths:
+ * - If http(s) -> keep
+ * - If starts with "/" -> keep
+ * - If starts with "uploads/" or "tools/" or any relative -> prefix "../"
+ * NOTE: we DO NOT check if file exists (important for cover behavior).
+ */
+function media_url(?string $path): string {
+    $p = trim((string)$path);
+    if ($p === '') return '';
+    if (preg_match('~^https?://~i', $p)) return $p;
+    if (strpos($p, '/') === 0) return $p;        // absolute from domain root
+    return '../' . ltrim($p, '/');               // from /president/ to project root
+}
+
+/* =========================
+   Get president club_id
+========================= */
 $president_club_id = 0;
 $stmt = $conn->prepare("SELECT club_id FROM student WHERE student_id = ? LIMIT 1");
 $stmt->bind_param("i", $presidentId);
@@ -29,15 +54,12 @@ if ($president_club_id <= 0 || $president_club_id == 1) {
 
 // ===== Displayed club (from URL) =====
 $display_club_id = (int)($_GET['club_id'] ?? $president_club_id);
-if ($display_club_id <= 0) {
-    $display_club_id = $president_club_id;
-}
+if ($display_club_id <= 0) $display_club_id = $president_club_id;
 
 // ===== Can Edit? only if displayed club == president club =====
 $canEdit = ($display_club_id === $president_club_id);
 
 // ===== Fetch displayed club =====
-$club = [];
 $stmt = $conn->prepare("SELECT * FROM club WHERE club_id = ? LIMIT 1");
 $stmt->bind_param("i", $display_club_id);
 $stmt->execute();
@@ -50,20 +72,34 @@ if (empty($club)) {
     exit;
 }
 
+/* =========================
+   Map values
+========================= */
 $club_name     = $club['club_name'] ?? '—';
 $description   = $club['description'] ?? '';
 $category      = $club['category'] ?? '';
 $contact_email = $club['contact_email'] ?? '';
-$logo_url      = $club['logo'] ?? '';
 $facebook      = $club['facebook_url'] ?? '';
 $instagram     = $club['instagram_url'] ?? '';
 $linkedin      = $club['linkedin_url'] ?? '';
 $club_points   = (int)($club['points'] ?? 0);
 
-// Default logo if empty
-if (!$logo_url) {
-    $logo_url = "tools/pics/social_life.png";
-}
+// ---- LOGO (small circle image) ----
+$logo_db  = trim((string)($club['logo'] ?? ''));
+$logo_url = $logo_db !== '' ? media_url($logo_db) : media_url('tools/pics/social_life.png'); // fallback only if DB empty
+
+// ---- COVER / HERO (big background) ----
+// IMPORTANT: take DB value as-is (NO file_exists), only fallback if DB empty.
+$cover_db = trim((string)(
+    $club['cover_image']   ??   // إذا عندك عمود cover_image
+    $club['cover']         ??   // أو cover
+    $club['hero_image']    ??   // أو hero_image
+    $club['banner_image']  ??   // أو banner_image
+    $club['banner']        ??   // أو banner
+    ''
+));
+
+$hero_bg = $cover_db !== '' ? media_url($cover_db) : media_url('tools/pics/social_life.png'); // fallback فقط إذا DB فاضي
 
 /* =========================
    Helper: Sponsor initials
@@ -84,11 +120,9 @@ function makeInitials(string $name): string {
 }
 
 /* =========================
-   NEW: Fetch CLUB sponsor (club.sponsor_id)
+   Fetch CLUB sponsor (club.sponsor_id)
 ========================= */
 $sponsorName = 'No sponsor yet';
-$sponsorInitials = 'SP';
-
 $clubSponsorId = (int)($club['sponsor_id'] ?? 0);
 if ($clubSponsorId > 0) {
     $stmtSp = $conn->prepare("SELECT company_name FROM sponsor WHERE sponsor_id = ? LIMIT 1");
@@ -97,7 +131,7 @@ if ($clubSponsorId > 0) {
     $resSp = $stmtSp->get_result();
     if ($resSp && $resSp->num_rows > 0) {
         $sp = $resSp->fetch_assoc();
-        $sponsorName = $sp['company_name'] ?? $sponsorName;
+        if (!empty($sp['company_name'])) $sponsorName = $sp['company_name'];
     }
     $stmtSp->close();
 }
@@ -180,7 +214,7 @@ body{
 .hero-card::before{
   content:"";
   position:absolute; inset:0;
-  background-image: var(--hero-bg, url("tools/pics/social_life.png"));
+  background-image: var(--hero-bg, url("../tools/pics/social_life.png"));
   background-size: cover; background-position: center; background-repeat: no-repeat;
   filter: grayscale(.12) contrast(1.03); opacity: .95;
 }
@@ -281,11 +315,13 @@ body{
 
   <section class="section hero">
     <div class="wrap">
-      <div class="hero-card" style="--hero-bg: url('tools/pics/social_life.png');">
+
+      <!-- ✅ COVER/HERO uses DB value as-is (no file_exists), only fallback if DB empty -->
+      <div class="hero-card" style="--hero-bg: url('<?php echo esc($hero_bg); ?>');">
         <div class="hero-top">
           <h1>CLUB PAGE</h1>
           <div class="hero-actions">
-            <div class="tag"><?php echo htmlspecialchars($category ?: 'Club'); ?></div>
+            <div class="tag"><?php echo esc($category ?: 'Club'); ?></div>
 
             <?php if ($canEdit): ?>
               <a href="clubedit.php" class="edit-btn">Edit</a>
@@ -296,21 +332,24 @@ body{
 
         <div class="hero-pillrow">
           <div class="pill">
-            <img src="<?php echo htmlspecialchars($logo_url); ?>"
-                alt="Club Logo"
-                style="width:42px; height:42px; border-radius:50%; object-fit:cover; border:2px solid rgba(255,255,255,.8)" />
+            <!-- ✅ LOGO uses DB, fallback only if DB empty -->
+            <img
+              src="<?php echo esc($logo_url); ?>"
+              alt="Club Logo"
+              style="width:42px; height:42px; border-radius:50%; object-fit:cover; border:2px solid rgba(255,255,255,.8)"
+            />
             <div>
               <div style="font-size:12px;opacity:.8">club name</div>
-              <strong id="clubs"><?php echo htmlspecialchars($club_name); ?></strong>
+              <strong id="clubs"><?php echo esc($club_name); ?></strong>
             </div>
           </div>
 
-          <!-- UPDATED PILL: Sponsor -->
+          <!-- Sponsor pill -->
           <div class="pill">
-            <div class="circle"><?php echo htmlspecialchars($sponsorInitials); ?></div>
+            <div class="circle"><?php echo esc($sponsorInitials); ?></div>
             <div>
               <div style="font-size:12px;opacity:.8">sponsor name</div>
-              <strong><?php echo htmlspecialchars($sponsorName); ?></strong>
+              <strong><?php echo esc($sponsorName); ?></strong>
             </div>
           </div>
         </div>
@@ -325,7 +364,7 @@ body{
       <div class="hr"></div>
 
       <div class="about">
-        <p><?php echo nl2br(htmlspecialchars($description)); ?></p>
+        <p><?php echo nl2br(esc($description)); ?></p>
 
         <div style="
           background: rgba(255,255,255,0.12);
@@ -346,8 +385,8 @@ body{
           <div>
             <div style="font-size:12px;opacity:.85;">President Contact</div>
             <strong>
-              <a href="mailto:<?php echo htmlspecialchars($contact_email); ?>" style="color:#f4df6d; text-decoration:none;">
-                <?php echo htmlspecialchars($contact_email ?: '—'); ?>
+              <a href="mailto:<?php echo esc($contact_email); ?>" style="color:#f4df6d; text-decoration:none;">
+                <?php echo esc($contact_email ?: '—'); ?>
               </a>
             </strong>
           </div>
@@ -355,11 +394,12 @@ body{
 
         <h4 style="letter-spacing:.4em; text-transform:uppercase; margin:16px 0 8px; color: #f4df6d">Links</h4>
         <div class="link-grid">
-          <a class="link-tile" href="<?php echo $linkedin ? htmlspecialchars($linkedin) : '#'; ?>" target="_blank" rel="noreferrer">
+          <a class="link-tile" href="<?php echo $linkedin ? esc($linkedin) : '#'; ?>" target="_blank" rel="noreferrer">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="#0a66c2" aria-hidden="true"><path d="M20.447 20.452h-3.555V14.86c0-1.333-.027-3.045-1.856-3.045-1.858 0-2.142 1.45-2.142 2.95v5.688H9.338V9h3.414v1.561h.048c.476-.9 1.637-1.85 3.369-1.85 3.602 0 4.268 2.371 4.268 5.455v6.286zM5.337 7.433a2.062 2.062 0 1 1 0-4.124 2.062 2.062 0 0 1 0 4.124zM6.99 20.452H3.68V9h3.31v11.452z"/></svg>
             <span class="links">LinkedIn</span>
           </a>
-          <a class="link-tile" href="<?php echo $instagram ? htmlspecialchars($instagram) : '#'; ?>" target="_blank" rel="noreferrer">
+
+          <a class="link-tile" href="<?php echo $instagram ? esc($instagram) : '#'; ?>" target="_blank" rel="noreferrer">
             <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" style="color:#E4405F">
               <rect x="2" y="2" width="20" height="20" rx="5" ry="5" fill="none" stroke="currentColor" stroke-width="2"/>
               <circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="2"/>
@@ -367,7 +407,8 @@ body{
             </svg>
             <span class="links">Instagram</span>
           </a>
-          <a class="link-tile" href="<?php echo $facebook ? htmlspecialchars($facebook) : '#'; ?>" target="_blank" rel="noreferrer">
+
+          <a class="link-tile" href="<?php echo $facebook ? esc($facebook) : '#'; ?>" target="_blank" rel="noreferrer">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="#1877f2" aria-hidden="true"><path d="M22 12.06C22 6.5 17.52 2 12 2S2 6.5 2 12.06C2 17.08 5.66 21.2 10.44 22v-7.02H7.9v-2.92h2.54v-2.2c0-2.5 1.5-3.89 3.78-3.89 1.1 0 2.24.2 2.24.2v2.46h-1.26c-1.24 0-1.63.77-1.63 1.56v1.87h2.78l-.44 2.92h-2.34V22C18.34 21.2 22 17.08 22 12.06z"/></svg>
             <span class="links">Facebook</span>
           </a>
@@ -401,11 +442,15 @@ body{
             $time= $start->format('g:i A');
           ?>
             <article class="card">
-              <div class="date"><div class="day"><?php echo $day; ?></div><div class="mon"><?php echo $mon; ?></div><div class="sep"><?php echo $wk; ?></div></div>
+              <div class="date">
+                <div class="day"><?php echo esc($day); ?></div>
+                <div class="mon"><?php echo esc($mon); ?></div>
+                <div class="sep"><?php echo esc($wk); ?></div>
+              </div>
               <div>
-                <div class="title"><?php echo htmlspecialchars($e['event_name']); ?></div>
-                <div class="mini"><span>📍 <?php echo htmlspecialchars($e['event_location'] ?? '—'); ?></span></div>
-                <div class="footer"><span class="mini">🕒 <?php echo $time; ?></span></div>
+                <div class="title"><?php echo esc($e['event_name']); ?></div>
+                <div class="mini"><span>📍 <?php echo esc($e['event_location'] ?? '—'); ?></span></div>
+                <div class="footer"><span class="mini">🕒 <?php echo esc($time); ?></span></div>
               </div>
             </article>
           <?php endforeach; ?>

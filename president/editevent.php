@@ -12,6 +12,14 @@ $president_id = (int)$_SESSION['student_id'];
 $event_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 if ($event_id <= 0) { header('Location: index.php'); exit; }
 
+/* ✅ ONLY CHANGE: fix image paths without changing DB values */
+function cch_img($path){
+    if (!$path) return '';
+    if (preg_match('/^https?:\/\//i', $path)) return $path; // full URL
+    if ($path[0] === '/') return $path;                     // absolute path
+    return '../' . ltrim($path, '/');                       // make uploads/... work from /president/
+}
+
 /* CSRF */
 if (empty($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(16));
 $csrf = $_SESSION['csrf_token'];
@@ -65,6 +73,11 @@ if (!$eventRow) { header('Location: index.php'); exit; }
 
 /* split old data to form fields */
 $rawDesc = $eventRow['description'] ?? '';
+
+/* ✅ ONLY CHANGE: cover comes from DB banner_image (with correct path). Fallback only if empty */
+$coverRaw = $eventRow['banner_image'] ?? '';
+$coverFinal = $coverRaw ? cch_img($coverRaw) : "https://images.unsplash.com/photo-1551836022-d5d88e9218df?q=80&w=1600&auto=format&fit=crop";
+
 $event = [
   'title' => $eventRow['event_name'] ?? '',
   'location' => $eventRow['event_location'] ?? '',
@@ -76,7 +89,7 @@ $event = [
   'sponsor' => cch_get_tag($rawDesc, 'CCH_SPONSOR'),
   'description' => cch_get_tag($rawDesc, 'CCH_DESC'),
   'notes' => cch_get_tag($rawDesc, 'CCH_NOTES'),
-  'cover' => $eventRow['banner_image'] ?: "https://images.unsplash.com/photo-1551836022-d5d88e9218df?q=80&w=1600&auto=format&fit=crop",
+  'cover' => $coverFinal,
 ];
 if ($event['description'] === '') $event['description'] = trim($rawDesc);
 
@@ -179,26 +192,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
  new_event_name, new_event_location, new_description,
  new_starting_date, new_ending_date,
  new_max_attendees, new_banner_image)
-
                   VALUES
                     (?, ?, ?, 'Pending',
                      ?, ?, ?,
                      ?, ?,
                      ?, ?)
                 ");
+
                 $stmt->bind_param(
-    "iiisssssis",
-    $event_id,
-    $club_id,
-    $president_id,
-    $title,
-    $location,
-    $finalDesc,
-    $startDT,
-    $endDT,
-    $max_attendees,
-    $newCoverPath
-);
+                    "iiisssssis",
+                    $event_id,
+                    $club_id,
+                    $president_id,
+                    $title,
+                    $location,
+                    $finalDesc,
+                    $startDT,
+                    $endDT,
+                    $max_attendees,
+                    $newCoverPath
+                );
 
                 $stmt->execute();
                 $stmt->close();

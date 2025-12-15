@@ -8,11 +8,17 @@ if (!isset($_SESSION['student_id']) || ($_SESSION['role'] !== 'student' && $_SES
 
 require_once '../config.php';
 
-
-
 $eventId = isset($_GET['event_id']) ? (int)$_GET['event_id'] : 0;
-
 $event = null;
+
+/* ✅ helper: fix image path for student folder */
+function img_path_student(string $path): string {
+    $path = trim($path);
+    if ($path === '') return '';
+    if (preg_match('/^https?:\/\//i', $path)) return $path; // absolute url
+    if ($path[0] === '/') return $path;                    // already absolute from root
+    return '../' . ltrim($path, '/');                      // relative -> go up from /student/
+}
 
 if ($eventId > 0) {
     $sql = "
@@ -42,6 +48,12 @@ if (!$event) {
     $title = "Event not found";
 } else {
     $title = $event['event_name'];
+}
+
+/* ✅ banner from DB with correct path */
+$bannerSrc = '';
+if (!empty($event['banner_image'])) {
+    $bannerSrc = img_path_student($event['banner_image']);
 }
 
 function formatWhenFull($startStr, $endStr): string {
@@ -204,14 +216,14 @@ function formatWhenFull($startStr, $endStr): string {
       <span>
         Hosted by: <?php echo htmlspecialchars($event['club_name']); ?>
         • Sponsored by <?php echo htmlspecialchars($sponsorShow); ?>
-
       </span>
     </div>
 
     <figure class="hero">
-      <?php if (!empty($event['banner_image'])): ?>
-        <img src="<?php echo htmlspecialchars($event['banner_image']); ?>"
-             alt="Event banner">
+      <?php if ($bannerSrc !== ''): ?>
+        <img src="<?php echo htmlspecialchars($bannerSrc); ?>"
+             alt="Event banner"
+             onerror="this.onerror=null;this.src='https://images.unsplash.com/photo-1551836022-d5d88e9218df?q=80&w=1600&auto=format&fit=crop';">
       <?php else: ?>
         <img src="https://images.unsplash.com/photo-1551836022-d5d88e9218df?q=80&w=1600&auto=format&fit=crop"
              alt="Students attending an event">
@@ -231,19 +243,17 @@ function formatWhenFull($startStr, $endStr): string {
               </span>
             </div>
           </div>
+
           <div class="info-item">
             <div class="icon">📍</div>
             <div>
               <b>Where</b>
               <span id="whereText">
-                <?php
-                  echo htmlspecialchars(
-                    $event['event_location'] ?: 'Location to be announced'
-                  );
-                ?>
+                <?php echo htmlspecialchars($event['event_location'] ?: 'Location to be announced'); ?>
               </span>
             </div>
           </div>
+
           <div class="info-item">
             <div class="icon">🏷</div>
             <div>
@@ -251,6 +261,7 @@ function formatWhenFull($startStr, $endStr): string {
               <span><?php echo htmlspecialchars($categoryShow); ?></span>
             </div>
           </div>
+
           <div class="info-item">
             <div class="icon">🤝</div>
             <div>
@@ -292,6 +303,7 @@ function formatWhenFull($startStr, $endStr): string {
         </iframe>
       </div>
     </article>
+
   <?php endif; ?>
 </main>
 

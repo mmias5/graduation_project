@@ -1,7 +1,7 @@
 <?php
 session_start();
 
-if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
+if (!isset($_SESSION['student_id']) || ($_SESSION['role'] ?? '') !== 'club_president') {
     header('Location: ../login.php');
     exit;
 }
@@ -10,19 +10,45 @@ require_once __DIR__ . '/../config.php';
 
 $presidentId = (int)$_SESSION['student_id'];
 
-// ===== Get president club_id =====
+/* =========================
+   Helpers
+========================= */
+function esc($v): string {
+    return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
+}
+
+/**
+ * Make a usable URL for stored paths (NO file_exists, NO changing DB value)
+ * - If http(s) -> keep
+ * - If starts with "/" -> keep
+ * - Otherwise (uploads/..., tools/..., etc) -> prefix "../" because file is inside /president/
+ */
+function media_url(?string $path): string {
+    $p = trim((string)$path);
+    if ($p === '') return '';
+    if (preg_match('~^https?://~i', $p)) return $p;
+    if (strpos($p, '/') === 0) return $p;
+    return '../' . ltrim($p, '/');
+}
+
+/* =========================
+   Get president club_id
+========================= */
 $stmt = $conn->prepare("SELECT club_id FROM student WHERE student_id=? LIMIT 1");
 $stmt->bind_param("i", $presidentId);
 $stmt->execute();
 $myClubId = (int)($stmt->get_result()->fetch_assoc()['club_id'] ?? 0);
 $stmt->close();
 
+// ✅ FIX: This is "not assigned", NOT "submitted successfully"
 if ($myClubId <= 1) {
-    echo "<script>alert('✅ Edit request submitted successfully! Waiting for admin approval.'); location.href='index.php';</script>";
-exit;
+    echo "<script>alert('You are not assigned to any club yet.'); location.href='index.php';</script>";
+    exit;
 }
 
-// ===== Fetch club (ONLY his club) =====
+/* =========================
+   Fetch club (ONLY his club)
+========================= */
 $stmt = $conn->prepare("SELECT * FROM club WHERE club_id=? LIMIT 1");
 $stmt->bind_param("i", $myClubId);
 $stmt->execute();
@@ -34,23 +60,39 @@ $club_name      = $club['club_name'] ?? '';
 $category       = $club['category'] ?? '';
 $contact_email  = $club['contact_email'] ?? '';
 $description    = $club['description'] ?? '';
-$logo_url       = $club['logo'] ?? '';
+$logo_db        = $club['logo'] ?? '';
 $instagram      = $club['instagram_url'] ?? '';
 $facebook       = $club['facebook_url'] ?? '';
 $linkedin       = $club['linkedin_url'] ?? '';
 
-// cover مش موجود بالـ DB عندك
-$cover_url      = 'tools/pics/social_life.png';
+// ✅ COVER: keep DB value as-is if exists (حتى لو الملف مش موجود)
+// حطي هون اسم عمود الغلاف إذا عندك واحد، أنا عامل أكثر من احتمال بدون ما أغير DB
+$cover_db = trim((string)(
+    $club['cover_image']   ??   // لو عندك cover_image
+    $club['cover']         ??   // أو cover
+    $club['banner_image']  ??   // أو banner_image
+    $club['banner']        ??   // أو banner
+    ''                     // إذا ما في عمود
+));
 
-// sponsor مش موجودين بجدول club عندك
-$sponsor_name   = '—';
-$sponsor_logo   = 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Amazon_logo.svg/1200px-Amazon_logo.svg.png';
+// لو DB فاضي فقط بنستخدم placeholder
+$cover_url = ($cover_db !== '')
+    ? media_url($cover_db)
+    : media_url('tools/pics/social_life.png');
 
-if (!$logo_url) $logo_url = 'tools/pics/social_life.png';
+// ✅ LOGO: نفس الفكرة (لو DB فاضي بس)
+$logo_url = (trim((string)$logo_db) !== '')
+    ? media_url($logo_db)
+    : media_url('tools/pics/social_life.png');
 
-// (اختياري) فحص إذا في طلب تعديل Pending
+// sponsor (زي ما عندك)
+$sponsor_name = '—';
+$sponsor_logo = 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Amazon_logo.svg/1200px-Amazon_logo.svg.png';
+
+/* =========================
+   Pending request check (اختياري)
+========================= */
 $pendingMsg = '';
-$hasStatusCol = true;
 try {
     $stmt = $conn->prepare("SELECT request_id FROM club_edit_request WHERE club_id=? AND status='Pending' ORDER BY submitted_at DESC LIMIT 1");
     $stmt->bind_param("i", $club_id);
@@ -59,8 +101,7 @@ try {
     $stmt->close();
     if ($r) $pendingMsg = "You already have a pending edit request (Request #".$r['request_id']."). Wait for admin review.";
 } catch (Throwable $e) {
-    // إذا ما أضفت عمود status بعد، الكود ما يوقف
-    $hasStatusCol = false;
+    // لو عمود status مش موجود، ما نوقف الصفحة
 }
 ?>
 <!doctype html>
@@ -73,7 +114,6 @@ try {
 <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;600;700;800&display=swap" rel="stylesheet">
 
 <style>
-/* ========= Brand Tokens ========= */
 :root{
   --navy: #242751;
   --royal: #4871db;
@@ -86,7 +126,6 @@ try {
   --shadow:0 14px 34px rgba(10, 23, 60, .18);
   --radius:18px;
 }
-
 *{box-sizing:border-box}
 html,body{margin:0}
 body{
@@ -99,16 +138,14 @@ body{
   line-height:1.5;
 }
 
-/* ========= Helpers ========= */
 .section{padding:15px 20px}
 .wrap{max-width:1100px; margin:0 auto}
 
-/* ========= Hero ========= */
 .hero{ padding:0 0 28px 0; }
 .hero-card{ position:relative; overflow:hidden; border-radius:28px; box-shadow:var(--shadow); min-height:320px; display:flex; align-items:flex-end; background:none; }
 .hero-card::before{
   content:""; position:absolute; inset:0;
-  background-image: var(--hero-bg, url("https://images.unsplash.com/photo-1531189611190-3c6c6b3c3d57?q=80&w=1650&auto=format&fit=crop"));
+  background-image: var(--hero-bg, url("../tools/pics/social_life.png"));
   background-size: cover; background-position: center; background-repeat: no-repeat;
   filter: grayscale(.12) contrast(1.03); opacity: .95;
 }
@@ -126,11 +163,9 @@ body{
 .pill{ flex:1 1 260px; display:flex; align-items:center; gap:14px; backdrop-filter: blur(6px); background:rgba(255,255,255,.82); border:1px solid rgba(255,255,255,.7); border-radius:20px; padding:12px 14px; color:#1d244d; }
 .circle{ width:42px;height:42px;border-radius:50%; background:radial-gradient(circle at 30% 30%, #fff, #b9ccff); display:grid; place-items:center; font-weight:800; font-size:14px; color:#1d244d; border:2px solid rgba(255,255,255,.8); }
 
-/* ========= Headings ========= */
 .h-title{ font-size:34px; letter-spacing:.35em; text-transform:uppercase; margin:34px 0 12px; text-align:left; color:#2b2f55; }
 .hr{ height:3px; width:280px; background:#2b2f55; opacity:.35; border-radius:3px; margin:10px 0 24px; }
 
-/* ========= Form ========= */
 .card{ background:#fff; border-radius:18px; box-shadow:0 14px 34px rgba(10,23,60,.12); padding:20px; border:1px solid #e6e8f2; }
 .form-grid{ display:grid; grid-template-columns:1fr 1fr; gap:18px; }
 @media (max-width:900px){ .form-grid{ grid-template-columns:1fr; } }
@@ -144,13 +179,11 @@ body{
 .textarea{ min-height:120px; resize:vertical; }
 .input:focus, .textarea:focus{ border-color:var(--royal); box-shadow:0 0 0 3px rgba(72,113,219,.15); }
 
-/* ===== Buttons ===== */
 .actions{ display:flex; justify-content:flex-end; gap:12px; margin-top:18px; flex-wrap:wrap }
 .btn{ appearance:none; border:0; border-radius:12px; padding:12px 16px; font-weight:800; cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; }
 .btn.primary{ background:var(--royal); color:#fff; box-shadow:var(--shadow); }
 .btn.ghost{ background:#eef2ff; color:#1f2a6b; }
 
-/* ===== Uploaders ===== */
 .uploader{ display:flex; gap:14px; align-items:center; flex-wrap:wrap; border:1px dashed #d1d5db; border-radius:14px; padding:12px; }
 .thumb{ width:84px; height:84px; border-radius:12px; background:#f2f5ff; overflow:hidden; display:grid; place-items:center; border:1px solid #e5e7eb; }
 .thumb.wide{ width:144px; height:84px; }
@@ -158,36 +191,6 @@ body{
 .uploader input[type=file]{ display:none; }
 .pick{ display:inline-block; padding:10px 12px; border-radius:10px; background:#f3f4ff; color:#1f2a6b; font-weight:800; cursor:pointer; }
 
-/* ===== Custom Category Dropdown ===== */
-.cch-select{position:relative;font-size:14px;}
-.cch-select__btn{
-  width:100%;display:flex;align-items:center;justify-content:space-between;
-  background:#fff;border:1px solid #e5e7eb;border-radius:12px;
-  padding:12px 14px;font-weight:700;color:var(--ink);
-  cursor:pointer;transition:.12s;
-}
-.cch-select__btn:focus,
-.cch-select.open .cch-select__btn{
-  outline:none;border-color:var(--royal);
-  box-shadow:0 0 0 3px rgba(72,113,219,.15);
-}
-.cch-select__chev{width:20px;height:20px;color:var(--royal);transition:transform .18s;}
-.cch-select.open .cch-select__chev{transform:rotate(180deg);}
-.cch-select__menu{
-  position:absolute;left:0;right:0;top:calc(100% + 8px);
-  background:#fff;border:1px solid #dee6f5;border-radius:12px;
-  box-shadow:0 16px 34px rgba(10,23,60,.16);
-  list-style:none;margin:0;padding:6px;
-  max-height:260px;overflow:auto;display:none;z-index:30;
-}
-.cch-select.open .cch-select__menu{display:block;}
-.cch-select__option{padding:10px 12px;border-radius:10px;cursor:pointer;font-weight:600;}
-.cch-select__option:hover,
-.cch-select__option[aria-selected="true"]{
-  background:linear-gradient(180deg,#f5f8ff,#eef3ff);color:#1a2a5a;
-}
-
-/* ====== pending alert ====== */
 .notice{
   background:#fff7d6;border:1px solid #f1dc92;color:#604d11;
   padding:12px 14px;border-radius:14px;margin:10px 0 18px;font-weight:700;
@@ -201,7 +204,9 @@ body{
 
   <section class="section hero">
     <div class="wrap">
-      <div class="hero-card" style="--hero-bg: url('<?php echo htmlspecialchars($cover_url); ?>');">
+
+      <!-- ✅ cover stays DB value as-is (no checking), fallback only if DB empty -->
+      <div class="hero-card" style="--hero-bg: url('<?php echo esc($cover_url); ?>');">
         <div class="hero-top">
           <h1>EDIT CLUB</h1>
           <div class="tag">President Console</div>
@@ -209,11 +214,11 @@ body{
 
         <div class="hero-pillrow">
           <div class="pill">
-            <img src="<?php echo htmlspecialchars($logo_url); ?>" alt="Club Logo"
+            <img src="<?php echo esc($logo_url); ?>" alt="Club Logo"
               style="width:42px; height:42px; border-radius:50%; object-fit:cover; border:2px solid rgba(255,255,255,.8)" />
             <div>
               <div style="font-size:12px;opacity:.8">club name</div>
-              <strong id="clubs"><?php echo htmlspecialchars($club_name); ?></strong>
+              <strong id="clubs"><?php echo esc($club_name); ?></strong>
             </div>
           </div>
 
@@ -221,7 +226,7 @@ body{
             <div class="circle">SP</div>
             <div>
               <div style="font-size:12px;opacity:.8">sponsor name</div>
-              <strong id="sponsorNameHero"><?php echo htmlspecialchars($sponsor_name); ?></strong>
+              <strong id="sponsorNameHero"><?php echo esc($sponsor_name); ?></strong>
             </div>
           </div>
         </div>
@@ -236,7 +241,7 @@ body{
       <div class="hr"></div>
 
       <?php if ($pendingMsg): ?>
-        <div class="notice"><?php echo htmlspecialchars($pendingMsg); ?></div>
+        <div class="notice"><?php echo esc($pendingMsg); ?></div>
       <?php endif; ?>
 
       <form class="card" id="editClubForm" action="update_club.php" method="POST" enctype="multipart/form-data" novalidate>
@@ -246,63 +251,52 @@ body{
           <div class="field">
             <label class="label" for="club_name">Club name</label>
             <input class="input" id="club_name" name="club_name" required maxlength="255"
-                   value="<?php echo htmlspecialchars($club_name); ?>" />
+                   value="<?php echo esc($club_name); ?>" />
             <span class="hint">Your official club display name.</span>
           </div>
 
           <div class="field">
-            <label class="label">Category</label>
-            <div class="cch-select" id="categorySelect">
-              <button type="button" class="cch-select__btn" aria-haspopup="listbox" aria-expanded="false">
-                <span class="cch-select__value"><?php echo htmlspecialchars($category ?: 'Select category'); ?></span>
-                <svg class="cch-select__chev" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg>
-              </button>
-              <ul class="cch-select__menu" role="listbox">
-                <?php
-                  $cats = ['Technology','Business','Arts','Sports','Culture','Community','Science','Other'];
-                  foreach($cats as $c){
-                    $sel = ($category === $c) ? 'aria-selected="true"' : '';
-                    echo '<li class="cch-select__option" '.$sel.' data-value="'.htmlspecialchars($c).'">'.htmlspecialchars($c).'</li>';
-                  }
-                ?>
-              </ul>
-              <input type="hidden" name="category" value="<?php echo htmlspecialchars($category); ?>">
-            </div>
-            <span class="hint">Choose the best-fit category.</span>
+            <label class="label" for="category">Category</label>
+            <input class="input" id="category" name="category" maxlength="80"
+                   value="<?php echo esc($category); ?>" />
+            <span class="hint">Write a category (or later we can keep your custom dropdown).</span>
           </div>
 
           <div class="field">
             <label class="label" for="contact_email">Contact email</label>
             <input class="input" id="contact_email" name="contact_email" type="email" required
-                   value="<?php echo htmlspecialchars($contact_email); ?>" />
+                   value="<?php echo esc($contact_email); ?>" />
             <span class="hint">For student & sponsor inquiries.</span>
           </div>
 
           <div class="field">
             <label class="label" for="sponsor_name_display">Sponsor name</label>
-            <input class="input" id="sponsor_name_display" value="<?php echo htmlspecialchars($sponsor_name); ?>" disabled>
-            <input type="hidden" name="sponsor_name" value="<?php echo htmlspecialchars($sponsor_name); ?>">
-            <span class="hint">Assigned by the Super Admin. You can’t change the sponsor from this page.</span>
+            <input class="input" id="sponsor_name_display" value="<?php echo esc($sponsor_name); ?>" disabled>
+            <input type="hidden" name="sponsor_name" value="<?php echo esc($sponsor_name); ?>">
+            <span class="hint">Assigned by admin.</span>
           </div>
 
           <div class="field" style="grid-column:1 / -1">
             <label class="label" for="description">About the club</label>
-            <textarea class="textarea" id="description" name="description" maxlength="1000" required><?php echo htmlspecialchars($description); ?></textarea>
-            <span class="hint">Short and clear. Appears on the public club page.</span>
+            <textarea class="textarea" id="description" name="description" maxlength="1000" required><?php echo esc($description); ?></textarea>
+            <span class="hint">Short and clear.</span>
           </div>
         </div>
 
         <h3 class="h-title" style="font-size:20px; letter-spacing:.2em; margin-top:24px">Images</h3>
         <div class="hr" style="width:180px"></div>
+
         <div class="form-grid">
           <div class="field">
             <span class="label">Logo</span>
             <div class="uploader">
-              <div class="thumb"><img id="logoPreview" src="<?php echo htmlspecialchars($logo_url); ?>" alt="Logo preview"></div>
+              <div class="thumb">
+                <img id="logoPreview" src="<?php echo esc($logo_url); ?>" alt="Logo preview">
+              </div>
               <div>
                 <label class="pick" for="logo">Choose file</label>
                 <input id="logo" name="logo" type="file" accept="image/*">
-                <div class="hint">PNG/JPG. Square ~512×512 recommended.</div>
+                <div class="hint">PNG/JPG recommended.</div>
               </div>
             </div>
           </div>
@@ -310,11 +304,14 @@ body{
           <div class="field">
             <span class="label">Cover</span>
             <div class="uploader">
-              <div class="thumb wide"><img id="coverPreview" src="<?php echo htmlspecialchars($cover_url); ?>" alt="Cover preview"></div>
+              <!-- ✅ preview shows DB value (even if file missing) -->
+              <div class="thumb wide">
+                <img id="coverPreview" src="<?php echo esc($cover_url); ?>" alt="Cover preview">
+              </div>
               <div>
                 <label class="pick" for="cover">Choose file</label>
                 <input id="cover" name="cover" type="file" accept="image/*">
-                <div class="hint">Cover preview only (not saved to DB).</div>
+                <div class="hint">Preview only unless your update_club.php saves it.</div>
               </div>
             </div>
           </div>
@@ -323,41 +320,38 @@ body{
             <span class="label">Sponsor logo</span>
             <div class="uploader">
               <div class="thumb">
-                <img id="sponsorLogoPreview" src="<?php echo htmlspecialchars($sponsor_logo); ?>" alt="Sponsor logo preview">
+                <img id="sponsorLogoPreview" src="<?php echo esc($sponsor_logo); ?>" alt="Sponsor logo preview">
               </div>
-              <div class="hint">
-                Sponsor branding is managed by the Super Admin and can’t be changed from here.
-              </div>
+              <div class="hint">Managed by admin.</div>
             </div>
-            <input type="hidden" name="sponsor_logo" value="<?php echo htmlspecialchars($sponsor_logo); ?>">
+            <input type="hidden" name="sponsor_logo" value="<?php echo esc($sponsor_logo); ?>">
           </div>
         </div>
 
         <h3 class="h-title" style="font-size:20px; letter-spacing:.2em; margin-top:24px">Social Links</h3>
         <div class="hr" style="width:210px"></div>
+
         <div class="form-grid">
           <div class="field">
             <label class="label" for="instagram">Instagram</label>
-            <input class="input" id="instagram" name="instagram" type="url" placeholder="https://www.instagram.com/yourclub"
-                   value="<?php echo htmlspecialchars($instagram); ?>">
+            <input class="input" id="instagram" name="instagram" type="url"
+                   value="<?php echo esc($instagram); ?>">
           </div>
           <div class="field">
             <label class="label" for="facebook">Facebook</label>
-            <input class="input" id="facebook" name="facebook" type="url" placeholder="https://www.facebook.com/yourclub"
-                   value="<?php echo htmlspecialchars($facebook); ?>">
+            <input class="input" id="facebook" name="facebook" type="url"
+                   value="<?php echo esc($facebook); ?>">
           </div>
           <div class="field">
             <label class="label" for="linkedin">LinkedIn</label>
-            <input class="input" id="linkedin" name="linkedin" type="url" placeholder="https://www.linkedin.com/company/yourclub"
-                   value="<?php echo htmlspecialchars($linkedin); ?>">
+            <input class="input" id="linkedin" name="linkedin" type="url"
+                   value="<?php echo esc($linkedin); ?>">
           </div>
         </div>
 
         <div class="actions">
           <a class="btn ghost" href="clubpage.php">Cancel</a>
-          <button class="btn primary" type="submit" id="saveBtn">
-            Request change
-          </button>
+          <button class="btn primary" type="submit" id="saveBtn">Request change</button>
         </div>
       </form>
     </div>
@@ -366,32 +360,6 @@ body{
   <?php include 'footer.php'; ?>
 
 <script>
-  (function(){
-    const sel = document.getElementById('categorySelect');
-    const btn = sel.querySelector('.cch-select__btn');
-    const valEl = sel.querySelector('.cch-select__value');
-    const menu = sel.querySelector('.cch-select__menu');
-    const opts = Array.from(menu.querySelectorAll('.cch-select__option'));
-    const hidden = sel.querySelector('input[type="hidden"]');
-
-    function open(){ sel.classList.add('open'); btn.setAttribute('aria-expanded','true'); }
-    function close(){ sel.classList.remove('open'); btn.setAttribute('aria-expanded','false'); }
-    function set(v, t){
-      hidden.value = v; valEl.textContent = t;
-      opts.forEach(o=>o.removeAttribute('aria-selected'));
-      const chosen = opts.find(o=>o.dataset.value===v);
-      if(chosen) chosen.setAttribute('aria-selected','true');
-    }
-    btn.addEventListener('click', e=>{
-      e.stopPropagation();
-      sel.classList.contains('open') ? close() : open();
-    });
-    opts.forEach(o=>o.addEventListener('click', ()=>{
-      set(o.dataset.value, o.textContent.trim()); close();
-    }));
-    document.addEventListener('click', e=>{ if(!sel.contains(e.target)) close(); });
-  })();
-
   function previewImage(inputEl, imgEl){
     const f = inputEl.files && inputEl.files[0];
     if(!f) return;

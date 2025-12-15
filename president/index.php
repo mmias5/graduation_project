@@ -1,8 +1,12 @@
 <?php
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
 session_start();
 
-// بس الطالب العادي يدخل هون
-if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
+// بس الـ club president يدخل هون
+if (!isset($_SESSION['student_id']) || ($_SESSION['role'] ?? '') !== 'club_president') {
     if (isset($_SESSION['role']) && $_SESSION['role'] === 'student') {
         header('Location: ../president/index.php');
         exit;
@@ -10,7 +14,73 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
     header('Location: ../login.php');
     exit;
 }
+
 require_once __DIR__ . '/../config.php';
+
+/* =========================
+   PROJECT PATH CONFIG (LOCALHOST)
+   ========================= */
+define('PROJECT_BASE_URL', '/project/graduation_project'); // لا تحط / بالنهاية
+
+function project_root_fs(): string {
+    $docRoot = rtrim((string)($_SERVER['DOCUMENT_ROOT'] ?? ''), '/\\');
+    return $docRoot . PROJECT_BASE_URL;
+}
+
+function esc_attr(string $v): string {
+    return htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
+}
+
+function normalize_upload_rel(?string $dbPath): string {
+    $p = trim((string)$dbPath);
+    if ($p === '') return '';
+
+    // external/full url (إذا موجود عندك قديم) — بنمرره كما هو
+    if (preg_match('~^https?://~i', $p)) return $p;
+
+    $p = str_replace('\\', '/', $p);
+
+    // إذا بالغلط مخزن /project/graduation_project/uploads/... بنقصه
+    $pos = stripos($p, PROJECT_BASE_URL . '/');
+    if ($pos !== false) {
+        $p = substr($p, $pos + strlen(PROJECT_BASE_URL) + 1);
+    }
+
+    while (str_starts_with($p, '../')) $p = substr($p, 3);
+
+    if (str_starts_with($p, '/uploads/')) $p = ltrim($p, '/');
+
+    return $p;
+}
+
+function upload_public_url(string $rel): string {
+    $rel = ltrim($rel, '/');
+    return PROJECT_BASE_URL . '/' . $rel;
+}
+
+function upload_fs_path(string $rel): string {
+    $rel = ltrim($rel, '/');
+    return rtrim(project_root_fs(), '/\\') . '/' . $rel;
+}
+
+function img_url_from_db(?string $dbPath, string $placeholderRel): string {
+    $rel = normalize_upload_rel($dbPath);
+
+    if ($rel !== '' && preg_match('~^https?://~i', $rel)) {
+        return esc_attr($rel);
+    }
+
+    if ($rel === '' || !str_starts_with($rel, 'uploads/')) {
+        return esc_attr(upload_public_url($placeholderRel));
+    }
+
+    $fs = upload_fs_path($rel);
+    if (is_file($fs)) {
+        return esc_attr(upload_public_url($rel));
+    }
+
+    return esc_attr(upload_public_url($placeholderRel));
+}
 
 /* =======================
    COUNTERS (students / clubs / sponsors)
@@ -20,15 +90,12 @@ $totalClubs    = 0;
 $totalSponsors = 0;
 
 if (isset($conn) && $conn instanceof mysqli) {
-    // طلاب
     if ($res = $conn->query("SELECT COUNT(*) AS c FROM student")) {
         if ($row = $res->fetch_assoc()) $totalStudents = (int)$row['c'];
     }
-    // أندية
     if ($res = $conn->query("SELECT COUNT(*) AS c FROM club")) {
         if ($row = $res->fetch_assoc()) $totalClubs = (int)$row['c'];
     }
-    // رعاة
     if ($res = $conn->query("SELECT COUNT(*) AS c FROM sponsor")) {
         if ($row = $res->fetch_assoc()) $totalSponsors = (int)$row['c'];
     }
@@ -40,8 +107,6 @@ if (isset($conn) && $conn instanceof mysqli) {
 $topClubs = [];
 
 if (isset($conn) && $conn instanceof mysqli) {
-
-    // 1) Get latest ranking period_end
     $latestEnd = null;
     $periodRes = $conn->query("
         SELECT period_end
@@ -53,7 +118,6 @@ if (isset($conn) && $conn instanceof mysqli) {
         $latestEnd = $periodRes->fetch_assoc()['period_end'];
     }
 
-    // 2) Get top 4 clubs from ranking for that period
     if ($latestEnd !== null) {
         $stmt = $conn->prepare("
             SELECT
@@ -71,13 +135,10 @@ if (isset($conn) && $conn instanceof mysqli) {
         $stmt->bind_param("s", $latestEnd);
         $stmt->execute();
         $res = $stmt->get_result();
-        while ($row = $res->fetch_assoc()) {
-            $topClubs[] = $row;
-        }
+        while ($row = $res->fetch_assoc()) $topClubs[] = $row;
         $stmt->close();
     }
 
-    // fallback لو جدول ranking فاضي/ما رجّع شي
     if (empty($topClubs)) {
         $res = $conn->query("
             SELECT club_id, club_name, logo, points
@@ -85,13 +146,10 @@ if (isset($conn) && $conn instanceof mysqli) {
             ORDER BY points DESC, club_name ASC
             LIMIT 4
         ");
-        if ($res) {
-            while ($row = $res->fetch_assoc()) $topClubs[] = $row;
-        }
+        if ($res) while ($row = $res->fetch_assoc()) $topClubs[] = $row;
     }
 }
 
-// fallback نهائي لو فاضي
 if (empty($topClubs)) {
     $topClubs = [
         ['club_id'=>1, 'club_name'=>'AI Innovators', 'logo'=>null, 'points'=>9800],
@@ -113,32 +171,15 @@ if (isset($conn) && $conn instanceof mysqli) {
         LIMIT 5
     ";
     if ($res = $conn->query($sql)) {
-        while ($row = $res->fetch_assoc()) {
-            $newsItems[] = $row;
-        }
+        while ($row = $res->fetch_assoc()) $newsItems[] = $row;
     }
 }
-// fallback لو فاضية
+
 if (empty($newsItems)) {
     $newsItems = [
-        [
-            'news_id'  => 0,
-            'title'    => 'Top performing clubs',
-            'category' => 'Ranking',
-            'image'    => 'https://images.unsplash.com/photo-1519389950473-47ba0277781c?q=80&w=1200&auto=format&fit=crop',
-        ],
-        [
-            'news_id'  => 0,
-            'title'    => 'Join a new club',
-            'category' => 'Clubs',
-            'image'    => 'https://images.unsplash.com/photo-1556761175-5973dc0f32e7?q=80&w=1200&auto=format&fit=crop',
-        ],
-        [
-            'news_id'  => 0,
-            'title'    => 'Redeem your points',
-            'category' => 'Rewards',
-            'image'    => 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?q=80&w=1200&auto=format&fit=crop',
-        ],
+        ['news_id'=>0,'title'=>'Top performing clubs','category'=>'Ranking','image'=>null],
+        ['news_id'=>0,'title'=>'Join a new club','category'=>'Clubs','image'=>null],
+        ['news_id'=>0,'title'=>'Redeem your points','category'=>'Rewards','image'=>null],
     ];
 }
 
@@ -157,33 +198,8 @@ if (isset($conn) && $conn instanceof mysqli) {
         while ($row = $res->fetch_assoc()) $sponsors[] = $row;
     }
 }
-// لو أقل من 7، كمّل placeholders
 while (count($sponsors) < 7) {
     $sponsors[] = ['sponsor_id'=>0,'company_name'=>'Sponsor','logo'=>null];
-}
-
-/* =======================
-   HELPERS
-   ======================= */
-function club_logo_url(?string $logo): string {
-    if ($logo && $logo !== '') {
-        return htmlspecialchars($logo, ENT_QUOTES, 'UTF-8');
-    }
-    return 'https://dummyimage.com/120x120/a9bff8/242751.png&text=CL';
-}
-
-function sponsor_logo_url(?string $logo): string {
-    if ($logo && $logo !== '') {
-        return htmlspecialchars($logo, ENT_QUOTES, 'UTF-8');
-    }
-    return 'https://dummyimage.com/200x200/a9bff8/242751.png&text=S';
-}
-
-function news_image_url(?string $image): string {
-    if ($image && $image !== '') {
-        return htmlspecialchars($image, ENT_QUOTES, 'UTF-8');
-    }
-    return 'https://images.unsplash.com/photo-1519389950473-47ba0277781c?q=80&w=1200&auto=format&fit=crop';
 }
 ?>
 <!doctype html>
@@ -409,15 +425,14 @@ body{
   justify-content:center;
   gap:26px;
 
-  flex-wrap:nowrap;   /* مهم: ما ينزلوا تحت */
-  overflow-x:auto;    /* لو الشاشة ضيقة */
+  flex-wrap:nowrap;
+  overflow-x:auto;
 }
 
 .sponsors .sponsor-dot{
   width:94px;
   height:94px;
   border-radius:50%;
-  background:#f1f4ff;
 
   display:flex;
   align-items:center;
@@ -471,7 +486,7 @@ body{
   </div>
 </section>
 
-<!-- ===== NEWS CAROUSEL (من جدول news) ===== -->
+<!-- ===== NEWS CAROUSEL ===== -->
 <section class="cards-wrap container">
   <div class="carousel" id="cards-carousel" aria-roledescription="carousel">
     <div class="carousel-track" id="cards-track">
@@ -479,11 +494,14 @@ body{
         <?php
           $href     = $item['news_id'] ? 'news.php?id='.(int)$item['news_id'] : '#';
           $pillText = $item['category'] ? $item['category'] : 'News';
+
+          // ✅ صورة خبر محلية
+          $newsImg = img_url_from_db($item['image'] ?? '', 'uploads/news/default_news.jpg');
         ?>
         <a class="card" href="<?php echo $href; ?>">
           <div class="card-inner">
             <span class="pill"><?php echo htmlspecialchars($pillText); ?></span>
-            <img src="<?php echo news_image_url($item['image']); ?>" alt="">
+            <img src="<?php echo $newsImg; ?>" alt="">
             <h3><?php echo htmlspecialchars($item['title']); ?></h3>
           </div>
         </a>
@@ -506,14 +524,17 @@ body{
           $i++;
           $accent = ($i === 1) ? ' accent' : '';
           $trophy = ($i === 1) ? '🏆' : (($i === 2) ? '🥈' : (($i === 3) ? '🥉' : '🎖️'));
+
+          // ✅ club logo محلي
+          $clubLogo = img_url_from_db($club['logo'] ?? '', 'uploads/clubs/default_club.png');
       ?>
         <div class="rank-item<?php echo $accent; ?>">
           <div class="avatar">
-            <img src="<?php echo club_logo_url($club['logo']); ?>" alt="">
+            <img src="<?php echo $clubLogo; ?>" alt="">
           </div>
           <div class="meta">
             <div class="name"><?php echo htmlspecialchars($club['club_name']); ?></div>
-            <div class="points"><?php echo number_format((int)$club['points']); ?> pts</div>
+            <div class="points"><?php echo number_format((int)($club['points'] ?? 0)); ?> pts</div>
           </div>
           <div class="trophy"><?php echo $trophy; ?></div>
         </div>
@@ -528,15 +549,25 @@ body{
   <h2 class="sponsors-title">SPONSORS</h2>
 
   <div class="sponsor-panel">
-    <div class="sponsor-dot"><img src="<?php echo sponsor_logo_url($sponsors[0]['logo']); ?>" alt=""></div>
-    <div class="sponsor-dot"><img src="<?php echo sponsor_logo_url($sponsors[1]['logo']); ?>" alt=""></div>
-    <div class="sponsor-dot"><img src="<?php echo sponsor_logo_url($sponsors[2]['logo']); ?>" alt=""></div>
+    <?php
+      // ✅ sponsor logos محلي
+      $sp0 = img_url_from_db($sponsors[0]['logo'] ?? '', 'uploads/sponsors/default_sponsor.png');
+      $sp1 = img_url_from_db($sponsors[1]['logo'] ?? '', 'uploads/sponsors/default_sponsor.png');
+      $sp2 = img_url_from_db($sponsors[2]['logo'] ?? '', 'uploads/sponsors/default_sponsor.png');
+      $sp3 = img_url_from_db($sponsors[3]['logo'] ?? '', 'uploads/sponsors/default_sponsor.png');
+      $sp4 = img_url_from_db($sponsors[4]['logo'] ?? '', 'uploads/sponsors/default_sponsor.png');
+      $sp5 = img_url_from_db($sponsors[5]['logo'] ?? '', 'uploads/sponsors/default_sponsor.png');
+      $sp6 = img_url_from_db($sponsors[6]['logo'] ?? '', 'uploads/sponsors/default_sponsor.png');
+    ?>
+    <div class="sponsor-dot"><img src="<?php echo $sp0; ?>" alt=""></div>
+    <div class="sponsor-dot"><img src="<?php echo $sp1; ?>" alt=""></div>
+    <div class="sponsor-dot"><img src="<?php echo $sp2; ?>" alt=""></div>
 
-    <div class="sponsor-dot large"><img src="<?php echo sponsor_logo_url($sponsors[3]['logo']); ?>" alt=""></div>
+    <div class="sponsor-dot large"><img src="<?php echo $sp3; ?>" alt=""></div>
 
-    <div class="sponsor-dot"><img src="<?php echo sponsor_logo_url($sponsors[4]['logo']); ?>" alt=""></div>
-    <div class="sponsor-dot"><img src="<?php echo sponsor_logo_url($sponsors[5]['logo']); ?>" alt=""></div>
-    <div class="sponsor-dot"><img src="<?php echo sponsor_logo_url($sponsors[6]['logo']); ?>" alt=""></div>
+    <div class="sponsor-dot"><img src="<?php echo $sp4; ?>" alt=""></div>
+    <div class="sponsor-dot"><img src="<?php echo $sp5; ?>" alt=""></div>
+    <div class="sponsor-dot"><img src="<?php echo $sp6; ?>" alt=""></div>
   </div>
 </section>
 
@@ -564,7 +595,7 @@ body{
 </footer>
 
 <script>
-/* ===== CAROUSEL (نفس الأنيميشن القديم) ===== */
+/* ===== CAROUSEL ===== */
 (function cardsCarousel(){
   const track    = document.getElementById('cards-track');
   const carousel = document.getElementById('cards-carousel');

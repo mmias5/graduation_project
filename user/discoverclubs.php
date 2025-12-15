@@ -9,10 +9,17 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
     header('Location: ../login.php');
     exit;
 }
-
 require_once '../config.php';
 
 $student_id = $_SESSION['student_id'];
+
+/* ✅ ONLY CHANGE: fix images paths without changing DB values */
+function img_path($path){
+    if (!$path) return '';
+    if (preg_match('/^https?:\/\//i', $path)) return $path; // full URL
+    if ($path[0] === '/') return $path;                     // absolute path
+    return '../' . ltrim($path, '/');                       // make uploads/... work from /president/
+}
 
 // ============================
 // 1) نحضر club_id الخاص بالطالب
@@ -303,7 +310,10 @@ sort($categories);
       <?php else: ?>
         <?php foreach ($clubs as $club): 
           $cat = $club['category'] ?: 'Other';
+
+          /* ✅ ONLY CHANGE: logo path output */
           $logo = !empty($club['logo']) ? $club['logo'] : 'assets/images/clubs/default.png';
+          $logo = img_path($logo);
         ?>
           <a class="club-card-link"
              href="clubpage.php?club_id=<?php echo (int)$club['club_id']; ?>"

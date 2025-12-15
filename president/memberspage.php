@@ -1,14 +1,33 @@
 <?php
 session_start();
 
-if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
+if (!isset($_SESSION['student_id']) || ($_SESSION['role'] ?? '') !== 'club_president') {
     header('Location: ../login.php');
     exit;
 }
 
-require_once '../config.php';
+require_once __DIR__ . '/../config.php';
 
 $president_id = (int)$_SESSION['student_id'];
+
+/* helpers */
+function esc($v): string {
+    return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
+}
+
+/**
+ * Make a usable URL for stored media paths (NO file_exists, NO changing DB values)
+ * - http(s) -> keep
+ * - /absolute -> keep
+ * - relative "uploads/.." -> prefix "../" (because page is inside /president/)
+ */
+function media_url(?string $path): string {
+    $p = trim((string)$path);
+    if ($p === '') return '';
+    if (preg_match('~^https?://~i', $p)) return $p;
+    if (strpos($p, '/') === 0) return $p;
+    return '../' . ltrim($p, '/');
+}
 
 /* get president club_id safely */
 $stmt = $conn->prepare("SELECT club_id FROM student WHERE student_id=? AND role='club_president' LIMIT 1");
@@ -46,26 +65,26 @@ if ($club_id > 1) {
     $stmt->bind_param("ii", $club_id, $club_id);
     $stmt->execute();
     $r = $stmt->get_result();
+
     while ($row = $r->fetch_assoc()) {
         $id = (int)$row['student_id'];
 
-        $avatar = $row['profile_photo'];
-        if (!$avatar) {
+        $avatar = trim((string)($row['profile_photo'] ?? ''));
+        if ($avatar === '') {
             // fallback avatar (deterministic)
             $avatar = "https://i.pravatar.cc/150?u=" . urlencode("student_" . $id);
         } else {
-            // if you store relative paths like "uploads/.."
-            // keep as is; adjust if needed
-            $avatar = $avatar;
+            // IMPORTANT: fix relative path for president folder
+            $avatar = media_url($avatar);
         }
 
         $joined = $row['joined_at'] ? date('Y-m-d', strtotime($row['joined_at'])) : '—';
 
         $members[] = [
             "id"    => $id,
-            "name"  => $row['student_name'],
-            "email" => $row['email'],
-            "major" => $row['major'] ?: '—',
+            "name"  => $row['student_name'] ?? '',
+            "email" => $row['email'] ?? '',
+            "major" => ($row['major'] ?? '') !== '' ? $row['major'] : '—',
             "role"  => ($id === $president_id ? 'President' : 'Member'),
             "joined"=> $joined,
             "studentId" => (string)$id,
@@ -101,7 +120,7 @@ $csrf = $_SESSION['csrf_token'];
 html,body{margin:0; height:100%}
 body{
   min-height:100vh;
-  display:flex;              /* makes footer stick to bottom */
+  display:flex;
   flex-direction:column;
   font-family:"Raleway",system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
   color:var(--ink);
@@ -110,9 +129,15 @@ body{
     radial-gradient(900px 700px at 110% 60%, rgba(72,113,219,.20), transparent 60%),
     var(--paper);
 }
-/* main page content grows to fill space; footer sits at bottom */
-.wrap{max-width:var(--maxw); margin:28px auto 24px; padding:0 18px; flex:1 0 auto;}
-footer.cch-footer{ margin-top:auto !important; }   /* don’t edit footer.php; just pin it */
+/* page content grows to push footer down */
+.wrap{
+  max-width:var(--maxw);
+  margin:28px auto 24px;
+  padding:0 18px;
+  flex:1 0 auto;
+}
+/* ensure footer sits at bottom even if footer.php has its own spacing */
+body > footer{ margin-top:auto !important; }
 
 /* header row */
 .header-row{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:8px 0 16px}
@@ -141,12 +166,13 @@ footer.cch-footer{ margin-top:auto !important; }   /* don’t edit footer.php; j
 .meta{color:#596180;font-size:13px}
 .role-badge{display:inline-block;background:#fff7e6;border:1px solid #ffecb5;color:#8a5b00;font-weight:800;border-radius:999px;padding:6px 10px;font-size:12px;margin-top:6px}
 
-/* buttons (make them feel clickable) */
+/* buttons */
 .actions{display:flex;gap:8px}
 .btn{
   cursor:pointer;
   user-select:none;
   transition:transform .16s ease, box-shadow .16s ease, background-color .16s ease, border-color .16s ease;
+  border:0;
 }
 .btn.small{padding:8px 10px;font-size:12px;border-radius:10px}
 .btn.ghost{background:#fff;border:1px solid #e6e8f2;color:#1a1f36}
@@ -154,12 +180,12 @@ footer.cch-footer{ margin-top:auto !important; }   /* don’t edit footer.php; j
 .btn.kick{background:#fff;border:2px solid #ffdddd;color:#b42318}
 .btn.kick:hover{background:#ffecec; transform:translateY(-1px)}
 
-/* NEW royal primary button (for Membership Requests) */
+/* royal primary button */
 .btn.primary{
   background:var(--royal);
   border:1px solid var(--royal);
   color:#fff;
-  font-weight:700;
+  font-weight:800;
 }
 .btn.primary:hover{
   background:#365ac0;
@@ -176,7 +202,7 @@ footer.cch-footer{ margin-top:auto !important; }   /* don’t edit footer.php; j
 /* pager */
 .pager{display:flex;gap:8px;justify-content:center;margin:18px 0}
 .pager a, .pager span{
-  padding:8px 12px;border-radius:10px;border:1px solid #e1e6f0;background:#fff;text-decoration:none;color:#1a1f36;font-weight:700
+  padding:8px 12px;border-radius:10px;border:1px solid #e1e6f0;background:#fff;text-decoration:none;color:#1a1f36;font-weight:800
 }
 .pager .active{background:var(--royal);color:#fff;border-color:transparent}
 
@@ -199,20 +225,15 @@ footer.cch-footer{ margin-top:auto !important; }   /* don’t edit footer.php; j
     <div class="subtitle"><span id="count"></span> total</div>
   </div>
 
-  <!-- Toolbar -->
   <div class="toolbar">
     <input id="search" class="input" type="search" placeholder="Search by name…">
-    <!-- Membership Requests button with royal color -->
     <button class="btn primary small" type="button" onclick="location.href='membershiprequests.php'">
       Membership Requests
     </button>
   </div>
 
-  <!-- Members -->
   <div id="grid" class="grid"></div>
   <div id="empty" class="empty" style="display:none">No members match your search.</div>
-
-  <!-- Pagination -->
   <div id="pager" class="pager"></div>
 </div>
 
@@ -231,34 +252,29 @@ footer.cch-footer{ margin-top:auto !important; }   /* don’t edit footer.php; j
 </div>
 
 <script>
-/* ==== DB Data injected from PHP ==== */
-const CSRF = <?php echo json_encode($csrf); ?>;
-const MY_ID = <?php echo (int)$president_id; ?>;
-const CLUB_ID = <?php echo (int)$club_id; ?>;
-const MEMBERS = <?php echo json_encode($members, JSON_UNESCAPED_SLASHES); ?>;
+const CSRF   = <?php echo json_encode($csrf); ?>;
+const MY_ID  = <?php echo (int)$president_id; ?>;
+const CLUB_ID= <?php echo (int)$club_id; ?>;
+const MEMBERS= <?php echo json_encode($members, JSON_UNESCAPED_SLASHES); ?>;
 
-/* ==== Elements ==== */
 const grid=document.getElementById('grid');
 const empty=document.getElementById('empty');
 const pager=document.getElementById('pager');
 const countEl=document.getElementById('count');
 const searchEl=document.getElementById('search');
 
-/* ==== State ==== */
 let state={q:'',page:1,limit:8,data:[...MEMBERS]};
 countEl.textContent=state.data.length;
 
-/* ==== Render ==== */
 function renderGrid(){
-  const {q,page,limit}=state;
-  const ql=q.trim().toLowerCase();
-  const filtered=state.data.filter(m=>!ql || (m.name||'').toLowerCase().includes(ql));
+  const ql=(state.q||'').trim().toLowerCase();
+  const filtered=state.data.filter(m=>!ql || String(m.name||'').toLowerCase().includes(ql));
   const total=filtered.length;
-  const pages=Math.max(1,Math.ceil(total/limit));
+  const pages=Math.max(1,Math.ceil(total/state.limit));
   if(state.page>pages) state.page=pages;
 
-  const start=(state.page-1)*limit;
-  const slice=filtered.slice(start,start+limit);
+  const start=(state.page-1)*state.limit;
+  const slice=filtered.slice(start,start+state.limit);
 
   grid.innerHTML=slice.map(cardHTML).join('');
   empty.style.display=slice.length?'none':'block';
@@ -295,10 +311,8 @@ function renderPager(pages){
   }).join('');
 }
 
-/* ==== Actions ==== */
 function gotoPage(p){state.page=p;renderGrid();}
 
-/* Live search */
 searchEl.addEventListener('input',()=>{
   state.q=searchEl.value;
   state.page=1;
@@ -346,7 +360,6 @@ kickConfirm.addEventListener('click', async ()=>{
       return;
     }
 
-    // remove from UI
     state.data = state.data.filter(m => m.id !== pendingKickId);
     countEl.textContent = state.data.length;
     closeKick();
@@ -356,7 +369,6 @@ kickConfirm.addEventListener('click', async ()=>{
   }
 });
 
-/* ==== Init ==== */
 renderGrid();
 window.gotoPage=gotoPage;
 window.openKick=openKick;

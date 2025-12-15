@@ -13,7 +13,16 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
 
 require_once '../config.php';
 
-$studentId = $_SESSION['student_id'];
+$studentId = (int)($_SESSION['student_id'] ?? 0);
+
+/* ✅ helper: make DB image paths work from /student/ */
+function img_path_student($path){
+    $path = trim((string)$path);
+    if ($path === '') return '';
+    if (preg_match('/^https?:\/\//i', $path)) return $path; // full URL
+    if ($path[0] === '/') return $path;                     // absolute
+    return '../' . ltrim($path, '/');                       // relative from student folder
+}
 
 // --- Get student's club_id ---
 $clubId = null;
@@ -30,8 +39,9 @@ $inClub = !empty($clubId) && (int)$clubId !== 1;
 $members = [];
 
 if ($inClub) {
+    // ✅ Added profile_photo from DB
     $stmt = $conn->prepare("
-        SELECT student_id, student_name, email, major, role
+        SELECT student_id, student_name, email, major, role, profile_photo
         FROM student
         WHERE club_id = ?
         ORDER BY (role = 'club_president') DESC, student_name ASC
@@ -42,6 +52,10 @@ if ($inClub) {
 
     while ($row = $result->fetch_assoc()) {
         $id = (int)$row['student_id'];
+
+        $photoRaw = trim((string)($row['profile_photo'] ?? ''));
+        $photoDb  = $photoRaw !== '' ? img_path_student($photoRaw) : '';
+
         $members[] = [
             'id'        => $id,
             'studentId' => $id,
@@ -51,8 +65,8 @@ if ($inClub) {
             'role'      => ($row['role'] === 'club_president' ? 'President' : 'Member'),
             // ما عنا عمود join date حالياً، فبنحط شرطة بس
             'joined'    => '—',
-            // أفاتار مؤقت من pravatar حسب student_id
-            'avatar'    => 'https://i.pravatar.cc/150?u=student_' . $id,
+            // ✅ avatar from DB if exists, else pravatar fallback
+            'avatar'    => ($photoDb !== '' ? $photoDb : 'https://i.pravatar.cc/150?u=student_' . $id),
         ];
     }
     $stmt->close();
@@ -285,7 +299,7 @@ function cardHTML(m){
   const joinedText = m.joined && m.joined !== '—' ? `Joined ${m.joined}` : `ID ${m.studentId}`;
   return `
   <div class="card" data-id="${m.id}" data-name="${m.name}">
-    <img class="avatar" src="${m.avatar}" alt="${m.name}">
+    <img class="avatar" src="${m.avatar}" alt="${m.name}" onerror="this.src='https://i.pravatar.cc/150?u=student_${m.id}'">
     <div>
       <div class="name">${m.name}</div>
       <div class="meta">${m.email}</div>

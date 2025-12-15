@@ -13,6 +13,14 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
 
 require_once '../config.php'; // عدلي المسار إذا ملف config بمكان ثاني
 
+/* ✅ ONLY CHANGE: fix images paths without changing DB values */
+function img_path($path){
+    if (!$path) return '';
+    if (preg_match('/^https?:\/\//i', $path)) return $path; // full URL
+    if ($path[0] === '/') return $path;                     // absolute path
+    return '../' . ltrim($path, '/');                       // make uploads/... work from /president/
+}
+
 // ---------- 1) Get latest ranking period ----------
 $currentPeriodStart = null;
 $currentPeriodEnd   = null;
@@ -292,7 +300,7 @@ $top3 = $rankingClubs[2] ?? null;
       <article class="pod s2">
         <div class="medal s">
           <?php if (!empty($top2['club_logo'])): ?>
-            <img src="<?php echo htmlspecialchars($top2['club_logo']); ?>" alt="<?php echo htmlspecialchars($top2['club_name']); ?>">
+            <img src="<?php echo htmlspecialchars(img_path($top2['club_logo'])); ?>" alt="<?php echo htmlspecialchars($top2['club_name']); ?>">
           <?php else: ?>
             <span><?php echo htmlspecialchars(substr($top2['club_name'], 0, 1)); ?></span>
           <?php endif; ?>
@@ -301,7 +309,7 @@ $top3 = $rankingClubs[2] ?? null;
         <div class="sponsor">
           <?php if (!empty($top2['sponsor_logo'])): ?>
             <span class="sponsor-logo">
-              <img src="<?php echo htmlspecialchars($top2['sponsor_logo']); ?>" alt="">
+              <img src="<?php echo htmlspecialchars(img_path($top2['sponsor_logo'])); ?>" alt="">
             </span>
           <?php else: ?>
             <span class="sponsor-logo"></span>
@@ -318,7 +326,7 @@ $top3 = $rankingClubs[2] ?? null;
       <article class="pod">
         <div class="medal g">
           <?php if (!empty($top1['club_logo'])): ?>
-            <img src="<?php echo htmlspecialchars($top1['club_logo']); ?>" alt="<?php echo htmlspecialchars($top1['club_name']); ?>">
+            <img src="<?php echo htmlspecialchars(img_path($top1['club_logo'])); ?>" alt="<?php echo htmlspecialchars($top1['club_name']); ?>">
           <?php else: ?>
             <span><?php echo htmlspecialchars(substr($top1['club_name'], 0, 1)); ?></span>
           <?php endif; ?>
@@ -327,7 +335,7 @@ $top3 = $rankingClubs[2] ?? null;
         <div class="sponsor">
           <?php if (!empty($top1['sponsor_logo'])): ?>
             <span class="sponsor-logo">
-              <img src="<?php echo htmlspecialchars($top1['sponsor_logo']); ?>" alt="">
+              <img src="<?php echo htmlspecialchars(img_path($top1['sponsor_logo'])); ?>" alt="">
             </span>
           <?php else: ?>
             <span class="sponsor-logo"></span>
@@ -349,7 +357,7 @@ $top3 = $rankingClubs[2] ?? null;
       <article class="pod s3">
         <div class="medal b">
           <?php if (!empty($top3['club_logo'])): ?>
-            <img src="<?php echo htmlspecialchars($top3['club_logo']); ?>" alt="<?php echo htmlspecialchars($top3['club_name']); ?>">
+            <img src="<?php echo htmlspecialchars(img_path($top3['club_logo'])); ?>" alt="<?php echo htmlspecialchars($top3['club_name']); ?>">
           <?php else: ?>
             <span><?php echo htmlspecialchars(substr($top3['club_name'], 0, 1)); ?></span>
           <?php endif; ?>
@@ -358,7 +366,7 @@ $top3 = $rankingClubs[2] ?? null;
         <div class="sponsor">
           <?php if (!empty($top3['sponsor_logo'])): ?>
             <span class="sponsor-logo">
-              <img src="<?php echo htmlspecialchars($top3['sponsor_logo']); ?>" alt="">
+              <img src="<?php echo htmlspecialchars(img_path($top3['sponsor_logo'])); ?>" alt="">
             </span>
           <?php else: ?>
             <span class="sponsor-logo"></span>
@@ -397,34 +405,34 @@ $top3 = $rankingClubs[2] ?? null;
               <td class="clubcell">
                 <span class="avatar">
                   <?php if (!empty($row['club_logo'])): ?>
-                    <img src="<?php echo htmlspecialchars($row['club_logo']); ?>" alt="">
+                    <img src="<?php echo htmlspecialchars(img_path($row['club_logo'])); ?>" alt="">
                   <?php else: ?>
                     <span><?php echo htmlspecialchars(substr($row['club_name'], 0, 1)); ?></span>
                   <?php endif; ?>
                 </span>
                 <div>
                   <div>
-  <span><?php echo htmlspecialchars($row['club_name']); ?></span>
+                    <span><?php echo htmlspecialchars($row['club_name']); ?></span>
 
-  <?php
-    $st = strtolower(trim($row['club_status'] ?? 'inactive'));
-    $stClass = ($st === 'active') ? 'active' : 'inactive';
-    $stLabel = ($st === 'active') ? 'Active' : 'Inactive';
-  ?>
-  <div class="status-badge <?php echo $stClass; ?>">
-    <?php echo $stLabel; ?>
-  </div>
+                    <?php
+                      $st = strtolower(trim($row['club_status'] ?? 'inactive'));
+                      $stClass = ($st === 'active') ? 'active' : 'inactive';
+                      $stLabel = ($st === 'active') ? 'Active' : 'Inactive';
+                    ?>
+                    <div class="status-badge <?php echo $stClass; ?>">
+                      <?php echo $stLabel; ?>
+                    </div>
 
-  <div class="sponsor small">
-
-                    <?php if (!empty($row['sponsor_logo'])): ?>
-                      <span class="sponsor-logo small">
-                        <img src="<?php echo htmlspecialchars($row['sponsor_logo']); ?>" alt="">
-                      </span>
-                    <?php else: ?>
-                      <span class="sponsor-logo small"></span>
-                    <?php endif; ?>
-                    Sponsored by <strong><?php echo htmlspecialchars($row['sponsor_name']); ?></strong>
+                    <div class="sponsor small">
+                      <?php if (!empty($row['sponsor_logo'])): ?>
+                        <span class="sponsor-logo small">
+                          <img src="<?php echo htmlspecialchars(img_path($row['sponsor_logo'])); ?>" alt="">
+                        </span>
+                      <?php else: ?>
+                        <span class="sponsor-logo small"></span>
+                      <?php endif; ?>
+                      Sponsored by <strong><?php echo htmlspecialchars($row['sponsor_name']); ?></strong>
+                    </div>
                   </div>
                 </div>
               </td>

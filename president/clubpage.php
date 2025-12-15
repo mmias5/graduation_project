@@ -14,6 +14,14 @@ require_once '../config.php';
 
 $studentId = (int)$_SESSION['student_id'];
 
+/* ✅ ONLY CHANGE: fix image paths without changing DB values */
+function img_path($path){
+    if (!$path) return '';
+    if (preg_match('/^https?:\/\//i', $path)) return $path; // full URL
+    if ($path[0] === '/') return $path;                     // absolute path
+    return '../' . ltrim($path, '/');                       // make uploads/... work from /president/
+}
+
 /* =========================
    FLASH (Swal after redirect)
 ========================= */
@@ -157,7 +165,19 @@ if (!$club) {
 
 $clubName        = $club['club_name'] ?? 'Club';
 $clubDescription = $club['description'] ?? '';
-$clubLogo        = !empty($club['logo']) ? $club['logo'] : "tools/pics/social_life.png";
+
+/* ✅ Logo from DB (same as your code) */
+$clubLogoRaw = $club['logo'] ?? '';
+if (!empty($clubLogoRaw)) {
+    $clubLogo = img_path($clubLogoRaw);
+} else {
+    $clubLogo = "tools/pics/social_life.png"; // keep your default
+}
+
+/* ✅ COVER from DB (banner_image) — ONLY IMAGE CHANGE */
+$clubCoverRaw = $club['cover'] ?? '';
+$clubCover = !empty($clubCoverRaw) ? img_path($clubCoverRaw) : '';  // no fallback
+
 $contactEmail    = $club['contact_email'] ?? '';
 $facebookUrl     = !empty($club['facebook_url']) ? $club['facebook_url'] : "#";
 $instagramUrl    = !empty($club['instagram_url']) ? $club['instagram_url'] : "#";
@@ -167,7 +187,6 @@ $clubPoints      = (int)($club['points'] ?? 0);
 
 /* =========================
    4.5) Fetch CLUB Sponsor (from club.sponsor_id)
-   - each club has ONE sponsor
 ========================= */
 $sponsorName = 'No sponsor yet';
 $sponsorInitials = 'SP';
@@ -187,7 +206,7 @@ if ($clubSponsorId > 0) {
 $sponsorInitials = makeInitials((string)$sponsorName);
 
 /* =========================
-   5) Last request status for this club (for button label)
+   5) Last request status for this club
 ========================= */
 $stmtLastReq = $conn->prepare("
     SELECT status
@@ -266,7 +285,8 @@ body{
 }
 .hero-card::before{
   content:""; position:absolute; inset:0;
-  background-image: var(--hero-bg, url("https://images.unsplash.com/photo-1531189611190-3c6c6b3c3d57?q=80&w=1650&auto=format&fit=crop"));
+  /* ✅ ONLY CHANGE: no fallback image; take from DB only */
+  background-image: var(--hero-bg);
   background-size:cover; background-position:center; opacity:.95;
 }
 .hero-card::after{
@@ -347,7 +367,8 @@ body{
 
 <section class="section hero">
   <div class="wrap">
-    <div class="hero-card" style="--hero-bg: url('<?php echo htmlspecialchars($clubLogo); ?>');">
+    <!-- ✅ ONLY CHANGE: cover from DB banner_image -->
+    <div class="hero-card" style="--hero-bg: <?php echo $clubCover ? "url('".htmlspecialchars($clubCover)."')" : "none"; ?>;">
       <div class="hero-top">
         <div class="tag"><?php echo htmlspecialchars($club['category'] ?? 'Club'); ?></div>
       </div>
@@ -363,7 +384,6 @@ body{
           </div>
         </div>
 
-        <!-- UPDATED pill: sponsor -->
         <div class="pill">
           <div class="circle"><?php echo htmlspecialchars($sponsorInitials); ?></div>
           <div>
@@ -437,7 +457,6 @@ body{
             $dow  = $start->format('D');
             $time = $start->format('g:i A');
             $location = $ev['event_location'] ?? '';
-            $maxAtt  = (int)($ev['max_attendees'] ?? 0);
           ?>
           <article class="card">
             <div class="date">
@@ -464,7 +483,6 @@ body{
       <div class="stat"><h5>Earned points</h5><div class="kpi"><?php echo str_pad($clubPoints, 4, "0", STR_PAD_LEFT); ?></div></div>
     </div>
 
-    <!-- JOIN CTA -->
     <?php if ($canRequestJoin): ?>
       <form id="joinForm" method="post" style="margin-top:26px;">
         <input type="hidden" name="action" value="join">
@@ -491,12 +509,10 @@ body{
 <?php include 'footer.php'; ?>
 
 <script>
-  // assumes SweetAlert is loaded in header.php as Swal
   const joinBtn = document.getElementById('joinBtn');
   const joinForm = document.getElementById('joinForm');
   const reasonInput = document.getElementById('reasonInput');
 
-  // Show flash swal if exists
   <?php if (!empty($flash)): ?>
     Swal.fire({
       icon: <?php echo json_encode($flash['icon'] ?? 'info'); ?>,
@@ -508,8 +524,6 @@ body{
 
   if (joinBtn && joinForm) {
     joinBtn.addEventListener('click', async () => {
-
-      // If already pending -> don’t allow another attempt
       const btnText = joinBtn.textContent.trim().toLowerCase();
       if (btnText.includes('pending')) {
         Swal.fire({

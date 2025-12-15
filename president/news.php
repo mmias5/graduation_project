@@ -11,6 +11,15 @@ if (
 
 require_once '../config.php';
 
+/* ✅ helper: fix image path for student folder */
+function img_path_student(string $path): string {
+    $path = trim($path);
+    if ($path === '') return '';
+    if (preg_match('/^https?:\/\//i', $path)) return $path; // absolute url
+    if ($path[0] === '/') return $path;                    // already absolute from root
+    return '../' . ltrim($path, '/');                      // relative -> go up from /student/
+}
+
 /**
  * Load a single news row.
  * We use SELECT * so it works with your actual columns.
@@ -56,8 +65,7 @@ $hasNews   = (bool)$news;
 $title     = $hasNews ? ($news['title'] ?? 'News article') : 'News article not found';
 $category  = $hasNews ? ($news['category'] ?? 'News')       : 'News';
 
-/* Try to guess which column holds the long text.
-   Adjust this list to match your actual table if needed. */
+/* Try to guess which column holds the long text. */
 $content = '';
 if ($hasNews) {
     if (isset($news['content'])) {
@@ -67,19 +75,28 @@ if ($hasNews) {
     } elseif (isset($news['description'])) {
         $content = $news['description'];
     } else {
-        $content = ''; // no text column, stays empty
+        $content = '';
     }
 }
 
-$heroImage = $hasNews && !empty($news['hero_image'])
-    ? $news['hero_image']
-    : 'https://images.unsplash.com/photo-1521737604893-d14cc237f11d?q=80&w=1600&auto=format&fit=crop';
+/* ✅ hero image from DB with correct path */
+$fallbackHero = 'https://images.unsplash.com/photo-1521737604893-d14cc237f11d?q=80&w=1600&auto=format&fit=crop';
+
+$heroImageRaw = '';
+if ($hasNews) {
+    // prefer hero_image, but if your DB uses a different column name, add it here
+    if (!empty($news['hero_image'])) $heroImageRaw = $news['hero_image'];
+    elseif (!empty($news['image']))  $heroImageRaw = $news['image'];
+    elseif (!empty($news['photo']))  $heroImageRaw = $news['photo'];
+}
+
+$heroImage = $heroImageRaw !== '' ? img_path_student($heroImageRaw) : $fallbackHero;
 
 $createdAt = '';
 if ($hasNews && !empty($news['created_at'])) {
     try {
         $dt = new DateTime($news['created_at']);
-        $createdAt = $dt->format('M Y'); // e.g., "Nov 2025"
+        $createdAt = $dt->format('M Y');
     } catch (Exception $e) {
         $createdAt = $news['created_at'];
     }
@@ -230,15 +247,13 @@ if ($hasNews && !empty($news['created_at'])) {
   <?php if ($hasNews): ?>
     <figure class="hero">
       <img src="<?php echo htmlspecialchars($heroImage); ?>"
-           alt="<?php echo htmlspecialchars($title); ?>">
+           alt="<?php echo htmlspecialchars($title); ?>"
+           onerror="this.onerror=null;this.src='<?php echo htmlspecialchars($fallbackHero); ?>';">
       <figcaption class="credit">Photo: CCH Media</figcaption>
     </figure>
 
     <article class="content">
       <?php
-        // If your column already stores HTML, echo it directly:
-        //   echo $content;
-        // If it’s plain text, keep escaping like this:
         echo nl2br(htmlspecialchars($content));
       ?>
     </article>

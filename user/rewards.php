@@ -10,7 +10,6 @@ if (!isset($_SESSION['student_id']) || ($_SESSION['role'] ?? '') !== 'student') 
     header('Location: ../login.php');
     exit;
 }
-
 require_once __DIR__ . '/../config.php';
 
 $studentId      = (int)$_SESSION['student_id'];
@@ -21,6 +20,15 @@ $redeemSuccess  = '';
 
 function escapeH(?string $s): string {
     return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
+}
+
+/* ✅ ONLY CHANGE: fix image paths without changing DB values */
+function img_path($path){
+    $path = trim((string)$path);
+    if ($path === '') return '';
+    if (preg_match('/^https?:\/\//i', $path)) return $path; // full URL
+    if ($path[0] === '/') return $path;                     // absolute path
+    return '../' . ltrim($path, '/');                       // make uploads/... work from /president/
 }
 
 function getStudentPointsFromStudent(mysqli $conn, int $studentId): int {
@@ -393,13 +401,8 @@ if (isset($conn) && $conn instanceof mysqli) {
         <?php foreach ($rewards as $r): ?>
           <?php
             $cost = (int)$r['value'];
-            $pic  = trim((string)($r['picture'] ?? ''));
-
-            // ✅ Ensure correct relative path for student folder
-            $imgSrc = '';
-            if ($pic !== '') {
-                $imgSrc = '../' . ltrim($pic, '/');
-            }
+            $picRaw  = (string)($r['picture'] ?? '');
+            $imgSrc  = img_path($picRaw);
           ?>
           <article class="reward-card" data-name="<?php echo escapeH(mb_strtolower((string)$r['item_name'])); ?>">
             <div class="rc-photo">

@@ -15,6 +15,14 @@ if ($event_id <= 0) {
     exit;
 }
 
+/* ✅ ONLY CHANGE: fix image paths without changing DB values */
+function img_path($path){
+    if (!$path) return '';
+    if (preg_match('/^https?:\/\//i', $path)) return $path; // full URL
+    if ($path[0] === '/') return $path;                     // absolute path
+    return '../' . ltrim($path, '/');                       // make uploads/... work from /president/
+}
+
 /* helpers (legacy tags inside description) */
 function cch_get_tag($text, $tag) {
     if (!$text) return '';
@@ -93,11 +101,9 @@ if ($sponsor_name === '') {
 /* notes from tag */
 $notes = cch_get_tag($rawDesc, 'CCH_NOTES');
 
-/* cover image */
-$cover = $event['banner_image'];
-if (!$cover) {
-    $cover = "https://images.unsplash.com/photo-1551836022-d5d88e9218df?q=80&w=1600&auto=format&fit=crop";
-}
+/* ✅ cover image FROM DB ONLY (event.banner_image) */
+$coverRaw = $event['banner_image'] ?? '';
+$cover = img_path($coverRaw); // if empty => ''
 
 /* date/time formatting */
 $startDT = !empty($event['starting_date']) ? new DateTime($event['starting_date']) : null;
@@ -182,7 +188,9 @@ $isLeader = true;
   </div>
 
   <figure class="hero">
-    <img src="<?php echo htmlspecialchars($cover); ?>" alt="Event cover">
+    <?php if (!empty($cover)): ?>
+      <img src="<?php echo htmlspecialchars($cover); ?>" alt="Event cover">
+    <?php endif; ?>
     <figcaption class="credit">Photo: CCH Media</figcaption>
   </figure>
 

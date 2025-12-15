@@ -15,6 +15,15 @@ require_once '../config.php';
 
 $studentId = (int)$_SESSION['student_id'];
 
+/* ✅ ONLY CHANGE: helper to make DB image paths work from /student/ */
+function img_path_student($path){
+    $path = trim((string)$path);
+    if ($path === '') return '';
+    if (preg_match('/^https?:\/\//i', $path)) return $path; // full URL
+    if ($path[0] === '/') return $path;                     // absolute path
+    return '../' . ltrim($path, '/');                       // relative path from student folder
+}
+
 // ===== 1) Get student =====
 $stmtStu = $conn->prepare("SELECT student_id, club_id FROM student WHERE student_id = ? LIMIT 1");
 $stmtStu->bind_param("i", $studentId);
@@ -45,13 +54,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $stmt->execute();
             $stmt->close();
 
-            // 2) Decrease member_count safely (optional but recommended)
+            // 2) Decrease member_count safely
             $stmt = $conn->prepare("UPDATE club SET member_count = GREATEST(member_count - 1, 0) WHERE club_id = ?");
             $stmt->bind_param("i", $studentClubId);
             $stmt->execute();
             $stmt->close();
 
-            // 3) Update latest approved membership request to 'left' (optional but good tracking)
+            // 3) Update latest approved membership request to 'left'
             $stmt = $conn->prepare("
                 SELECT request_id
                 FROM club_membership_request
@@ -285,8 +294,6 @@ body{
 
 <?php if ($noClub): ?>
   <script>
-    // If user opened this page directly while not in a club
-    // Use your existing function in header (SweetAlert2)
     if (typeof showNoClubPopup === "function") {
       showNoClubPopup('myclubpage.php');
     } else {
@@ -316,7 +323,22 @@ if (!$club) {
 
 $clubName        = $club['club_name'] ?? 'Club';
 $clubDescription = $club['description'] ?? '';
-$clubLogo        = !empty($club['logo']) ? $club['logo'] : "tools/pics/social_life.png";
+
+// ✅ logo from DB (fixed path)
+$clubLogoRaw = !empty($club['logo']) ? $club['logo'] : "tools/pics/social_life.png";
+$clubLogo    = img_path_student($clubLogoRaw);
+
+// ✅ ✅ ONLY CHANGE FOR COVER: take cover from DB (try cover_image then banner_image), else keep fallback
+$clubCoverRaw = '';
+if (!empty($club['cover'])) {
+    $clubCoverRaw = $club['cover'];
+} elseif (!empty($club['banner_image'])) {
+    $clubCoverRaw = $club['banner_image'];
+}
+$clubCover = ($clubCoverRaw !== '')
+    ? img_path_student($clubCoverRaw)
+    : "https://images.unsplash.com/photo-1531189611190-3c6c6b3c3d57?q=80&w=1650&auto=format&fit=crop";
+
 $contactEmail    = $club['contact_email'] ?? '';
 $facebookUrl     = !empty($club['facebook_url']) ? $club['facebook_url'] : "#";
 $instagramUrl    = !empty($club['instagram_url']) ? $club['instagram_url'] : "#";
@@ -325,7 +347,7 @@ $memberCount     = (int)($club['member_count'] ?? 0);
 $clubPoints      = (int)($club['points'] ?? 0);
 
 /* =========================
-   NEW: Fetch Sponsor for this club (club.sponsor_id)
+   Fetch Sponsor for this club (club.sponsor_id)
 ========================= */
 $sponsorName = 'No sponsor yet';
 $sponsorInitials = 'SP';
@@ -364,7 +386,8 @@ $eventsDone = count($events);
 <!-- ========== HERO ========== -->
 <section class="section hero">
   <div class="wrap">
-    <div class="hero-card" style="--hero-bg: url('<?php echo htmlspecialchars($clubLogo); ?>');">
+    <!-- ✅ ONLY CHANGE: cover comes from DB now -->
+    <div class="hero-card" style="--hero-bg: url('<?php echo htmlspecialchars($clubCover); ?>');">
 
       <div class="hero-top">
         <div class="tag">
@@ -383,7 +406,7 @@ $eventsDone = count($events);
           </div>
         </div>
 
-        <!-- UPDATED PILL: Sponsor -->
+        <!-- Sponsor -->
         <div class="pill">
           <div class="circle"><?php echo htmlspecialchars($sponsorInitials); ?></div>
           <div>
@@ -476,7 +499,6 @@ $eventsDone = count($events);
             $dow  = $start ? $start->format('D') : '--';
             $time = $start ? $start->format('g:i A') : '--';
             $location = $ev['event_location'] ?? '';
-            $maxAtt  = (int)($ev['max_attendees'] ?? 0);
           ?>
           <article class="card">
             <div class="date">
