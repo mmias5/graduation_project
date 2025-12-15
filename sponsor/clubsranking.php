@@ -12,6 +12,108 @@ if (!isset($_SESSION['sponsor_id']) || ($_SESSION['role'] ?? '') !== 'sponsor') 
 
 require_once __DIR__ . '/../config.php';
 
+/* =========================================================
+   ✅ UniHive Image Helpers (works across admin/student/sponsor)
+   - DB stores: uploads/...
+   - Files exist at: /project/graduation_project/uploads/...
+   ========================================================= */
+
+// ✅ set your project web-root path (based on your debug)
+define('APP_BASE', '/project/graduation_project'); // <-- مهم
+
+/**
+ * sanitize a relative upload path:
+ * - allow only paths starting with "uploads/"
+ * - prevent traversal
+ */
+function clean_upload_rel(?string $rel): string {
+    $p = trim((string)$rel);
+    if ($p === '') return '';
+    $p = str_replace('\\', '/', $p);
+
+    // remove leading "./"
+    $p = preg_replace('~^\./+~', '', $p);
+
+    // prevent traversal
+    if (strpos($p, '..') !== false) return '';
+
+    // enforce uploads/
+    if (stripos($p, 'uploads/') !== 0) return '';
+
+    return $p;
+}
+
+/** convert DB relative path (uploads/...) into absolute URL under APP_BASE */
+function upload_url(?string $rel): string {
+    $p = clean_upload_rel($rel);
+    if ($p === '') return '';
+    return rtrim(APP_BASE, '/') . '/' . $p;
+}
+
+/** check if the file physically exists on server (for placeholders) */
+function upload_exists(?string $rel): bool {
+    $p = clean_upload_rel($rel);
+    if ($p === '') return false;
+
+    // DOCUMENT_ROOT + APP_BASE + /uploads/...
+    $abs = rtrim($_SERVER['DOCUMENT_ROOT'], '/')
+         . rtrim(APP_BASE, '/')
+         . '/'
+         . $p;
+
+    return is_file($abs);
+}
+
+/** initials helper (for placeholder text) */
+function initials(string $name): string {
+    $name = trim($name);
+    if ($name === '') return 'CL';
+    $parts = preg_split('/\s+/', $name);
+    if (count($parts) >= 2) {
+        $a = mb_substr($parts[0], 0, 1);
+        $b = mb_substr($parts[1], 0, 1);
+        return mb_strtoupper($a . $b);
+    }
+    return mb_strtoupper(mb_substr($name, 0, 2));
+}
+
+/**
+ * SVG placeholder (NOT base64) as data-uri
+ * - safe, fast, doesn't require extra files
+ */
+function svg_placeholder_datauri(string $label = 'UH'): string {
+    $label = htmlspecialchars(mb_strtoupper(mb_substr(trim($label), 0, 2)), ENT_QUOTES, 'UTF-8');
+
+    // simple circle avatar placeholder
+    $svg = "<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'>
+      <defs>
+        <linearGradient id='g' x1='0' y1='0' x2='1' y2='1'>
+          <stop offset='0' stop-color='#eef2f7'/>
+          <stop offset='1' stop-color='#dbe6ff'/>
+        </linearGradient>
+      </defs>
+      <circle cx='32' cy='32' r='32' fill='url(#g)'/>
+      <text x='32' y='38' text-anchor='middle' font-family='Arial' font-size='20' font-weight='800' fill='#242751'>{$label}</text>
+    </svg>";
+
+    // encode minimal for data uri
+    $svg = rawurlencode($svg);
+    return "data:image/svg+xml;charset=UTF-8,{$svg}";
+}
+
+/**
+ * Final safe image src:
+ * - if DB empty OR invalid OR file missing => placeholder
+ * - else => correct URL under APP_BASE
+ */
+function img_src_or_placeholder(?string $rel, string $fallbackLabel = 'UH'): string {
+    $p = clean_upload_rel($rel);
+    if ($p === '' || !upload_exists($p)) {
+        return svg_placeholder_datauri($fallbackLabel);
+    }
+    return htmlspecialchars(upload_url($p), ENT_QUOTES, 'UTF-8');
+}
+
 /* =========================
    1) Get latest ranking period
    ========================= */
@@ -32,6 +134,8 @@ if ($periodRes && $periodRes->num_rows > 0) {
 $rankingClubs = [];
 
 if ($currentPeriodEnd !== null) {
+
+    // NOTE: group by uses real columns (better with ONLY_FULL_GROUP_BY)
     $stmt = $conn->prepare("
         SELECT
             r.club_id,
@@ -59,17 +163,9 @@ if ($currentPeriodEnd !== null) {
            AND e.ending_date < NOW()
         WHERE r.period_end = ?
         GROUP BY
-            r.club_id,
-            r.total_points,
-            r.rank_position,
-            r.period_start,
-            r.period_end,
-            c.club_name,
-            c.status,
-            c.logo,
-            c.member_count,
-            sponsor_name,
-            sponsor_logo
+            r.club_id, r.total_points, r.rank_position, r.period_start, r.period_end,
+            c.club_name, c.status, c.logo, c.member_count,
+            s.company_name, s.logo
         ORDER BY r.rank_position ASC, r.total_points DESC
     ");
     $stmt->bind_param('s', $currentPeriodEnd);
@@ -103,14 +199,8 @@ if (empty($rankingClubs)) {
            AND e.ending_date < NOW()
         WHERE c.club_id <> 1
         GROUP BY
-            c.club_id,
-            c.points,
-            c.club_name,
-            c.status,
-            c.logo,
-            c.member_count,
-            sponsor_name,
-            sponsor_logo
+            c.club_id, c.points, c.club_name, c.status, c.logo, c.member_count,
+            s.company_name, s.logo
         ORDER BY total_points DESC, c.club_name ASC
     ";
     $res = $conn->query($sql);
@@ -128,22 +218,6 @@ $top1 = $rankingClubs[0] ?? null;
 $top2 = $rankingClubs[1] ?? null;
 $top3 = $rankingClubs[2] ?? null;
 
-function initials(string $name): string {
-    $name = trim($name);
-    if ($name === '') return 'CL';
-    $parts = preg_split('/\s+/', $name);
-    if (count($parts) >= 2) {
-        $a = mb_substr($parts[0], 0, 1);
-        $b = mb_substr($parts[1], 0, 1);
-        return mb_strtoupper($a.$b);
-    }
-    return mb_strtoupper(mb_substr($name, 0, 2));
-}
-
-function safe_img(?string $url): string {
-    $u = trim((string)$url);
-    return $u !== '' ? htmlspecialchars($u, ENT_QUOTES, 'UTF-8') : '';
-}
 ?>
 <!doctype html>
 <html lang="en">
@@ -156,7 +230,7 @@ function safe_img(?string $url): string {
 
 <style>
 /* =============================
-   Unified Ranking UI (Student)
+   Unified Ranking UI
    ============================= */
 .cch-ranking{
   --navy:#242751;
@@ -250,13 +324,9 @@ function safe_img(?string $url): string {
   width:8px;height:8px;border-radius:50%;
   background:#9aa3b2;
 }
-.cch-ranking .status-badge.active{
-  background:#EEFDF3; color:#147a3d;
-}
+.cch-ranking .status-badge.active{ background:#EEFDF3; color:#147a3d; }
 .cch-ranking .status-badge.active::before{ background:#22c55e; }
-.cch-ranking .status-badge.inactive{
-  background:#FFF1F2; color:#b42318;
-}
+.cch-ranking .status-badge.inactive{ background:#FFF1F2; color:#b42318; }
 .cch-ranking .status-badge.inactive::before{ background:#ff5e5e; }
 
 /* Podium */
@@ -331,9 +401,7 @@ function safe_img(?string $url): string {
 .cch-ranking tbody tr:hover{ background:#FAFBFF; }
 .cch-ranking .col-rank{ width:56px; text-align:center; font-weight:900; color:#6b7090; }
 
-.cch-ranking .clubcell{
-  display:flex; align-items:center; gap:10px; white-space:nowrap;
-}
+.cch-ranking .clubcell{ display:flex; align-items:center; gap:10px; white-space:nowrap; }
 .cch-ranking .avatar{
   width:28px;height:28px;border-radius:50%;
   overflow:hidden;
@@ -395,7 +463,7 @@ function safe_img(?string $url): string {
     <div class="podium">
 
       <!-- #2 -->
-      <?php if ($top2): 
+      <?php if ($top2):
         $n = $top2['club_name'] ?? '';
         $p = (int)($top2['total_points'] ?? 0);
         $logo = $top2['club_logo'] ?? '';
@@ -404,22 +472,14 @@ function safe_img(?string $url): string {
       ?>
       <article class="pod s2">
         <div class="medal s">
-          <?php if (trim($logo) !== ''): ?>
-            <img src="<?php echo safe_img($logo); ?>" alt="<?php echo htmlspecialchars($n); ?>">
-          <?php else: ?>
-            <span><?php echo htmlspecialchars(initials($n)); ?></span>
-          <?php endif; ?>
+          <img src="<?php echo img_src_or_placeholder($logo, initials($n)); ?>" alt="<?php echo htmlspecialchars($n); ?>">
         </div>
 
         <div class="clubname"><?php echo htmlspecialchars($n); ?></div>
 
         <div class="sponsor">
           <span class="sponsor-logo">
-            <?php if (trim($splogo) !== ''): ?>
-              <img src="<?php echo safe_img($splogo); ?>" alt="">
-            <?php else: ?>
-              <span><?php echo htmlspecialchars(mb_strtoupper(mb_substr($sp,0,1))); ?></span>
-            <?php endif; ?>
+            <img src="<?php echo img_src_or_placeholder($splogo, mb_substr($sp,0,1)); ?>" alt="">
           </span>
           Sponsored by <strong><?php echo htmlspecialchars($sp); ?></strong>
         </div>
@@ -439,22 +499,14 @@ function safe_img(?string $url): string {
       ?>
       <article class="pod">
         <div class="medal g">
-          <?php if (trim($logo) !== ''): ?>
-            <img src="<?php echo safe_img($logo); ?>" alt="<?php echo htmlspecialchars($n); ?>">
-          <?php else: ?>
-            <span><?php echo htmlspecialchars(initials($n)); ?></span>
-          <?php endif; ?>
+          <img src="<?php echo img_src_or_placeholder($logo, initials($n)); ?>" alt="<?php echo htmlspecialchars($n); ?>">
         </div>
 
         <div class="clubname"><?php echo htmlspecialchars($n); ?></div>
 
         <div class="sponsor">
           <span class="sponsor-logo">
-            <?php if (trim($splogo) !== ''): ?>
-              <img src="<?php echo safe_img($splogo); ?>" alt="">
-            <?php else: ?>
-              <span><?php echo htmlspecialchars(mb_strtoupper(mb_substr($sp,0,1))); ?></span>
-            <?php endif; ?>
+            <img src="<?php echo img_src_or_placeholder($splogo, mb_substr($sp,0,1)); ?>" alt="">
           </span>
           Sponsored by <strong><?php echo htmlspecialchars($sp); ?></strong>
         </div>
@@ -474,22 +526,14 @@ function safe_img(?string $url): string {
       ?>
       <article class="pod s3">
         <div class="medal b">
-          <?php if (trim($logo) !== ''): ?>
-            <img src="<?php echo safe_img($logo); ?>" alt="<?php echo htmlspecialchars($n); ?>">
-          <?php else: ?>
-            <span><?php echo htmlspecialchars(initials($n)); ?></span>
-          <?php endif; ?>
+          <img src="<?php echo img_src_or_placeholder($logo, initials($n)); ?>" alt="<?php echo htmlspecialchars($n); ?>">
         </div>
 
         <div class="clubname"><?php echo htmlspecialchars($n); ?></div>
 
         <div class="sponsor">
           <span class="sponsor-logo">
-            <?php if (trim($splogo) !== ''): ?>
-              <img src="<?php echo safe_img($splogo); ?>" alt="">
-            <?php else: ?>
-              <span><?php echo htmlspecialchars(mb_strtoupper(mb_substr($sp,0,1))); ?></span>
-            <?php endif; ?>
+            <img src="<?php echo img_src_or_placeholder($splogo, mb_substr($sp,0,1)); ?>" alt="">
           </span>
           Sponsored by <strong><?php echo htmlspecialchars($sp); ?></strong>
         </div>
@@ -539,11 +583,7 @@ function safe_img(?string $url): string {
 
               <td class="clubcell">
                 <span class="avatar">
-                  <?php if (trim($clubLogo) !== ''): ?>
-                    <img src="<?php echo safe_img($clubLogo); ?>" alt="">
-                  <?php else: ?>
-                    <?php echo htmlspecialchars(initials($clubName)); ?>
-                  <?php endif; ?>
+                  <img src="<?php echo img_src_or_placeholder($clubLogo, initials($clubName)); ?>" alt="">
                 </span>
 
                 <div>
@@ -555,11 +595,7 @@ function safe_img(?string $url): string {
 
                   <div class="sponsor small">
                     <span class="sponsor-logo small">
-                      <?php if (trim($spLogo) !== ''): ?>
-                        <img src="<?php echo safe_img($spLogo); ?>" alt="">
-                      <?php else: ?>
-                        <span><?php echo htmlspecialchars(mb_strtoupper(mb_substr($spName,0,1))); ?></span>
-                      <?php endif; ?>
+                      <img src="<?php echo img_src_or_placeholder($spLogo, mb_substr($spName,0,1)); ?>" alt="">
                     </span>
                     Sponsored by <strong><?php echo htmlspecialchars($spName); ?></strong>
                   </div>

@@ -1,13 +1,134 @@
 <?php
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
 session_start();
 
-
-if (!isset($_SESSION['sponsor_id']) || $_SESSION['role'] !== 'sponsor') {
+if (!isset($_SESSION['sponsor_id']) || ($_SESSION['role'] ?? '') !== 'sponsor') {
     header('Location: ../login.php');
     exit;
 }
-require_once '../config.php';
 
+require_once __DIR__ . '/../config.php';
+
+/* =========================
+   PROJECT PATH CONFIG
+   =========================
+   هذا هو مسار مشروعك على localhost (URL)
+   حسب كلامك: /project/graduation_project/...
+*/
+define('PROJECT_BASE_URL', '/project/graduation_project'); // لا تحطي / آخرها
+
+/**
+ * يرجّع مسار ملفات السيرفر الحقيقي (Filesystem root) للمشروع
+ * عادةً DOCUMENT_ROOT = htdocs
+ */
+function project_root_fs(): string {
+    $docRoot = rtrim((string)($_SERVER['DOCUMENT_ROOT'] ?? ''), '/\\');
+    return $docRoot . PROJECT_BASE_URL;
+}
+
+/**
+ * تنظيف آمن للـ output في HTML attributes
+ */
+function esc_attr(string $v): string {
+    return htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
+}
+
+/**
+ * توحيد أي path جاي من DB إلى شكل "uploads/...."
+ * - يقبل: uploads/...
+ * - يقبل: /project/graduation_project/uploads/...
+ * - يقبل: ../uploads/...
+ * - يقبل: /uploads/... (لو صار)
+ */
+function normalize_upload_rel(?string $dbPath): string {
+    $p = trim((string)$dbPath);
+    if ($p === '') return '';
+
+    // full URL (rare) => ما رح نعمل file_exists
+    if (preg_match('~^https?://~i', $p)) {
+        return $p;
+    }
+
+    // شيل أي backslashes
+    $p = str_replace('\\', '/', $p);
+
+    // إذا فيه PROJECT_BASE_URL داخل النص، قصّه
+    $pos = stripos($p, PROJECT_BASE_URL . '/');
+    if ($pos !== false) {
+        $p = substr($p, $pos + strlen(PROJECT_BASE_URL) + 1);
+    }
+
+    // شيل ../ من البداية
+    while (str_starts_with($p, '../')) {
+        $p = substr($p, 3);
+    }
+
+    // إذا بدأ بـ /uploads/... خليه uploads/...
+    if (str_starts_with($p, '/uploads/')) {
+        $p = ltrim($p, '/');
+    }
+
+    // إذا بدأ بـ uploads/ تمام
+    return $p;
+}
+
+/**
+ * يحوّل uploads/... إلى URL مطلق من جذر المشروع
+ */
+function upload_public_url(string $rel): string {
+    $rel = ltrim($rel, '/');
+    return PROJECT_BASE_URL . '/' . $rel;
+}
+
+/**
+ * يحوّل uploads/... إلى مسار filesystem للفحص file_exists
+ */
+function upload_fs_path(string $rel): string {
+    $rel = ltrim($rel, '/');
+    return rtrim(project_root_fs(), '/\\') . '/' . $rel;
+}
+
+/**
+ * الدالة الأهم:
+ * - تاخذ path من DB
+ * - تعمل normalize
+ * - إذا الملف موجود فعليًا => ترجع URL صحيح
+ * - إذا مش موجود => ترجع placeholder URL
+ */
+function img_url_from_db(?string $dbPath, string $placeholderRel): string {
+    $rel = normalize_upload_rel($dbPath);
+
+    // full URL (http) => رجعه كما هو
+    if ($rel !== '' && preg_match('~^https?://~i', $rel)) {
+        return esc_attr($rel);
+    }
+
+    // إذا فاضي => placeholder
+    if ($rel === '') {
+        return esc_attr(upload_public_url($placeholderRel));
+    }
+
+    // إذا مش داخل uploads/، اعتبره placeholder (حماية)
+    if (!str_starts_with($rel, 'uploads/')) {
+        return esc_attr(upload_public_url($placeholderRel));
+    }
+
+    // تحقق وجود الملف على السيرفر
+    $fs = upload_fs_path($rel);
+    if (is_file($fs)) {
+        return esc_attr(upload_public_url($rel));
+    }
+
+    // غير موجود => placeholder
+    return esc_attr(upload_public_url($placeholderRel));
+}
+
+/* =========================
+   FETCH EVENT
+   ========================= */
 $eventId = isset($_GET['event_id']) ? (int)$_GET['event_id'] : 0;
 
 $event = null;
@@ -19,27 +140,17 @@ if ($eventId > 0) {
             c.club_name,
             sp.company_name AS sponsor_name
         FROM event e
-        INNER JOIN club c
-            ON e.club_id = c.club_id
-        LEFT JOIN sponsor sp
-            ON sp.sponsor_id = e.sponsor_id
+        INNER JOIN club c ON e.club_id = c.club_id
+        LEFT JOIN sponsor sp ON sp.sponsor_id = e.sponsor_id
         WHERE e.event_id = ?
         LIMIT 1
     ";
-
     $stmt = $conn->prepare($sql);
     $stmt->bind_param("i", $eventId);
     $stmt->execute();
     $res  = $stmt->get_result();
     $event = $res->fetch_assoc();
     $stmt->close();
-}
-
-if (!$event) {
-    http_response_code(404);
-    $title = "Event not found";
-} else {
-    $title = $event['event_name'];
 }
 
 function formatWhenFull($startStr, $endStr): string {
@@ -54,22 +165,29 @@ function formatWhenFull($startStr, $endStr): string {
     }
     return $start->format('l • M d, Y • g:i A');
 }
+
+$title = $event ? ($event['event_name'] ?? 'Event Details') : 'Event not found';
+
+// ✅ Banner URL (حل نهائي)
+$bannerUrl = $event
+    ? img_url_from_db($event['banner_image'] ?? '', 'uploads/events/default_event.jpg')
+    : esc_attr(upload_public_url('uploads/events/default_event.jpg'));
+
 ?>
 <!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>CCH — Event Details</title>
+<title><?php echo esc_attr($title); ?></title>
 
 <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;600;700;800&display=swap" rel="stylesheet">
 
 <style>
-  /* ===== Sponsor Theme Tokens (Warm / Gold) ===== */
   :root{
     --navy:#242751;
-    --royal:#e5b758;        /* gold accent */
-    --lightBlue:#ffe9a8;    /* warm highlight */
+    --royal:#e5b758;
+    --lightBlue:#ffe9a8;
     --gold:#e5b758;
     --paper:#fff7e3;
     --ink:#1e1a16;
@@ -78,26 +196,21 @@ function formatWhenFull($startStr, $endStr): string {
     --radius:22px;
     --maxw:1100px;
   }
-
   *{box-sizing:border-box}
   html,body{margin:0;padding:0}
-
   body{
     font-family:"Raleway",system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
     background:linear-gradient(180deg,#fff9ec,#f7f0dd);
     color:var(--ink);
   }
-
   .wrap{ max-width:var(--maxw); margin:40px auto 0; padding:0 20px; }
   .content{ max-width:var(--maxw); margin:40px auto 60px; padding:0 20px; }
-
   .headline{
     margin:10px 0 16px;
     font-weight:800; line-height:1.1;
     font-size:clamp(32px, 4.7vw, 52px);
     color:var(--navy);
   }
-
   .meta{
     display:flex; flex-wrap:wrap; align-items:center; gap:14px;
     margin-bottom:22px; color:#7c6122; font-weight:700;
@@ -112,7 +225,6 @@ function formatWhenFull($startStr, $endStr): string {
     box-shadow:0 10px 22px rgba(77,54,16,.10);
   }
   .dot{ width:6px;height:6px;border-radius:50%;background:#d9c38e; }
-
   .hero{
     position:relative; border-radius:var(--radius); overflow:hidden;
     box-shadow:var(--shadow);
@@ -125,7 +237,6 @@ function formatWhenFull($startStr, $endStr): string {
     background:rgba(0,0,0,.55); color:#fff; font-size:12px;
     padding:6px 10px; border-radius:999px;
   }
-
   article{
     margin-top:28px; background:var(--card);
     border-radius:var(--radius); box-shadow:var(--shadow); padding:30px;
@@ -162,27 +273,12 @@ function formatWhenFull($startStr, $endStr): string {
     border:1px solid rgba(229,183,88,.35);
   }
   .info-item .icon{
-    width:28px;
-    height:28px;
-    display:grid;
-    place-items:center;
-    border-radius:10px;
-    background:#ffe8a4;
-    font-weight:900;
-    color:var(--navy);
+    width:28px;height:28px;display:grid;place-items:center;
+    border-radius:10px;background:#ffe8a4;font-weight:900;color:var(--navy);
     flex:0 0 28px;
   }
-  .info-item b{
-    display:block;
-    font-size:14px;
-    color:#5b4215;
-    margin-bottom:4px;
-  }
-  .info-item span{
-    display:block;
-    font-size:15px;
-    color:#302319;
-  }
+  .info-item b{display:block;font-size:14px;color:#5b4215;margin-bottom:4px;}
+  .info-item span{display:block;font-size:15px;color:#302319;}
 
   .cta{
     display:flex;
@@ -191,24 +287,13 @@ function formatWhenFull($startStr, $endStr): string {
     margin-top:16px;
   }
   .btn{
-    border:0;
-    border-radius:12px;
-    padding:12px 16px;
-    font-weight:900;
-    cursor:pointer;
+    border:0;border-radius:12px;padding:12px 16px;
+    font-weight:900;cursor:pointer;
     box-shadow:0 8px 18px rgba(77,54,16,.18);
-    background:#fff3c2;
-    color:#5a4613;
+    background:#fff3c2;color:#5a4613;
   }
-  .btn.primary{
-    background:var(--gold);
-    color:var(--navy);
-  }
-  .btn.ghost{
-    background:#fff;
-    border:2px solid #f3d47a;
-    color:#7a5a1a;
-  }
+  .btn.primary{background:var(--gold);color:var(--navy);}
+  .btn.ghost{background:#fff;border:2px solid #f3d47a;color:#7a5a1a;}
 
   .side-card{
     background:var(--card);
@@ -216,11 +301,7 @@ function formatWhenFull($startStr, $endStr): string {
     box-shadow:var(--shadow);
     padding:22px;
   }
-  .side-card h3{
-    margin:0 0 10px;
-    font-size:18px;
-    color:var(--navy);
-  }
+  .side-card h3{margin:0 0 10px;font-size:18px;color:var(--navy);}
   .tagline{ color:#7e6a3d; font-weight:600; }
 
   .map-wrap{ margin-top:26px; }
@@ -263,11 +344,7 @@ function formatWhenFull($startStr, $endStr): string {
     </div>
 
     <figure class="hero">
-      <?php if (!empty($event['banner_image'])): ?>
-        <img src="<?php echo htmlspecialchars($event['banner_image']); ?>" alt="Event banner">
-      <?php else: ?>
-        <img src="https://images.unsplash.com/photo-1551836022-d5d88e9218df?q=80&w=1600&auto=format&fit=crop" alt="Students attending an event">
-      <?php endif; ?>
+      <img src="<?php echo $bannerUrl; ?>" alt="Event banner">
       <figcaption class="credit">Photo: CCH Media</figcaption>
     </figure>
 
@@ -278,7 +355,7 @@ function formatWhenFull($startStr, $endStr): string {
             <div class="icon">🗓</div>
             <div>
               <b>When</b>
-              <span id="whenText">
+              <span>
                 <?php echo htmlspecialchars(formatWhenFull($event['starting_date'], $event['ending_date'])); ?>
               </span>
             </div>
@@ -288,9 +365,7 @@ function formatWhenFull($startStr, $endStr): string {
             <div class="icon">📍</div>
             <div>
               <b>Where</b>
-              <span id="whereText">
-                <?php echo htmlspecialchars($event['event_location'] ?: 'Location to be announced'); ?>
-              </span>
+              <span><?php echo htmlspecialchars($event['event_location'] ?: 'Location to be announced'); ?></span>
             </div>
           </div>
 
@@ -335,11 +410,15 @@ function formatWhenFull($startStr, $endStr): string {
 
       <div class="map-wrap">
         <h2 style="color:var(--navy); margin:0 0 12px;">Location</h2>
+        <?php
+          $mapQuery = $event['event_location'] ?: 'Jordan University';
+          $mapSrc   = "https://www.google.com/maps?q=" . urlencode($mapQuery) . "&output=embed";
+        ?>
         <iframe
           class="map"
           loading="lazy"
           referrerpolicy="no-referrer-when-downgrade"
-          src="https://www.google.com/maps?q=<?php echo urlencode($event['event_location'] ?: 'Jordan University'); ?>&output=embed">
+          src="<?php echo esc_attr($mapSrc); ?>">
         </iframe>
       </div>
     </article>
@@ -371,8 +450,8 @@ document.getElementById('addCalBtn').addEventListener('click', () => {
   const title = '<?php echo addslashes($event['event_name']); ?>';
   const desc  = '<?php echo addslashes($event['description'] ?? 'CCH event'); ?>';
   const loc   = '<?php echo addslashes($event['event_location'] ?? 'Campus'); ?>';
-  const start = '<?php echo $event['starting_date'] ? (new DateTime($event['starting_date']))->format("Ymd\THis") : ""; ?>';
-  const end   = '<?php echo $event['ending_date'] ? (new DateTime($event['ending_date']))->format("Ymd\THis") : ""; ?>';
+  const start = '<?php echo $event['starting_date'] ? (new DateTime($event['starting_date']))->format("Ymd\\THis") : ""; ?>';
+  const end   = '<?php echo $event['ending_date'] ? (new DateTime($event['ending_date']))->format("Ymd\\THis") : ""; ?>';
 
   if(!start){
     alert('Start date not set for this event yet.');

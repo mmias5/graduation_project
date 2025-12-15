@@ -8,6 +8,66 @@ if (!isset($_SESSION['sponsor_id']) || ($_SESSION['role'] ?? '') !== 'sponsor') 
 
 require_once __DIR__ . '/../config.php';
 
+/* =========================================================
+   ✅ UniHive Image Helpers (works across admin/student/sponsor)
+   DB stores: uploads/...
+   Project URL base: /project/graduation_project
+   ========================================================= */
+define('APP_BASE', '/project/graduation_project'); // مهم
+
+function clean_upload_rel(?string $rel): string {
+    $p = trim((string)$rel);
+    if ($p === '') return '';
+    $p = str_replace('\\', '/', $p);
+    $p = preg_replace('~^\./+~', '', $p);
+    if (strpos($p, '..') !== false) return '';
+    if (stripos($p, 'uploads/') !== 0) return '';
+    return $p;
+}
+
+function upload_url(?string $rel): string {
+    $p = clean_upload_rel($rel);
+    if ($p === '') return '';
+    return rtrim(APP_BASE, '/') . '/' . $p;
+}
+
+function upload_exists(?string $rel): bool {
+    $p = clean_upload_rel($rel);
+    if ($p === '') return false;
+
+    $abs = rtrim($_SERVER['DOCUMENT_ROOT'], '/')
+         . rtrim(APP_BASE, '/')
+         . '/'
+         . $p;
+
+    return is_file($abs);
+}
+
+function svg_placeholder_datauri(string $label = 'UH'): string {
+    $label = htmlspecialchars(mb_strtoupper(mb_substr(trim($label), 0, 2)), ENT_QUOTES, 'UTF-8');
+
+    $svg = "<svg xmlns='http://www.w3.org/2000/svg' width='90' height='90' viewBox='0 0 64 64'>
+      <defs>
+        <linearGradient id='g' x1='0' y1='0' x2='1' y2='1'>
+          <stop offset='0' stop-color='#eef2f7'/>
+          <stop offset='1' stop-color='#dbe6ff'/>
+        </linearGradient>
+      </defs>
+      <rect x='0' y='0' width='64' height='64' rx='14' fill='url(#g)'/>
+      <text x='32' y='39' text-anchor='middle' font-family='Arial' font-size='18' font-weight='800' fill='#242751'>{$label}</text>
+    </svg>";
+
+    return "data:image/svg+xml;charset=UTF-8," . rawurlencode($svg);
+}
+
+function img_src_or_placeholder(?string $rel, string $fallbackLabel = 'UH'): string {
+    $p = clean_upload_rel($rel);
+    if ($p === '' || !upload_exists($p)) {
+        return svg_placeholder_datauri($fallbackLabel);
+    }
+    return htmlspecialchars(upload_url($p), ENT_QUOTES, 'UTF-8');
+}
+
 /* =========================
    Fetch categories (Top 10) for dropdown
 ========================= */
@@ -432,7 +492,7 @@ while ($row = $result->fetch_assoc()) {
           $isActive    = in_array($statusRaw, ['active', '1', 'enabled'], true);
           $statusText  = $isActive ? 'Active' : 'Inactive';
 
-          $initials    = mb_strtoupper(mb_substr($name, 0, 2));
+          $fallback    = mb_strtoupper(mb_substr($name, 0, 2));
 
           $dataName    = mb_strtolower($name);
           $dataCat     = mb_strtolower($category);
@@ -450,11 +510,10 @@ while ($row = $result->fetch_assoc()) {
           aria-label="Open club page: <?php echo htmlspecialchars($name); ?>">
 
           <div class="club-logo">
-            <?php if (!empty($logo)): ?>
-              <img src="<?php echo htmlspecialchars($logo); ?>" alt="<?php echo htmlspecialchars($name); ?> logo">
-            <?php else: ?>
-              <?php echo htmlspecialchars($initials); ?>
-            <?php endif; ?>
+            <img
+              src="<?php echo img_src_or_placeholder($logo, $fallback); ?>"
+              alt="<?php echo htmlspecialchars($name); ?> logo"
+            >
           </div>
 
           <div>

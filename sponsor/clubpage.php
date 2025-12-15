@@ -11,6 +11,66 @@ if (!isset($_SESSION['sponsor_id']) || $_SESSION['role'] !== 'sponsor') {
 
 require_once __DIR__ . '/../config.php';
 
+/* =========================================================
+   ✅ UniHive Image Helpers (works across admin/student/sponsor)
+   DB stores: uploads/...
+   Project URL base: /project/graduation_project
+   ========================================================= */
+define('APP_BASE', '/project/graduation_project'); // مهم
+
+function clean_upload_rel(?string $rel): string {
+    $p = trim((string)$rel);
+    if ($p === '') return '';
+    $p = str_replace('\\', '/', $p);
+    $p = preg_replace('~^\./+~', '', $p);
+    if (strpos($p, '..') !== false) return '';
+    if (stripos($p, 'uploads/') !== 0) return '';
+    return $p;
+}
+
+function upload_url(?string $rel): string {
+    $p = clean_upload_rel($rel);
+    if ($p === '') return '';
+    return rtrim(APP_BASE, '/') . '/' . $p;
+}
+
+function upload_exists(?string $rel): bool {
+    $p = clean_upload_rel($rel);
+    if ($p === '') return false;
+
+    $abs = rtrim($_SERVER['DOCUMENT_ROOT'], '/')
+         . rtrim(APP_BASE, '/')
+         . '/'
+         . $p;
+
+    return is_file($abs);
+}
+
+function svg_placeholder_datauri(string $label = 'UH'): string {
+    $label = htmlspecialchars(mb_strtoupper(mb_substr(trim($label), 0, 2)), ENT_QUOTES, 'UTF-8');
+
+    $svg = "<svg xmlns='http://www.w3.org/2000/svg' width='90' height='90' viewBox='0 0 64 64'>
+      <defs>
+        <linearGradient id='g' x1='0' y1='0' x2='1' y2='1'>
+          <stop offset='0' stop-color='#eef2f7'/>
+          <stop offset='1' stop-color='#dbe6ff'/>
+        </linearGradient>
+      </defs>
+      <rect x='0' y='0' width='64' height='64' rx='14' fill='url(#g)'/>
+      <text x='32' y='39' text-anchor='middle' font-family='Arial' font-size='18' font-weight='800' fill='#242751'>{$label}</text>
+    </svg>";
+
+    return "data:image/svg+xml;charset=UTF-8," . rawurlencode($svg);
+}
+
+function img_src_or_placeholder(?string $rel, string $fallbackLabel = 'UH'): string {
+    $p = clean_upload_rel($rel);
+    if ($p === '' || !upload_exists($p)) {
+        return svg_placeholder_datauri($fallbackLabel);
+    }
+    return htmlspecialchars(upload_url($p), ENT_QUOTES, 'UTF-8');
+}
+
 // ======= Get club id from URL =======
 $clubId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 if ($clubId <= 0) {
@@ -102,6 +162,8 @@ if (trim($clubSponsorName) === '') {
 }
 $sponsorInitials = makeInitials($clubSponsorName);
 
+// ✅ placeholder initials للّوغو
+$clubInitials = mb_strtoupper(mb_substr($name, 0, 2, 'UTF-8'));
 ?>
 <!doctype html>
 <html lang="en">
@@ -376,17 +438,11 @@ body{
 
         <!-- Club pill -->
         <div class="pill">
-          <?php if (!empty($logo)): ?>
-            <img
-              src="<?php echo htmlspecialchars($logo); ?>"
-              alt="<?php echo htmlspecialchars($name); ?> logo"
-              style="width:42px; height:42px; border-radius:50%; object-fit:cover; border:2px solid rgba(255,255,255,.8)"
-            />
-          <?php else: ?>
-            <div class="circle">
-              <?php echo htmlspecialchars(mb_strtoupper(mb_substr($name,0,2))); ?>
-            </div>
-          <?php endif; ?>
+          <img
+            src="<?php echo img_src_or_placeholder($logo, $clubInitials); ?>"
+            alt="<?php echo htmlspecialchars($name); ?> logo"
+            style="width:42px; height:42px; border-radius:50%; object-fit:cover; border:2px solid rgba(255,255,255,.8)"
+          />
           <div>
             <div style="font-size:12px;opacity:.8">club name</div>
             <strong id="clubs"><?php echo htmlspecialchars($name); ?></strong>
