@@ -527,16 +527,28 @@ body.menu-open .backdrop{ opacity:1; pointer-events:auto }
         <span>My Club</span>
       </button>
 
-      <button class="side-btn" type="button">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="3" width="7" height="7"></rect>
-          <rect x="14" y="3" width="7" height="7"></rect>
-          <rect x="3" y="14" width="7" height="7"></rect>
-          <path d="M14 14h3v3h-3zM18 18h3v3h-3zM18 14h3"></path>
-        </svg>
-        <span>QR Code</span><span class="sub" aria-hidden="true">— Scan / Show</span>
-      </button>
+       <!-- Scan Attendance -->
+<button class="side-btn" type="button" onclick="location.href='qr_attendance.php'">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+       stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 3h6v6H3zM15 3h6v6h-6zM3 15h6v6H3z"></path>
+    <path d="M15 15h3v3h-3zM18 18h3v3h-3zM18 15h3"></path>
+  </svg>
+  <span>Scan Attendance</span>
+</button>
+
+<!-- Show My QR -->
+<button class="side-btn" type="button" onclick="location.href='show_qr.php'">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+       stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="3" width="7" height="7"></rect>
+    <rect x="14" y="3" width="7" height="7"></rect>
+    <rect x="3" y="14" width="7" height="7"></rect>
+    <rect x="14" y="14" width="7" height="7"></rect>
+  </svg>
+  <span>Show My QR</span>
+</button>
+
 
       <a class="side-btn logout" href="../logout.php" role="button">Logout</a>
     </div>

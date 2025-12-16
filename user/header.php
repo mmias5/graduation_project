@@ -364,14 +364,21 @@ $notInClub = (empty($clubId) || (int)$clubId === 1);
       </div>
     </div>
     <div class="sidebar-content" id="sideDesc">
-      <button class="side-btn primary needs-club-btn" type="button" data-href="myclubpage.php">
+      <button class="side-btn primary needs-club-btn" type="button" onclick="location.href='myclubpage.php'">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21v-4m8 4v-4M4 10h16M2 6h20v12H2z"/></svg>
         <span>My Club</span>
       </button>
-      <button class="side-btn" type="button">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><path d="M14 14h3v3h-3zM18 18h3v3h-3zM18 14h3"></path></svg>
-        <span>QR Code</span><span class="sub" aria-hidden="true">— Scan / Show</span>
-      </button>
+      <button class="side-btn" type="button" onclick="location.href='show_qr.php'">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+       stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="3" width="7" height="7"></rect>
+    <rect x="14" y="3" width="7" height="7"></rect>
+    <rect x="3" y="14" width="7" height="7"></rect>
+    <rect x="14" y="14" width="7" height="7"></rect>
+  </svg>
+  <span>Show My QR</span>
+</button>
+
       <a class="side-btn logout" href="../logout.php" role="button">Logout</a>
     </div>
   </aside>
