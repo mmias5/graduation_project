@@ -48,7 +48,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $imagePath = 'assets/news/' . $newName;
         }
     }
-
     $sql = "INSERT INTO news (title, body, category, image, created_at, updated_at, admin_id)
             VALUES (?, ?, ?, ?, ?, ?, ?)";
 
@@ -358,7 +357,7 @@ body{
       <input type="date" name="date" class="input-field" required>
 
       <label class="form-label">Header Image</label>
-      <input type="file" name="image" class="input-field" accept="image/*" required>
+      <input type="file" name="image" class="input-field" accept="uploads/news/*" required>
 
       <label class="form-label">Body Content</label>
       <textarea name="body" class="textarea-field" required></textarea>

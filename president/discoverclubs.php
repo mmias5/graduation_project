@@ -9,7 +9,6 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
     header('Location: ../login.php');
     exit;
 }
-
 require_once '../config.php';
 
 $student_id = $_SESSION['student_id'];
@@ -231,44 +230,61 @@ sort($categories);
   }
 
   .club-head{
-    display:flex; justify-content:space-between; align-items:center;
-  }
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:10px;
+}
 
-  .club-id{ display:flex; align-items:center; gap:10px; }
-  .club-logo{
+.club-id{ 
+  display:flex; 
+  align-items:center; 
+  gap:10px; 
+  min-width:0;          /* مهم */
+  flex:1;               /* عشان ياخذ المساحة */
+}  
+
+.club-logo{
     width:44px; height:44px;
     border-radius:50%;
     border:3px solid var(--c-blue);
     object-fit:cover;
   }
 
-  .club-title h3{
-    margin:0; font-family:"Raleway"; font-size:18px; font-weight:800;
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-  }
+.club-title{
+  min-width:0;          /* مهم */
+}
+
+ .club-title h3{
+  margin:0;
+  font-family:"Raleway";
+  font-size:18px;
+  font-weight:800;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
 
   .club-title small{ font-size:11px; color:#76829F; }
   .sponsor{ color:var(--c-blue); font-weight:800; }
 
   .category-chip{
-    background:#F0F3FA;
-    border:2px solid var(--c-blue);
-    padding:4px 8px;
-    border-radius:999px;
-    font-size:11px;
-    font-weight:800;
-  }
+  flex-shrink:0;
+  max-width:40%;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
 
   .club-desc{
-    margin:6px 2px 8px;
-    font-size:13px;
-    line-height:1.45;
-    overflow:hidden;
-    line-clamp: 2;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-  }
+  margin:6px 2px 8px;
+  font-size:13px;
+  line-height:1.45;
+  overflow:hidden;
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+}
 
   .club-meta{
     margin-top:auto;

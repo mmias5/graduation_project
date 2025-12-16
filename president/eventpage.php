@@ -237,7 +237,7 @@ function formatWhenFull($startStr, $endStr): string {
 document.getElementById('shareBtn').addEventListener('click', async () => {
   const shareData = {
     title: '<?php echo addslashes($event['event_name']); ?>',
-    text: 'Join me at this CCH event!',
+    text: 'Join me at this unihive event!',
     url: window.location.href
   };
   try{
