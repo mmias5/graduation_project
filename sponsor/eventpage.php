@@ -18,7 +18,7 @@ require_once __DIR__ . '/../config.php';
    هذا هو مسار مشروعك على localhost (URL)
    حسب كلامك: /project/graduation_project/...
 */
-define('PROJECT_BASE_URL', '/project/graduation_project'); // لا تحطي / آخرها
+define('PROJECT_BASE_URL', '/graduation_project'); // لا تحطي / آخرها
 
 /**
  * يرجّع مسار ملفات السيرفر الحقيقي (Filesystem root) للمشروع

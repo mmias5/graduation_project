@@ -14,9 +14,9 @@ require_once __DIR__ . '/../config.php';
 /* =========================================================
    ✅ UniHive Image Helpers (works across admin/student/sponsor)
    DB stores: uploads/...
-   Project URL base: /project/graduation_project
+   Project URL base: /graduation_project
    ========================================================= */
-define('APP_BASE', '/project/graduation_project'); // مهم
+define('APP_BASE', '/graduation_project'); // مهم
 
 function clean_upload_rel(?string $rel): string {
     $p = trim((string)$rel);
@@ -49,7 +49,7 @@ function upload_exists(?string $rel): bool {
 function svg_placeholder_datauri(string $label = 'UH'): string {
     $label = htmlspecialchars(mb_strtoupper(mb_substr(trim($label), 0, 2)), ENT_QUOTES, 'UTF-8');
 
-    $svg = "<svg xmlns='http://www.w3.org/2000/svg' width='90' height='90' viewBox='0 0 64 64'>
+    $svg = "<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 64 64'>
       <defs>
         <linearGradient id='g' x1='0' y1='0' x2='1' y2='1'>
           <stop offset='0' stop-color='#eef2f7'/>
@@ -68,14 +68,8 @@ function img_src_or_placeholder(?string $rel, string $fallbackLabel = 'UH'): str
     if ($p === '' || !upload_exists($p)) {
         return svg_placeholder_datauri($fallbackLabel);
     }
-    return htmlspecialchars(upload_url($p), ENT_QUOTES, 'UTF-8');
-}
-
-// ======= Get club id from URL =======
-$clubId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
-if ($clubId <= 0) {
-    header('Location: discoverclubs.php');
-    exit;
+    // لاحظ: هون برجع URL (مش encoded) لأننا بنستخدمه داخل HTML
+    return upload_url($p);
 }
 
 /* =========================
@@ -96,7 +90,14 @@ function makeInitials(string $name): string {
     return $ini !== '' ? $ini : 'SP';
 }
 
-// ======= Fetch club from DB (WITH sponsor) =======
+// ======= Get club id from URL =======
+$clubId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+if ($clubId <= 0) {
+    header('Location: discoverclubs.php');
+    exit;
+}
+
+// ======= Fetch club from DB (WITH sponsor + total_events + hero_image) =======
 $sql = "
     SELECT 
         c.club_id,
@@ -104,6 +105,7 @@ $sql = "
         c.category,
         c.description,
         c.logo,
+        c.cover,
         c.member_count,
         c.points,
         c.contact_email,
@@ -144,6 +146,8 @@ $name          = $club['club_name']       ?? 'Club';
 $category      = $club['category']        ?? 'General';
 $description   = $club['description']     ?? 'No description available yet for this club.';
 $logo          = $club['logo']            ?? '';
+$heroImage     = $club['cover']      ?? '';
+
 $memberCount   = isset($club['member_count']) ? (int)$club['member_count'] : 0;
 $points        = isset($club['points'])        ? (int)$club['points']        : 0;
 $totalEvents   = isset($club['total_events'])  ? (int)$club['total_events']  : 0;
@@ -164,6 +168,9 @@ $sponsorInitials = makeInitials($clubSponsorName);
 
 // ✅ placeholder initials للّوغو
 $clubInitials = mb_strtoupper(mb_substr($name, 0, 2, 'UTF-8'));
+
+// ✅ HERO background src (URL or placeholder data uri)
+$heroBgSrc = img_src_or_placeholder($heroImage, $clubInitials);
 ?>
 <!doctype html>
 <html lang="en">
@@ -209,6 +216,8 @@ body{
   display:flex; align-items:flex-end;
   background:none;
 }
+
+/* ✅ IMPORTANT: background from DB via CSS variable */
 .hero-card::before{
   content:"";
   position:absolute; inset:0;
@@ -219,6 +228,7 @@ body{
   filter: grayscale(.12) contrast(1.03);
   opacity: .95;
 }
+
 .hero-card::after{
   content:"";
   position:absolute; inset:0;
@@ -427,7 +437,9 @@ body{
 <!-- ========== HERO ========== -->
 <section class="section hero">
   <div class="wrap">
-    <div class="hero-card">
+
+    <!-- ✅ هنا الربط: الHero background من DB -->
+    <div class="hero-card" style="--hero-bg: url('<?php echo htmlspecialchars($heroBgSrc, ENT_QUOTES, 'UTF-8'); ?>');">
       <div class="hero-top">
         <div class="tag">
           <?php echo htmlspecialchars($university); ?>
@@ -439,7 +451,7 @@ body{
         <!-- Club pill -->
         <div class="pill">
           <img
-            src="<?php echo img_src_or_placeholder($logo, $clubInitials); ?>"
+            src="<?php echo htmlspecialchars(img_src_or_placeholder($logo, $clubInitials), ENT_QUOTES, 'UTF-8'); ?>"
             alt="<?php echo htmlspecialchars($name); ?> logo"
             style="width:42px; height:42px; border-radius:50%; object-fit:cover; border:2px solid rgba(255,255,255,.8)"
           />
@@ -449,7 +461,7 @@ body{
           </div>
         </div>
 
-        <!-- ✅ Sponsor pill (FROM DB club.sponsor_id) -->
+        <!-- Sponsor pill -->
         <div class="pill">
           <div class="circle"><?php echo htmlspecialchars($sponsorInitials); ?></div>
           <div>

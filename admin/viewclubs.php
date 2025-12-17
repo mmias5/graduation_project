@@ -178,36 +178,25 @@ sort($categories);
 
 /**
  * Helper: make image src correct from admin folder
- * - If it's "uploads/..." => use "/project/graduation_project/uploads/..."
+ * - If it's "uploads/..." => use "/uploads/..." (absolute from root)
  * - Else (assets/...) => keep as-is (relative to admin)
  */
 function uiImgSrc(string $path): string {
     $path = trim($path);
 
-<<<<<<< HEAD
-=======
-    // لو فاضي حطي placeholder (موجود عندك داخل admin/assets/)
->>>>>>> f8068f1e3bcddd175bf2d6031b8f8842eec47d2d
+    // placeholder داخل admin
     if ($path === '') {
         return 'assets/club_placeholder.png';
     }
 
-<<<<<<< HEAD
+    // uploads from project root
     if (strpos($path, 'uploads/') === 0) {
-        return '/project/graduation_project/' . ltrim($path, '/');
+        return '/graduation_project/' . ltrim($path, '/');
     }
 
-=======
-    // لو مسار uploads أو assets من root، لازم نطلع من admin لفوق
-    if (strpos($path, 'uploads/') === 0 || strpos($path, 'assets/') === 0) {
-        return '../' . $path;
-    }
-
-    // أي مسار ثاني (احتياط)
->>>>>>> f8068f1e3bcddd175bf2d6031b8f8842eec47d2d
+    // any other relative asset
     return $path;
 }
-
 
 ?>
 <!doctype html>
@@ -245,98 +234,31 @@ body{margin:0;background:var(--paper);font-family:"Raleway",system-ui,-apple-sys
 .category-menu.open{display:block;}
 .category-option{width:100%;padding:9px 16px;text-align:left;border:none;background:transparent;font-size:.93rem;cursor:pointer;color:var(--ink);transition:background .15s ease;}
 .category-option:hover{background:#f3f4f6;}
-
 .cards-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:22px;}
 .club-card{background:var(--card);border-radius:20px;box-shadow:0 18px 40px rgba(15,23,42,.14);padding:18px 20px 16px;border:2px solid rgba(36,39,81,0.07);position:relative;cursor:pointer;}
 .card-link{position:absolute;top:0;left:0;width:100%;height:100%;z-index:1;display:block;}
 .actions-row,.actions-row *{position:relative;z-index:5;}
 .club-card.active{border-color:var(--navy);}
-
-/* ✅ FIX: keep everything inside the card top row */
-.card-top{
-  display:flex;
-  justify-content:space-between;
-  align-items:flex-start;
-  gap:12px;
-  margin-bottom:10px;
-}
-.card-main{
-  display:flex;
-  gap:14px;
-  min-width:0;     /* ✅ important */
-  flex:1;          /* ✅ take remaining space */
-}
-.club-text{
-  display:flex;
-  flex-direction:column;
-  gap:2px;
-  min-width:0;     /* ✅ important for ellipsis */
-}
-
+.card-top{display:flex;justify-content:space-between;gap:12px;margin-bottom:10px;}
+.card-main{display:flex;gap:14px;}
 .club-logo{width:52px;height:52px;border-radius:50%;background:#e5e7eb;object-fit:cover;flex-shrink:0;}
-
-/* ✅ name ellipsis */
-.club-name{
-  font-weight:800;
-  font-size:1.05rem;
-  color:var(--ink);
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  max-width:100%;
-}
-
-/* ✅ sponsor line ellipsis */
-.club-sponsor{
-  font-size:.9rem;
-  color:var(--muted);
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  max-width:100%;
-}
+.club-text{display:flex;flex-direction:column;gap:2px;}
+.club-name{font-weight:800;font-size:1.05rem;color:var(--ink);}
+.club-sponsor{font-size:.9rem;color:var(--muted);}
 .club-sponsor span{color:var(--coral);font-weight:600;}
-
-/* ✅ pill stays inside + ellipsis */
-.category-pill{
-  align-self:flex-start;
-  padding:6px 14px;
-  border-radius:999px;
-  border:2px solid var(--navy);
-  color:var(--navy);
-  font-size:.86rem;
-  font-weight:600;
-  background:#e3e4f4;
-
-  flex-shrink:0;
-  max-width:42%;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-}
-
-/* ✅ description clamp (safe) */
-.club-desc{
-  font-size:.93rem;
-  color:var(--muted);
-  margin-bottom:10px;
-  overflow:hidden;
-  display:-webkit-box;
-  -webkit-line-clamp:3;
-  -webkit-box-orient:vertical;
-}
-
-.stats-row{display:flex;gap:18px;font-size:.88rem;font-weight:600;color:var(--ink);margin-bottom:12px;flex-wrap:wrap;}
+.category-pill{align-self:flex-start;padding:6px 14px;border-radius:999px;border:2px solid var(--navy);color:var(--navy);font-size:.86rem;font-weight:600;background:#e3e4f4;}
+.club-desc{font-size:.93rem;color:var(--muted);margin-bottom:10px;}
+.stats-row{display:flex;gap:18px;font-size:.88rem;font-weight:600;color:var(--ink);margin-bottom:12px;}
 .stats-row span{color:var(--muted);font-weight:500;}
-.actions-row{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;}
-.btn-group-left{display:flex;gap:8px;flex-wrap:wrap;}
+.actions-row{display:flex;justify-content:space-between;gap:10px;align-items:center;}
+.btn-group-left{display:flex;gap:8px;}
 .card-btn{padding:8px 14px;border-radius:999px;font-size:.86rem;font-weight:600;border:none;cursor:pointer;transition:background .15s ease, color .15s ease, transform .1s ease;}
 .btn-delete{background:#ffe3e3;color:#b91c1c;}
 .btn-delete:hover{background:var(--coral);color:#ffffff;transform:translateY(-1px);}
 .btn-status{background:#dfe2f0;color:var(--navy);}
 .btn-status.inactive{background:#f3f4f6;color:#6b7280;}
 .btn-status:hover{background:var(--navy);color:#ffffff;transform:translateY(-1px);}
-.btn-view-members{background:var(--navy);color:#ffffff;text-decoration:none;display:inline-flex;align-items:center;}
+.btn-view-members{background:var(--navy);color:#ffffff;text-decoration:none;}
 .btn-view-members:hover{background:#191c3a;transform:translateY(-1px);}
 .inline-form{display:inline;}
 .flash{margin-bottom:16px;padding:12px 16px;border-radius:14px;font-weight:700;box-shadow:0 10px 24px rgba(15,23,42,.12);}

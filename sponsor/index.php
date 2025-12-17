@@ -18,7 +18,7 @@ $sponsorId = (int)($_SESSION['sponsor_id'] ?? 0);
 /* =========================
    PROJECT PATH CONFIG
    ========================= */
-define('PROJECT_BASE_URL', '/project/graduation_project'); // لا تحطي / آخرها
+define('PROJECT_BASE_URL', '/graduation_project'); // لا تحطي / آخرها
 
 function project_root_fs(): string {
     $docRoot = rtrim((string)($_SERVER['DOCUMENT_ROOT'] ?? ''), '/\\');

@@ -19,7 +19,7 @@ require_once __DIR__ . '/../config.php';
    ========================================================= */
 
 // ✅ set your project web-root path (based on your debug)
-define('APP_BASE', '/project/graduation_project'); // <-- مهم
+define('APP_BASE', '/graduation_project'); // <-- مهم
 
 /**
  * sanitize a relative upload path:

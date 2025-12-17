@@ -104,7 +104,7 @@ function assetUrl(string $path): string {
 
   // إذا كان uploads/.. خليه under project root
   if (strpos($path, 'uploads/') === 0) {
-    return '/project/graduation_project/' . ltrim($path, '/');
+    return '/graduation_project/' . ltrim($path, '/');
   }
 
   // إذا كان assets/.. (داخل admin) خلّيه زي ما هو

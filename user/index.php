@@ -15,7 +15,7 @@ require_once __DIR__ . '/../config.php';
 /* =========================
    PROJECT PATH CONFIG (LOCALHOST)
    ========================= */
-define('PROJECT_BASE_URL', '/project/graduation_project'); // لا تحط / بالنهاية
+define('PROJECT_BASE_URL', '/graduation_project'); // لا تحط / بالنهاية
 
 function project_root_fs(): string {
     $docRoot = rtrim((string)($_SERVER['DOCUMENT_ROOT'] ?? ''), '/\\');

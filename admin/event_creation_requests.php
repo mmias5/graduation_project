@@ -184,7 +184,7 @@ function assetUrl(string $path): string {
 
   // uploads/... -> لازم يمر عبر project root
   if (strpos($path, 'uploads/') === 0) {
-    return '/project/graduation_project/' . $path;
+    return '/graduation_project/' . $path;
   }
 
   // غير هيك خليّه كما هو (مثلاً assets/.. داخل نفس البورتال)

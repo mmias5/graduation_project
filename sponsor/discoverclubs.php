@@ -13,7 +13,7 @@ require_once __DIR__ . '/../config.php';
    DB stores: uploads/...
    Project URL base: /project/graduation_project
    ========================================================= */
-define('APP_BASE', '/project/graduation_project'); // مهم
+define('APP_BASE', '/graduation_project'); // مهم
 
 function clean_upload_rel(?string $rel): string {
     $p = trim((string)$rel);
