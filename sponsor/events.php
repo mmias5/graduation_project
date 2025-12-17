@@ -1,7 +1,6 @@
 <?php
 session_start();
 
-
 require_once '../config.php';
 
 /* ===== Fetch UPCOMING events only ===== */
@@ -83,7 +82,6 @@ function timePart(?string $dt){
 <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;600;700;800&display=swap" rel="stylesheet">
 
 <style>
-/* ===== Sponsor Style Tokens ===== */
 :root{
   --navy:#242751;
   --royal:#4871db;
@@ -107,7 +105,6 @@ body{
     var(--paper);
 }
 
-/* ===== Layout ===== */
 .wrapper{
   max-width:1100px;
   margin:32px auto 48px;
@@ -133,8 +130,25 @@ body{
 
 .subtle{
   color:var(--muted);
-  margin:8px 0 22px;
+  margin:8px 0 18px;
   font-size:15px;
+}
+
+/* ===== Search Bar (ADDED) ===== */
+.search-wrap{
+  margin-bottom:22px;
+}
+.search-input{
+  width:100%;
+  padding:14px 18px;
+  border-radius:999px;
+  border:2px solid #dde3f0;
+  font-size:15px;
+  font-weight:600;
+  outline:none;
+}
+.search-input:focus{
+  border-color:var(--gold);
 }
 
 /* ===== Grid ===== */
@@ -147,7 +161,6 @@ body{
   .grid{ grid-template-columns:1fr; }
 }
 
-/* ===== Card (Sponsor Style) ===== */
 .card{
   background:var(--card);
   border-radius:var(--radius);
@@ -157,7 +170,7 @@ body{
   grid-template-columns:90px 1fr;
   gap:16px;
   cursor:pointer;
-  transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+  transition:.12s;
   border:2px solid transparent;
 }
 .card:hover{
@@ -165,12 +178,7 @@ body{
   box-shadow:0 18px 38px rgba(12,22,60,.16);
   border-color:var(--gold);
 }
-.card:focus{
-  outline:3px solid var(--royal);
-  outline-offset:3px;
-}
 
-/* ===== Date Box ===== */
 .date{
   display:flex;
   flex-direction:column;
@@ -186,13 +194,11 @@ body{
   border:2px solid var(--gold);
 }
 .date .day{ font-size:28px; }
-.date .mon{ font-size:12px; margin-top:2px; letter-spacing:1px; }
+.date .mon{ font-size:12px; margin-top:2px; }
 .date .sep{ font-size:11px; color:#6b7280; margin-top:6px; }
 
-/* ===== Content ===== */
 .topline{
   display:flex;
-  align-items:center;
   gap:8px;
   flex-wrap:wrap;
 }
@@ -223,7 +229,6 @@ body{
   font-size:13px;
   display:flex;
   gap:14px;
-  flex-wrap:wrap;
 }
 .footer{
   margin-top:8px;
@@ -241,7 +246,18 @@ body{
   <h1 class="page-title">Upcoming Events</h1>
   <p class="subtle">Discover what’s happening next across UniHive clubs.</p>
 
-  <div class="grid">
+  <!-- 🔍 Search Bar -->
+  <div class="search-wrap">
+    <input
+      type="text"
+      id="eventSearch"
+      class="search-input"
+      placeholder="Search events, clubs, sponsors..."
+      aria-label="Search events"
+    >
+  </div>
+
+  <div class="grid" id="eventsGrid">
     <?php if (empty($events)): ?>
       <p style="grid-column:1/-1;color:var(--muted);font-size:14px;">
         No upcoming events at the moment.
@@ -255,10 +271,12 @@ body{
       ?>
       <article
         class="card"
-        data-href="<?php echo htmlspecialchars($url); ?>"
-        role="link"
-        tabindex="0"
-        aria-label="Open event: <?php echo htmlspecialchars($ev['event_name']); ?>">
+        data-search="<?php
+          echo strtolower(
+            $ev['club_name'].' '.$ev['event_name'].' '.$ev['event_location'].' '.$sponsor
+          );
+        ?>"
+        data-href="<?php echo htmlspecialchars($url); ?>">
         <div class="date">
           <div class="day"><?php echo $day; ?></div>
           <div class="mon"><?php echo $mon; ?></div>
@@ -292,24 +310,19 @@ body{
 <?php include 'footer.php'; ?>
 
 <script>
-/* Click + keyboard accessibility (same as sponsor) */
-(function(){
-  function ignore(t){
-    return ['A','BUTTON','INPUT','SELECT','TEXTAREA','LABEL','SVG','PATH'].includes(t.tagName);
-  }
-  document.addEventListener('click',e=>{
-    const c=e.target.closest('.card[data-href]');
-    if(!c||ignore(e.target))return;
-    location.href=c.dataset.href;
+/* Card navigation */
+document.addEventListener('click',e=>{
+  const c=e.target.closest('.card[data-href]');
+  if(c) location.href=c.dataset.href;
+});
+
+/* 🔍 Search logic */
+document.getElementById('eventSearch').addEventListener('input',function(){
+  const q=this.value.toLowerCase();
+  document.querySelectorAll('.card').forEach(card=>{
+    card.style.display = card.dataset.search.includes(q) ? '' : 'none';
   });
-  document.addEventListener('keydown',e=>{
-    if(e.key!=='Enter'&&e.key!==' ')return;
-    const c=e.target.closest('.card[data-href]');
-    if(!c)return;
-    e.preventDefault();
-    location.href=c.dataset.href;
-  });
-})();
+});
 </script>
 
 </body>
