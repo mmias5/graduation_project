@@ -6,6 +6,7 @@ if (!isset($_SESSION['admin_id'])) {
 }
 
 require_once __DIR__ . '/../config.php';
+$BASE = '/graduation_project/';
 
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
@@ -24,7 +25,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $newPresidentId = (int)($_POST['student_id'] ?? 0);
 
     if ($newPresidentId > 0) {
-        // 1) تأكد الطالب فعلاً ضمن نفس النادي
         $check = $conn->prepare("SELECT student_id FROM student WHERE student_id = ? AND club_id = ? LIMIT 1");
         $check->bind_param("ii", $newPresidentId, $clubId);
         $check->execute();
@@ -33,9 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
         if ($ok) {
             $conn->begin_transaction();
-
             try {
-                // 2) نزّل الرئيس الحالي (إن وجد)
                 $demote = $conn->prepare("
                     UPDATE student
                     SET role = 'student'
@@ -45,7 +43,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 $demote->execute();
                 $demote->close();
 
-                // 3) عيّن الرئيس الجديد
                 $promote = $conn->prepare("
                     UPDATE student
                     SET role = 'club_president'
@@ -57,10 +54,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 $promote->close();
 
                 $conn->commit();
-
                 header("Location: " . basename(__FILE__) . "?club_id={$clubId}&ok=1");
                 exit;
-
             } catch (Throwable $e) {
                 $conn->rollback();
                 header("Location: " . basename(__FILE__) . "?club_id={$clubId}&err=" . urlencode("Failed to update president."));
@@ -94,7 +89,7 @@ $clubStmt->close();
 // ===============================
 $members = [];
 $stmt = $conn->prepare("
-    SELECT student_id, student_name, email, major, role
+    SELECT student_id, student_name, email, major, role, profile_photo
     FROM student
     WHERE club_id = ?
     ORDER BY (role = 'club_president') DESC, student_name ASC
@@ -103,19 +98,26 @@ $stmt->bind_param("i", $clubId);
 $stmt->execute();
 $res = $stmt->get_result();
 
-$defaultAvatar = "assets/members/default.jpg"; // حط صورة افتراضية عندك
 while ($row = $res->fetch_assoc()) {
+    $sid = (int)$row['student_id'];
+
+    $photo = trim((string)($row['profile_photo'] ?? ''));
+    if ($photo === '') {
+        $photo = "uploads/students/student_{$sid}.png"; // fallback
+    }
+
     $members[] = [
-        "id" => (int)$row['student_id'],
+        "id" => $sid,
         "name" => $row['student_name'],
         "email" => $row['email'],
         "major" => $row['major'] ?? '—',
-        "student_id" => (string)$row['student_id'], // عندك ما في student_number فبنستعمل student_id
-        "joined" => "—", // ما عندك عمود joined بالـ student table
-        "avatar" => $defaultAvatar,
+        "student_id" => (string)$sid,
+        "joined" => "—",
+        "avatar" => $BASE . ltrim($photo, '/'),
         "role" => ($row['role'] === 'club_president') ? 'President' : 'Member',
     ];
 }
+
 $stmt->close();
 
 $totalMembers = count($members);
@@ -165,10 +167,20 @@ body{margin:0;background:var(--paper);font-family:"Raleway",system-ui,-apple-sys
 .search-input::placeholder{color:#9ca3af;}
 
 .members-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:18px 20px;}
-.member-card{background:var(--card);border-radius:20px;box-shadow:0 16px 34px rgba(15,23,42,.16);padding:16px 18px;display:flex;justify-content:space-between;align-items:center;}
-.member-left{display:flex;gap:14px;align-items:flex-start;}
+.member-card{
+  background:var(--card);
+  border-radius:20px;
+  box-shadow:0 16px 34px rgba(15,23,42,.16);
+  padding:16px 18px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:16px;
+  overflow:hidden;
+}
+.member-left{display:flex;gap:14px;align-items:flex-start;min-width:0;}
 .avatar{width:52px;height:52px;border-radius:50%;object-fit:cover;background:#e5e7eb;flex-shrink:0;}
-.member-info{display:flex;flex-direction:column;gap:3px;}
+.member-info{display:flex;flex-direction:column;gap:3px;min-width:0;}
 .member-name{font-weight:800;font-size:1rem;color:var(--ink);}
 .member-email{font-size:.9rem;color:var(--muted);}
 .member-meta{font-size:.86rem;color:var(--muted);}
@@ -178,11 +190,13 @@ body{margin:0;background:var(--paper);font-family:"Raleway",system-ui,-apple-sys
 .role-member{background:#e5e7eb;color:#374151;}
 
 .member-right{display:flex;align-items:center;}
+.member-right form{margin:0;}
 
 .make-president-btn{
   padding:9px 16px;border-radius:999px;border:none;cursor:pointer;
   font-size:.88rem;font-weight:600;background:#242751;color:#ffffff;
   transition:background .15s ease, transform .1s ease, opacity .1s ease;
+  white-space:nowrap;
 }
 .make-president-btn:hover{background:#181b3b;transform:translateY(-1px);}
 .make-president-btn.is-president{background:#ffffff;color:var(--navy);border:2px solid var(--navy);}
@@ -217,12 +231,15 @@ body{margin:0;background:var(--paper);font-family:"Raleway",system-ui,-apple-sys
     <?php foreach($members as $m): ?>
       <div
         class="member-card"
-        data-name="<?= strtolower($m['name']); ?>"
-        data-role="<?= strtolower($m['role']); ?>"
-        data-id="<?= (int)$m['id']; ?>"
+        data-name="<?= htmlspecialchars(strtolower($m['name'])); ?>"
       >
         <div class="member-left">
-          <img src="<?= htmlspecialchars($m['avatar']); ?>" alt="Avatar" class="avatar">
+          <img
+            src="<?= htmlspecialchars($m['avatar']); ?>"
+            alt="Avatar"
+            class="avatar"
+            onerror="this.src='<?= htmlspecialchars($BASE); ?>uploads/students/default.png';"
+          >
 
           <div class="member-info">
             <div class="member-name"><?= htmlspecialchars($m['name']); ?></div>
@@ -240,7 +257,7 @@ body{margin:0;background:var(--paper);font-family:"Raleway",system-ui,-apple-sys
         </div>
 
         <div class="member-right">
-          <form method="POST" style="margin:0">
+          <form method="POST">
             <input type="hidden" name="action" value="make_president">
             <input type="hidden" name="student_id" value="<?= (int)$m['id']; ?>">
 
@@ -261,15 +278,14 @@ body{margin:0;background:var(--paper);font-family:"Raleway",system-ui,-apple-sys
 </div>
 
 <script>
-// ===== Search by name =====
 const searchInput = document.getElementById('searchMembers');
 const memberCards = document.querySelectorAll('.member-card');
 
 searchInput.addEventListener('input', () => {
   const q = searchInput.value.toLowerCase().trim();
   memberCards.forEach(card => {
-    const name = card.dataset.name;
-    card.style.display = !q || name.includes(q) ? 'flex' : 'none';
+    const name = card.dataset.name || '';
+    card.style.display = (!q || name.includes(q)) ? 'flex' : 'none';
   });
 });
 </script>

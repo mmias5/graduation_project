@@ -184,16 +184,30 @@ sort($categories);
 function uiImgSrc(string $path): string {
     $path = trim($path);
 
+<<<<<<< HEAD
+=======
+    // لو فاضي حطي placeholder (موجود عندك داخل admin/assets/)
+>>>>>>> f8068f1e3bcddd175bf2d6031b8f8842eec47d2d
     if ($path === '') {
         return 'assets/club_placeholder.png';
     }
 
+<<<<<<< HEAD
     if (strpos($path, 'uploads/') === 0) {
         return '/project/graduation_project/' . ltrim($path, '/');
     }
 
+=======
+    // لو مسار uploads أو assets من root، لازم نطلع من admin لفوق
+    if (strpos($path, 'uploads/') === 0 || strpos($path, 'assets/') === 0) {
+        return '../' . $path;
+    }
+
+    // أي مسار ثاني (احتياط)
+>>>>>>> f8068f1e3bcddd175bf2d6031b8f8842eec47d2d
     return $path;
 }
+
 
 ?>
 <!doctype html>
