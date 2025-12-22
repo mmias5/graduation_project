@@ -206,7 +206,38 @@ body{
       <button class="nav-btn" onclick="location.href='events.php'">Events</button>
       <button class="nav-btn" onclick="location.href='aboutus.php'">About Us</button>
 
+      <!-- Account Dropdown -->
+<div class="dropdown">
+  <button class="nav-btn">
+    Account
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+         stroke="white" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+  </button>
+
+  <div class="menu">
+    <a href="account.php">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2">
+        <path d="M20 21a8 8 0 1 0-16 0"/>
+        <circle cx="12" cy="7" r="4"/>
+      </svg>
+      Account Management
+    </a>
+
+    <a href="../logout.php">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+        <path d="M16 17l5-5-5-5"/>
+        <path d="M21 12H9"/>
+      </svg>
+      Logout
+    </a>
+  </div>
+</div>
+
     </nav>
+    
 
     <!-- Logout -->
     <button class="logout-btn" onclick="location.href='../logout.php'">Logout</button>

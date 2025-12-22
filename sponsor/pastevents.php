@@ -207,7 +207,7 @@ function fmtDT($dt){
           $end    = $e['ending_date'] ?? null;
           $maxAtt = (int)($e['max_attendees'] ?? 0);
           $att    = (int)($e['attendees_count'] ?? 0);
-          $banner = $e['banner_image'] ?? '';
+          $banner = '/graduation_project/' . ($e['banner_image'] ?? '');
           $init   = strtoupper(substr($name, 0, 2));
         ?>
 
