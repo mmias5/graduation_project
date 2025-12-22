@@ -350,7 +350,7 @@ if (empty($topClubs)) {
     <div class="bi-wrap">
       <div class="bi-header">
         <div>
-          <div class="bi-title">Sponsorship Impact Dashboard</div>
+          <div class="bi-title">Platform Impact & Engagement Overview</div>
           <div class="bi-sub">Live KPIs on club performance, event reach, and student engagement.</div>
         </div>
         <div class="bi-pill">Interactive • Powered by Power BI</div>
