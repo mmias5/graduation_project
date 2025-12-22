@@ -546,20 +546,14 @@ function assetUrl(string $path): string {
           <div class="bi-pill">Interactive • Powered by Power BI</div>
         </div>
 
-        <div class="bi-frame">
-          <!-- ✅ Paste your admin Power BI embed iframe here -->
-          <!-- Example:
-          <iframe title="Admin Overview"
-            src="https://app.powerbi.com/reportEmbed?reportId=YOUR_REPORT_ID&autoAuth=true&ctid=YOUR_TENANT_ID"
-            allowfullscreen="true"></iframe>
-          -->
+      <div class="bi-frame">
+  <iframe
+    title="admin_bi"
+    src="https://app.powerbi.com/reportEmbed?reportId=29dca5d8-eeb0-4b61-83dd-137d7ecacbd5&autoAuth=true&ctid=05405dba-373c-4e20-a30e-3e6fcf507cfe"
+    allowfullscreen="true">
+  </iframe>
+</div>
 
-          <div class="bi-placeholder">
-            BI Dashboard placeholder
-            <div class="bi-note">Add your Power BI embed URL here.</div>
-          </div>
-        </div>
-      </div>
     </section>
 
     <!-- CLUBS RANKING TABLE -->
