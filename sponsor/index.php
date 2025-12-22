@@ -357,10 +357,8 @@ if (empty($topClubs)) {
       </div>
 
       <div class="bi-frame">
-        <div class="bi-placeholder">
-          <strong>BI dashboard placeholder</strong><br>
-          Connect your Power BI embed URL here to make this area fully interactive.
-        </div>
+  <iframe title="Sponsor Overview" width="1140" height="541.25" src="https://app.powerbi.com/reportEmbed?reportId=b1d04920-f60f-499c-8012-3876b963eff4&autoAuth=true&ctid=05405dba-373c-4e20-a30e-3e6fcf507cfe" frameborder="0" allowFullScreen="true"></iframe 
+  allowfullscreen="true">
       </div>
     </div>
   </section>
