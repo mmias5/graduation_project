@@ -202,7 +202,7 @@ include 'header.php';
         </div>
         <div class="col">
           <label>Email</label>
-          <input type="email" name="email" value="<?= htmlspecialchars($sponsor['email'] ?? '') ?>" required>
+          <input type="email" name="email" value="<?= htmlspecialchars($sponsor['email'] ?? '') ?>" disabled required>
         </div>
         <div class="col">
           <label>Phone</label>
@@ -235,7 +235,6 @@ include 'header.php';
       <div style="margin-top:12px;">
         <button name="update_password" value="1">Update Password</button>
       </div>
-      <div class="small">Note: Your current system stores passwords as plain text (like 123).</div>
     </form>
   </div>
 
