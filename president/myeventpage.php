@@ -237,7 +237,6 @@ $isLeader = true;
         <ul style="margin:10px 0 0 18px; line-height:1.7;">
           <li>Please bring your student ID.</li>
           <li>QR check-in available at entrance.</li>
-          <li>Snacks & coffee provided.</li>
         </ul>
       <?php endif; ?>
     </aside>
