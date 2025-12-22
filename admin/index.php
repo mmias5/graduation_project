@@ -218,7 +218,7 @@ function assetUrl(string $path): string {
       letter-spacing:.02em;
     }
 
-    /* ========= BI DASHBOARD PLACEHOLDER ========= */
+    /* ========= BI DASHBOARD ========= */
     .bi-wrapper{
       margin-top:8px;
       margin-bottom:40px;
@@ -237,21 +237,62 @@ function assetUrl(string $path): string {
       margin-bottom:18px;
     }
 
-    .bi-card{
+    /* ✅ NEW: Sponsor-like card container */
+    .bi-wrap{
       width:100%;
-      aspect-ratio:16 / 9;
-      border-radius:var(--radiusXl);
       background:var(--biCard);
+      border-radius:var(--radiusXl);
+      box-shadow:var(--shadowSoft);
+      padding:24px;
+      border:1px solid rgba(148,163,184,.22);
+    }
+
+    .bi-header{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:16px;
+      margin-bottom:18px;
+    }
+
+    .bi-pill{
+      font-size:.8rem;
+      padding:6px 14px;
+      border-radius:999px;
+      background:#ffe1e1;
+      color:var(--navy);
+      border:1px solid rgba(0,0,0,.06);
+      font-weight:700;
+      white-space:nowrap;
+    }
+
+    .bi-frame{
+      position:relative;
+      width:100%;
+      border-radius:20px;
+      overflow:hidden;
+      border:2px solid rgba(36,39,81,.08);
+      background:#f3f5fb;
+      aspect-ratio:16/9;
+    }
+
+    .bi-frame iframe{
+      width:100%;
+      height:100%;
+      border:0;
+    }
+
+    .bi-placeholder{
+      position:absolute;
+      inset:0;
       display:flex;
       flex-direction:column;
       align-items:center;
       justify-content:center;
-      font-size:1.8rem;
-      font-weight:700;
-      color:var(--navy);
-      box-shadow:var(--shadowSoft);
-      border:1px solid rgba(148,163,184,.26);
       text-align:center;
+      padding:0 24px;
+      color:var(--muted);
+      font-weight:600;
     }
 
     .bi-note{
@@ -496,12 +537,28 @@ function assetUrl(string $path): string {
 
     <!-- BI DASHBOARD -->
     <section class="bi-wrapper">
-      <div class="bi-title-main">Admin BI Dashboard</div>
-      <div class="bi-sub">Live analytics on clubs, events, and student engagement.</div>
+      <div class="bi-wrap">
+        <div class="bi-header">
+          <div>
+            <div class="bi-title-main">Admin BI Dashboard</div>
+            <div class="bi-sub">Live analytics on clubs, events, and student engagement.</div>
+          </div>
+          <div class="bi-pill">Interactive • Powered by Power BI</div>
+        </div>
 
-      <div class="bi-card">
-        BI Dashboard placeholder
-        <div class="bi-note">Add your Power BI embed URL here.</div>
+        <div class="bi-frame">
+          <!-- ✅ Paste your admin Power BI embed iframe here -->
+          <!-- Example:
+          <iframe title="Admin Overview"
+            src="https://app.powerbi.com/reportEmbed?reportId=YOUR_REPORT_ID&autoAuth=true&ctid=YOUR_TENANT_ID"
+            allowfullscreen="true"></iframe>
+          -->
+
+          <div class="bi-placeholder">
+            BI Dashboard placeholder
+            <div class="bi-note">Add your Power BI embed URL here.</div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -540,8 +597,8 @@ function assetUrl(string $path): string {
               <?php foreach ($clubsRanking as $club):
                 $clubNameRaw = (string)$club['club_name'];
                 $clubName    = htmlspecialchars($clubNameRaw);
-$logoPath = (string)($club['logo'] ?? '');
-$logo     = $logoPath !== '' ? htmlspecialchars(assetUrl($logoPath)) : '';
+                $logoPath = (string)($club['logo'] ?? '');
+                $logo     = $logoPath !== '' ? htmlspecialchars(assetUrl($logoPath)) : '';
 
                 $rankPos     = (int)$club['rank_position'];
                 $points      = (int)$club['total_points'];
