@@ -94,7 +94,7 @@ $sponsor_logo = 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Amazo
 ========================= */
 $pendingMsg = '';
 try {
-    $stmt = $conn->prepare("SELECT request_id FROM club_edit_request WHERE club_id=? AND status='Pending' ORDER BY submitted_at DESC LIMIT 1");
+    $stmt = $conn->prepare("SELECT request_id FROM club_edit_request WHERE club_id=? AND reviewed_at IS NULL ORDER BY submitted_at DESC LIMIT 1");
     $stmt->bind_param("i", $club_id);
     $stmt->execute();
     $r = $stmt->get_result()->fetch_assoc();

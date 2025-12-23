@@ -75,7 +75,7 @@ if (isset($_FILES['logo']) && $_FILES['logo']['error'] === UPLOAD_ERR_OK) {
 // 4) (اختياري) منع تقديم طلب جديد إذا في Pending
 // إذا لسا ما أضفت status column، راح نكمّل بدون منع
 try {
-    $stmt = $conn->prepare("SELECT request_id FROM club_edit_request WHERE club_id=? AND status='Pending' LIMIT 1");
+    $stmt = $conn->prepare("SELECT request_id FROM club_edit_request WHERE club_id=? AND reviewed_at IS NULL LIMIT 1");
     $stmt->bind_param("i", $clubId);
     $stmt->execute();
     $pending = $stmt->get_result()->fetch_assoc();

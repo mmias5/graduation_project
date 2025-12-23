@@ -144,19 +144,13 @@ body{
 
 /* ===== Logout Button ===== */
 .logout-btn{
-  background:white;
-  color:var(--navy);
-  border:2px solid var(--navy);
   padding:10px 20px;
   border-radius:999px;
   font-weight:800;
   cursor:pointer;
 }
 
-.logout-btn:hover{
-  background:var(--navy);
-  color:white;
-}
+
 </style>
 </head>
 
@@ -240,7 +234,7 @@ body{
     
 
     <!-- Logout -->
-    <button class="logout-btn" onclick="location.href='../logout.php'">Logout</button>
+    <div class="logout-btn"></div>
 
   </div>
 </header>
