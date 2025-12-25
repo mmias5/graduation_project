@@ -1,14 +1,13 @@
 <?php
-// admin/addsponsor.php
-require_once '../config.php';
-require_once 'admin_auth.php';
+require_once '../config.php';//database connection
+require_once 'admin_auth.php';//3ashan yetakad eno admin
 
 $currentPage = basename($_SERVER['PHP_SELF']);
 
 $errors = [];
 $success = '';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {//bas y3mal form submit befoot el condition
     $name     = trim($_POST['sponsor_name']     ?? '');
     $email    = trim($_POST['sponsor_email']    ?? '');
     $phone    = trim($_POST['sponsor_phone']    ?? '');
@@ -18,10 +17,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($email === '')    { $errors[] = 'Sponsor email is required.'; }
     if ($password === '') { $errors[] = 'Initial password is required.'; }
 
-    // ===== Logo upload handling =====
-    $logoPath = 'assets/sponsor_default.png'; // default if no upload
+    $logoPath = 'assets/sponsor_default.png'; // default if no pic uploaded
 
-    // Only process upload if user selected a file
     if (isset($_FILES['sponsor_logo']) && $_FILES['sponsor_logo']['error'] !== UPLOAD_ERR_NO_FILE) {
 
         if ($_FILES['sponsor_logo']['error'] !== UPLOAD_ERR_OK) {

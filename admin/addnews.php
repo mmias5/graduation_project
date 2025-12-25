@@ -1,13 +1,11 @@
 <?php
-// admin/addnews.php
-require_once '../config.php';
-require_once 'admin_auth.php';
+require_once '../config.php';//database connection
+require_once 'admin_auth.php';//3ashan yetakad eno admin
 
 $currentPage = basename($_SERVER['PHP_SELF']);
 
-// معالجة الإرسال
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $title    = trim($_POST['title'] ?? '');
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {//bas y3mal form submit befoot el condition
+    $title    = trim($_POST['title'] ?? '');//trim to remove spaces
     $category = trim($_POST['category'] ?? 'News');
     $body     = trim($_POST['body'] ?? '');
     $date     = $_POST['date'] ?? ''; // YYYY-MM-DD
@@ -19,18 +17,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    // التاريخ: لو مستخدم ما اختار، نستخدم الآن
-    if ($date) {
+    if ($date) {//etha el date mawjood bel form est5dm el date ely akhadtoh etha la hot el current date w time
         $createdAt = $date . ' 00:00:00';
     } else {
         $createdAt = date('Y-m-d H:i:s');
     }
     $updatedAt = $createdAt;
 
-    // رفع الصورة (اختياري)
     $imagePath = null;
     if (!empty($_FILES['image']['name'])) {
-        $uploadDir = '../assets/news/';
+        $uploadDir = '../uploads/news/';
 
         if (!is_dir($uploadDir)) {
             mkdir($uploadDir, 0777, true);
@@ -44,15 +40,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $target   = $uploadDir . $newName;
 
         if (move_uploaded_file($fileTmp, $target)) {
-            // المسار كما في الداتا: assets/news/...
-            $imagePath = 'assets/news/' . $newName;
+            $imagePath = '../uploads/news/' . $newName;
         }
     }
     $sql = "INSERT INTO news (title, body, category, image, created_at, updated_at, admin_id)
             VALUES (?, ?, ?, ?, ?, ?, ?)";
 
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("ssssssi", $title, $body, $category, $imagePath, $createdAt, $updatedAt, $adminId);
+    $stmt = $conn->prepare($sql);//prepare statement to prevent SQL injection
+    $stmt->bind_param("ssssssi", $title, $body, $category, $imagePath, $createdAt, $updatedAt, $adminId);//ssssssi 6 strings w 1 integer
 
     if ($stmt->execute()) {
         $_SESSION['flash_success'] = 'News added successfully.';
@@ -75,9 +70,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
 <style>
-/* ========================================
-   UNI HIVE ADMIN BRAND SYSTEM
-======================================== */
+
 :root{
   --sidebarWidth:240px;
 
@@ -104,7 +97,6 @@ body{
   color:var(--ink);
 }
 
-/* MAIN LAYOUT */
 .admin-main{
   margin-left:var(--sidebarWidth);
   padding:30px 34px 40px;
@@ -113,7 +105,6 @@ body{
   .admin-main{margin-left:0;padding:24px 20px}
 }
 
-/* PAGE TITLE */
 .page-title{
   font-size:1.7rem;
   font-weight:800;
@@ -126,7 +117,6 @@ body{
   margin-bottom:26px;
 }
 
-/* CARD */
 .card{
   background:var(--white);
   padding:26px 26px 30px;
@@ -135,7 +125,6 @@ body{
   max-width:100%;
 }
 
-/* INPUT LABEL */
 .form-label{
   font-size:.88rem;
   font-weight:600;
@@ -144,7 +133,6 @@ body{
   color:var(--navy);
 }
 
-/* BASE FIELDS */
 .input-field,
 .textarea-field{
   width:100%;
@@ -169,7 +157,6 @@ body{
   box-shadow:0 0 0 2px rgba(72,113,219,.25);
 }
 
-/* CUSTOM CATEGORY DROPDOWN */
 .custom-select{
   position:relative;
   width:100%;
@@ -253,7 +240,6 @@ body{
   color:var(--muted);
 }
 
-/* BUTTONS */
 .btn{
   border:none;
   outline:none;
@@ -327,7 +313,7 @@ body{
       <label class="form-label">Title</label>
       <input type="text" name="title" class="input-field" required>
 
-      <!-- CATEGORY (Custom Dropdown) -->
+      <!-- CATEGORY customized dropdown list(java script) -->
       <label class="form-label">Category</label>
 
       <input type="hidden" name="category" id="categoryValue" value="News">
@@ -354,7 +340,7 @@ body{
       </div>
 
       <label class="form-label">Date</label>
-      <input type="date" name="date" class="input-field" required>
+      <input type="date" name="date" class="input-field">
 
       <label class="form-label">Header Image</label>
       <input type="file" name="image" class="input-field" accept="uploads/news/*" required>
@@ -373,7 +359,6 @@ body{
 </main>
 
 <script>
-// ===== Custom Category Dropdown Logic =====
 (function(){
   const selectEl   = document.getElementById('categorySelect');
   const trigger    = selectEl.querySelector('.custom-select-trigger');
