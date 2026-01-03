@@ -16,9 +16,7 @@ if (!isset($_SESSION['sponsor_id']) || $_SESSION['role'] !== 'sponsor') {
 <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;600;700;800&display=swap" rel="stylesheet">
 
 <style>
-/* ======================================
-   BRAND TOKENS — UNIHIVE SPONSOR THEME
-====================================== */
+/* brand colors numbers */
 :root{
   --navy:#242751;
   --royal:#4871DB;
@@ -31,9 +29,7 @@ if (!isset($_SESSION['sponsor_id']) || $_SESSION['role'] !== 'sponsor') {
   --shadow:0 14px 34px rgba(10,23,60,.12);
 }
 
-/* ======================================
-   BASE STYLING
-====================================== */
+/* base styling */
 body{
   margin:0;
   font-family:"Raleway",system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
@@ -41,9 +37,7 @@ body{
   color:var(--navy);
 }
 
-/* ======================================
-   HERO BANNER
-====================================== */
+/* banner(header image) */
 .about-hero{
   width:100%;
   height:380px;
@@ -76,9 +70,7 @@ body{
   margin:14px auto 0;
 }
 
-/* ======================================
-   MAIN CONTENT WRAPPER
-====================================== */
+/*  MAIN CONTENT WRAPPER */
 .about-container{
   width:min(1150px,92%);
   margin:50px auto;
@@ -86,9 +78,7 @@ body{
   gap:32px;
 }
 
-/* ======================================
-   ABOUT CARDS (Vision / Mission / Goals)
-====================================== */
+/* ABOUT CARDS (Vision / Mission / Goals) */
 .about-card{
   display:grid;
   grid-template-columns:180px 1fr;
@@ -168,9 +158,7 @@ body{
 
 <?php include 'header.php'; ?>
 
-<!-- ======================================
-     HERO SECTION
-====================================== -->
+<!-- inside the header image -->
 <section class="about-hero">
   <h1 class="about-title">About UniHive</h1>
 </section>

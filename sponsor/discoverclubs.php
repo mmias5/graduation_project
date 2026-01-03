@@ -9,7 +9,7 @@ if (!isset($_SESSION['sponsor_id']) || ($_SESSION['role'] ?? '') !== 'sponsor') 
 require_once __DIR__ . '/../config.php';
 
 /* =========================================================
-   ✅ UniHive Image Helpers (works across admin/student/sponsor)
+  UniHive Image Helpers (works across admin/student/sponsor)
    DB stores: uploads/...
    Project URL base: /project/graduation_project
    ========================================================= */
@@ -89,10 +89,7 @@ if ($catRes) {
     }
 }
 
-/* =========================
-   Fetch ALL clubs (no filtering here)
-   Filtering will be LIVE on the frontend (JS)
-========================= */
+/* Fetch ALL clubs (no filtering here)*/
 $sql = "
     SELECT 
         club_id,
@@ -205,7 +202,7 @@ while ($row = $result->fetch_assoc()) {
     margin:10px 0 18px;
   }
 
-  /* make search & category same height */
+
   .field{
     background:rgba(255,255,255,.9);
     border:1px solid rgba(36,39,81,.15);
@@ -436,7 +433,7 @@ while ($row = $result->fetch_assoc()) {
     Browse student clubs you are not sponsoring yet and spot high-potential communities to support.
   </p>
 
-  <!-- ===== Filters UI (NO form submit / no reload) ===== -->
+  <!-- ===== Filters UI ===== -->
   <div class="filters">
     <div class="field" title="Search by club name">
       <span style="font-weight:800;color:var(--navy);">Search</span>
@@ -546,7 +543,7 @@ while ($row = $result->fetch_assoc()) {
 
 <script>
 (function(){
-  // Keep card click behavior
+  // card click behavior
   function shouldIgnore(target){
     const interactive = ['A','BUTTON','INPUT','SELECT','TEXTAREA','LABEL','SVG','PATH'];
     return interactive.includes(target.tagName);
@@ -600,7 +597,7 @@ while ($row = $result->fetch_assoc()) {
     noResults.style.display = visible === 0 ? 'block' : 'none';
   }
 
-  // Smooth typing (debounce)
+  // Smooth typing in search bar
   let timer = null;
   searchInput.addEventListener('input', () => {
     clearTimeout(timer);

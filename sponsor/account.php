@@ -55,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
       $error = "Please enter a valid email.";
     } else {
-      // prevent email duplicates (optional but good)
+      // prevent email duplicates 
       $chk = $conn->prepare("SELECT sponsor_id FROM sponsor WHERE email=? AND sponsor_id<>? LIMIT 1");
       $chk->bind_param("si", $email, $sponsorId);
       $chk->execute();
@@ -78,7 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
   }
 
-  // Update password (PLAIN - because your DB is plain)
+  // Update password 
   if (isset($_POST['update_password'])) {
     $current = (string)($_POST['current_password'] ?? '');
     $new1    = (string)($_POST['new_password'] ?? '');

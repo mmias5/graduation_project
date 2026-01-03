@@ -1,7 +1,6 @@
 <?php
-// config.php  (ROOT)
 
-$host    = 'localhost';   // أو 'localhost'
+$host    = 'localhost';
 $user    = 'root';
 $pass    = '';
 $db_name = 'unihive';
@@ -12,7 +11,5 @@ if ($conn->connect_error) {
     die('Connection failed: ' . $conn->connect_error);
 }
 
-// مهم عشان العربي والـ utf8mb4
 $conn->set_charset('utf8mb4');
 define('BASE_URL', '/GRADUATION_PROJECT/'); 
-// اذا اسم فولدر مشروعك غير هيك غيّريه

@@ -2,8 +2,7 @@
 require_once __DIR__ . '/../config.php';
 
 /**
- * يجيب كل الكلابز الـ active (ونتجاهل "No Club / Not Assigned")
- */
+ * fetches active clubs only */
 function sponsor_get_discover_clubs(): array {
     global $pdo;
 
@@ -28,7 +27,7 @@ function sponsor_get_discover_clubs(): array {
 }
 
 /**
- * ترتيب الكلابز حسب جدول ranking
+ *fetch clubs ranking
  */
 function sponsor_get_clubs_ranking(): array {
     global $pdo;
@@ -52,7 +51,7 @@ function sponsor_get_clubs_ranking(): array {
 }
 
 /**
- * الأحداث القادمة (Upcoming Events)
+ * (Upcoming Events)
  */
 function sponsor_get_upcoming_events(): array {
     global $pdo;
@@ -73,7 +72,7 @@ function sponsor_get_upcoming_events(): array {
 }
 
 /**
- * الأحداث السابقة (Past Events)
+ * (Past Events)
  */
 function sponsor_get_past_events(): array {
     global $pdo;
@@ -94,7 +93,7 @@ function sponsor_get_past_events(): array {
 }
 
 /**
- * تفاصيل event واحد (لو بدنا نستخدمها لاحقًا في eventpage.php)
+ * fetch event details for eventpage.php
  */
 function sponsor_get_event_by_id(int $event_id): ?array {
     global $pdo;
@@ -116,7 +115,7 @@ function sponsor_get_event_by_id(int $event_id): ?array {
     return $row ?: null;
 }
 /**
- * تفاصيل club واحد (لو بدنا نربط clubpage.php بالـ DB)
+ * fetch club details for clubpage.php
  */
 function sponsor_get_club_by_id(int $club_id): ?array {
     global $pdo;
@@ -142,7 +141,7 @@ function require_sponsor_login(): void {
 }
 
 /**
- * رجع بيانات السبونسر الحالي (أو null لو مش لاقيه)
+ * verify sponsor login 
  */
 function get_logged_in_sponsor(): ?array {
     global $conn;
@@ -171,15 +170,11 @@ function get_logged_in_sponsor(): ?array {
 /* ========== DATA HELPERS FOR HOME PAGE ========== */
 
 /**
- * Best of Campus this Month — توب كلَبز للـ homepage
- * تستعملها sponsor/index.php
- *
- * نعتمد على جدول ranking + club + sponsor_club_support + sponsor
  */
 function get_top_clubs_for_home(int $limit = 3): array {
     global $conn;
 
-    // أحدث فترة في جدول ranking
+    // fetch latest ranking
     $periodSql = "SELECT MAX(period_start) AS latest_period FROM ranking";
     $periodRes = $conn->query($periodSql);
     $periodRow = $periodRes ? $periodRes->fetch_assoc() : null;
@@ -226,8 +221,7 @@ function get_top_clubs_for_home(int $limit = 3): array {
 }
 
 /**
- * Highlighted / Upcoming Events للـ homepage
- * نعتمد على جدول event + club
+ *fetch upcoming events 
  */
 function get_upcoming_events(int $limit = 6): array {
     global $conn;
@@ -265,8 +259,7 @@ function get_upcoming_events(int $limit = 6): array {
 }
 
 /**
- * Clubs to Watch — قائمة كلَبز أكتيف للـ discover
- * نعتمد على جدول club + event لعدد الإيفينتات
+ * fetch active clubs for discover section
  */
 function get_active_clubs_for_discover(int $limit = 6): array {
     global $conn;
@@ -307,7 +300,7 @@ function get_active_clubs_for_discover(int $limit = 6): array {
 /* ========== EXTRA HELPERS FOR OTHER SPONSOR PAGES ========== */
 
 /**
- * Club Ranking page — تستخدم جدول ranking + club
+ * Club Ranking page
  */
 function get_club_ranking(int $limit = 50): array {
     global $conn;
@@ -403,7 +396,7 @@ function get_past_events_list(int $limit = 50): array {
 }
 
 /**
- * تفاصيل كلَب معيّن (club_page.php)
+ * club detials (club_page.php)
  */
 function get_club_details(int $clubId): ?array {
     global $conn;
@@ -442,7 +435,7 @@ function get_club_details(int $clubId): ?array {
 }
 
 /**
- * أحداث تابعة لكلَب معيّن (تستخدم في club_page.php)
+ * fetch specific club's events (clubpage.php)
  */
 function get_events_for_club(int $clubId): array {
     global $conn;
@@ -478,7 +471,7 @@ function get_events_for_club(int $clubId): array {
 }
 
 /**
- * تفاصيل حدث معيّن (event_details.php)
+ * get event details (eventpage.php)
  */
 function get_event_details(int $eventId): ?array {
     global $conn;

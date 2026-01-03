@@ -10,15 +10,13 @@ if (!isset($_SESSION['sponsor_id']) || ($_SESSION['role'] ?? '') !== 'sponsor') 
     exit;
 }
 
-/* ✅ الصحيح: config بطلع لفوق */
+/* include config*/
 require_once __DIR__ . '/../config.php';
 
 $sponsorId = (int)($_SESSION['sponsor_id'] ?? 0);
 
-/* =========================
-   PROJECT PATH CONFIG
-   ========================= */
-define('PROJECT_BASE_URL', '/graduation_project'); // لا تحطي / آخرها
+/*PROJECT PATH CONFIG */
+define('PROJECT_BASE_URL', '/graduation_project'); 
 
 function project_root_fs(): string {
     $docRoot = rtrim((string)($_SERVER['DOCUMENT_ROOT'] ?? ''), '/\\');
@@ -88,9 +86,7 @@ function img_url_from_db(?string $dbPath, string $placeholderRel): string {
     return esc_attr(upload_public_url($placeholderRel));
 }
 
-/* =========================
-   Get latest ranking period
-========================= */
+/* Get latest ranking period*/
 $latestPeriod = null;
 $periodSql = "
     SELECT period_start, period_end
@@ -103,9 +99,7 @@ if ($periodRes && $periodRes->num_rows > 0) {
     $latestPeriod = $periodRes->fetch_assoc();
 }
 
-/* =========================
-   Top 4 clubs
-========================= */
+/* fetch Top 4 clubs */
 $topClubs = [];
 
 if ($latestPeriod) {
@@ -303,7 +297,7 @@ if (empty($topClubs)) {
       box-shadow:0 14px 28px rgba(36,39,81,.35);
     }
 
-    /* Video card minimal (كما هو) */
+    /* Video card minimal  */
     .video-card{
       position:relative;
       z-index:2;
@@ -375,7 +369,6 @@ if (empty($topClubs)) {
           $i++;
           $trophy = ($i === 1) ? '🏆' : (($i === 2) ? '🥈' : (($i === 3) ? '🥉' : '🎖️'));
 
-          // ✅ حل الصورة: من DB => URL صحيح أو placeholder
           $clubLogoUrl = img_url_from_db($club['club_logo'] ?? '', 'uploads/clubs/default_club.png');
         ?>
           <div class="rank-item <?php echo $i === 1 ? 'top' : ''; ?>">

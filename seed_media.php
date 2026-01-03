@@ -1,7 +1,7 @@
 <?php
 // seed_media.php
 // Generates consistent, meaningful PNG images for clubs/students/events
-// and optionally updates DB with image paths.
+// and updates DB with image paths.
 
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
@@ -66,7 +66,6 @@ ensure_dir($clubsDir);
 ensure_dir($studentsDir);
 ensure_dir($eventsDir);
 
-// Try to find a font (Windows XAMPP often has none bundled)
 // We'll ship with DejaVu if you place it; fallback to system fonts.
 $fontCandidates = [
     $root . '/tools/fonts/DejaVuSans-Bold.ttf',
@@ -82,14 +81,14 @@ if (!$font) {
     die("Font not found. Put DejaVuSans-Bold.ttf in your project root OR tools/fonts/ .");
 }
 
-// --- Brand palette (from your UniHive style) ---
+// --- Brand palette ---
 $NAVY  = '#242751';
 $ROYAL = '#4871db';
 $CORAL = '#ff5c5c';
 $GOLD  = '#e5b758';
 $PAPER = '#eef2f7';
 
-// Pick nice color per category
+// Pick color per category
 function category_color(string $category): string {
     $c = strtolower(trim($category));
     if (str_contains($c, 'tech') || str_contains($c, 'ai') || str_contains($c, 'robot')) return '#4871db';

@@ -1,7 +1,7 @@
 <?php
-// معالجة نموذج "Become a Sponsor" وحفظه في جدول sponsor_request
+// "Become a Sponsor" and save it in table sponsor_request
 
-require_once 'config.php';   // اتصال قاعدة البيانات فقط
+require_once 'config.php'; 
 // NO session_start() here – الصفحة عامة
 
 // تأكد أن الصفحة تم استدعاؤها عبر POST من الفورم
@@ -10,29 +10,27 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-// استلام القيم من الفورم
+// recieve values from form 
 $company     = trim($_POST['name'] ?? '');
 $email       = trim($_POST['email'] ?? '');
 $phone       = trim($_POST['phone'] ?? '');
 $website     = trim($_POST['website'] ?? '');     // لازم تغيري name حقل الموقع في الفورم لـ website
 $description = trim($_POST['description'] ?? '');
 
-// ✅ تحقق بسيط من القيم المطلوبة
+// validate values
 if ($company === '' || $email === '' || $phone === '' || $description === '') {
-    // ممكن نرجع مع error code بسيط
+    // error code بسيط
     header('Location: register.php?error=missing');
     exit;
 }
 
-// ✅ تحقق من صيغة الإيميل
+//  validate email
 if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     header('Location: register.php?error=email');
     exit;
 }
 
-// تحضير جملة الـ INSERT لجدول sponsor_request
-// جدولك حسب الـ SQL:
-// sponsor_request (request_id, company_name, email, phone, description, website, status, submitted_at, reviewed_at, review_admin_id)
+// insert into database table sponsor_request 
 
 $sql = "
     INSERT INTO sponsor_request
@@ -44,7 +42,7 @@ $sql = "
 $stmt = $conn->prepare($sql);
 
 if (!$stmt) {
-    // في حالة فشل التحضير – للتطوير ممكن تطبعي الرسالة
+    // if preparation failed
     // die('Prepare failed: ' . $conn->error);
     header('Location: register.php?error=server');
     exit;
@@ -63,12 +61,12 @@ $ok = $stmt->execute();
 $stmt->close();
 
 if (!$ok) {
-    // فشل التنفيذ
+    // if execution failed
     // die('Execute failed: ' . $conn->error);
     header('Location: register.php?error=server');
     exit;
 }
 
-// ✅ لو كل شيء تمام → روح على صفحة الشكر
+// if everything worked go to thankyou page
 header('Location: thankyou.php');
 exit;

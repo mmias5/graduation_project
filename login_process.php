@@ -32,7 +32,7 @@ if (!$user) {
     exit;
 }
 
-// حالياً مقارنة نصية بسيطة، لاحقاً نستخدم password_hash
+// password_hash
 if ($password !== $user['password']) {
     header('Location: login.php?error=1');
     exit;

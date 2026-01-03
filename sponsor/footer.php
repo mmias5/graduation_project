@@ -5,18 +5,18 @@ if (session_status() === PHP_SESSION_NONE) {
 $currentPage = basename($_SERVER['PHP_SELF']);
 ?>
 <style>
-  /* ==== Brand Tokens (match sponsor header) ==== */
+  /* ==== Brand Tokens ==== */
   .cch-footer{
     --navy: #242751;
-    --gold: #e5b758;      /* same as header */
-    --lightBlue: #fff4c8; /* soft light for accents */
+    --gold: #e5b758;      
+    --lightBlue: #fff4c8; 
     --sun: #f4df6d;
     --coral: #ff5e5e;
-    --ink: #ffffff;       /* footer text = white */
+    --ink: #ffffff;     
   }
 
   .cch-footer{
-    background:var(--gold);          /* GOLD like header */
+    background:var(--gold);         
     color:var(--ink);
     font-family:"Raleway", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
     border-top:4px solid rgba(0,0,0,.05);
@@ -70,15 +70,15 @@ $currentPage = basename($_SERVER['PHP_SELF']);
     margin: 10px 0 18px;
   }
 
-  /* ========== NEW FIXED SOCIAL BTN STYLING ========== */
+  /* ========== scoial media button styling ========== */
   .cch-social__btn{
     display:inline-grid;
     place-items:center;
     width:40px; height:40px;
     border-radius:12px;
-    border:2px solid #ffffff;         /* default white border */
-    color:#ffffff;                    /* default white icon */
-    background:transparent;           /* NO background */
+    border:2px solid #ffffff;         
+    color:#ffffff;                    
+    background:transparent;           
     text-decoration:none;
     transition:
       transform .15s ease,
@@ -86,12 +86,11 @@ $currentPage = basename($_SERVER['PHP_SELF']);
       border-color .15s ease;
   }
   .cch-social__btn:hover{
-    background:transparent;           /* keep transparent */
-    border-color:var(--navy);         /* navy border */
-    color:var(--navy);                /* navy icon */
-    transform:translateY(-6px);       /* clean lift */
+    background:transparent;           
+    border-color:var(--navy);         
+    color:var(--navy);                
+    transform:translateY(-6px);       
   }
-  /* ================================================== */
 
   .cch-list{
     margin:0; padding:0;

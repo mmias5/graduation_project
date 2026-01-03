@@ -12,19 +12,16 @@ if (!isset($_SESSION['sponsor_id']) || ($_SESSION['role'] ?? '') !== 'sponsor') 
 
 require_once __DIR__ . '/../config.php';
 
-/* =========================================================
-   ✅ UniHive Image Helpers (works across admin/student/sponsor)
+/* UniHive Image Helpers (works across admin/student/sponsor)
    - DB stores: uploads/...
-   - Files exist at: /project/graduation_project/uploads/...
-   ========================================================= */
+   - Files exist at: /project/graduation_project/uploads/... */
 
-// ✅ set your project web-root path (based on your debug)
-define('APP_BASE', '/graduation_project'); // <-- مهم
+// set project web-root path 
+define('APP_BASE', '/graduation_project'); //
 
 /**
  * sanitize a relative upload path:
  * - allow only paths starting with "uploads/"
- * - prevent traversal
  */
 function clean_upload_rel(?string $rel): string {
     $p = trim((string)$rel);
@@ -78,8 +75,7 @@ function initials(string $name): string {
 }
 
 /**
- * SVG placeholder (NOT base64) as data-uri
- * - safe, fast, doesn't require extra files
+ * SVG placeholder
  */
 function svg_placeholder_datauri(string $label = 'UH'): string {
     $label = htmlspecialchars(mb_strtoupper(mb_substr(trim($label), 0, 2)), ENT_QUOTES, 'UTF-8');
@@ -114,9 +110,7 @@ function img_src_or_placeholder(?string $rel, string $fallbackLabel = 'UH'): str
     return htmlspecialchars(upload_url($p), ENT_QUOTES, 'UTF-8');
 }
 
-/* =========================
-   1) Get latest ranking period
-   ========================= */
+/* 1) Get latest ranking period */
 $currentPeriodEnd = null;
 $periodRes = $conn->query("
     SELECT period_end
@@ -128,14 +122,11 @@ if ($periodRes && $periodRes->num_rows > 0) {
     $currentPeriodEnd = $periodRes->fetch_assoc()['period_end'];
 }
 
-/* =========================
-   2) Get ranking clubs (ranking table) + fallback (club.points)
-   ========================= */
+/* 2) Get ranking clubs  */
 $rankingClubs = [];
 
 if ($currentPeriodEnd !== null) {
 
-    // NOTE: group by uses real columns (better with ONLY_FULL_GROUP_BY)
     $stmt = $conn->prepare("
         SELECT
             r.club_id,
@@ -229,9 +220,7 @@ $top3 = $rankingClubs[2] ?? null;
 <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;600;700;800&display=swap" rel="stylesheet">
 
 <style>
-/* =============================
-   Unified Ranking UI
-   ============================= */
+/*  */
 .cch-ranking{
   --navy:#242751;
   --royal:#4871db;

@@ -14,7 +14,7 @@ $currentPage = basename($_SERVER['PHP_SELF']);
 <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;600;700;800&display=swap" rel="stylesheet">
 
 <style>
-/* ===== Brand Tokens ===== */
+/* brand tokens*/
 :root{
   --navy:#242751;
   --gold:#e5b758;
@@ -24,7 +24,6 @@ $currentPage = basename($_SERVER['PHP_SELF']);
   --shadow:0 10px 30px rgba(0,0,0,.16);
 }
 
-/* ===== Global for sponsor layout (optional if you set elsewhere) ===== */
 body{
   margin:0;
   font-family:"Raleway",sans-serif;
@@ -72,21 +71,20 @@ body{
   display:inline-flex;
   align-items:center;
   gap:6px;
-  line-height:1;          /* important */
+  line-height:1;         
 }
 
 .nav-btn:hover{
   background:rgba(0,0,0,0.10);
 }
 
-/* ===== Dropdown ===== */
+/* ===== Dropdown styling ===== */
 .dropdown{
   position:relative;
   display:inline-flex;
   align-items:center;
 }
 
-/* Bridge the gap between button and menu */
 .dropdown::after{
   content:'';
   position:absolute;
@@ -101,10 +99,9 @@ body{
   display:block;
 }
 
-/* anchored to the pill, not magic 45px */
 .dropdown .menu{
   position:absolute;
-  top:calc(100% + 10px);   /* 10px under the pill */
+  top:calc(100% + 10px);  
   left:50%;
   transform:translateX(-50%);
   min-width:200px;
@@ -121,7 +118,6 @@ body{
   display:block;
 }
 
-/* scope menu links so other "a { }" rules don't break it */
 .topbar .menu a{
   display:flex;
   align-items:center;

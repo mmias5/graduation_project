@@ -12,7 +12,6 @@ if (!is_dir($dirFs)) mkdir($dirFs, 0775, true);
 
 /**
  * Simple "product-like" SVG banners without any text.
- * Style: clean, minimal, semi-realistic objects.
  */
 function rewardSvg(string $type, int $seed): string {
   $h1 = ($seed * 37) % 360;
@@ -113,7 +112,7 @@ OBJ;
 SVG;
 }
 
-// Map reward names -> image type (best-effort)
+// Map reward names -> image type
 function pickType(string $name): string {
   $n = strtolower($name);
   if (str_contains($n, 'cinema') || str_contains($n, 'ticket')) return 'cinema';

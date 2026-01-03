@@ -316,7 +316,7 @@ document.addEventListener('click',e=>{
   if(c) location.href=c.dataset.href;
 });
 
-/* 🔍 Search logic */
+/* Search logic */
 document.getElementById('eventSearch').addEventListener('input',function(){
   const q=this.value.toLowerCase();
   document.querySelectorAll('.card').forEach(card=>{

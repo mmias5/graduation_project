@@ -12,10 +12,7 @@ if (!($conn instanceof mysqli)) {
     die("DB connection error.");
 }
 
-/* =========================
-   Get club id from URL
-   pastevents.php?club_id=3  OR  pastevents.php?id=3
-========================= */
+/* Get club id from URL */
 $clubId = 0;
 if (isset($_GET['club_id'])) $clubId = (int)$_GET['club_id'];
 elseif (isset($_GET['id']))  $clubId = (int)$_GET['id'];
@@ -25,9 +22,7 @@ if ($clubId <= 0 || $clubId == 1) {
     exit;
 }
 
-/* =========================
-   Fetch past events (ended before now)
-========================= */
+/* Fetch past events (ended before now) */
 $events = [];
 $stmt = $conn->prepare("
     SELECT
@@ -72,8 +67,7 @@ function fmtDT($dt){
 
 <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;600;700;800&display=swap" rel="stylesheet">
 
-<!-- IMPORTANT:
-     We keep CSS minimal + scoped so we don't ruin your project styling -->
+<!-- styling -->
 <style>
   .pe-wrap{
     max-width: 1100px;

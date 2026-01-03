@@ -11,11 +11,10 @@ if (!isset($_SESSION['sponsor_id']) || $_SESSION['role'] !== 'sponsor') {
 
 require_once __DIR__ . '/../config.php';
 
-/* =========================================================
-   ✅ UniHive Image Helpers (works across admin/student/sponsor)
+/*UniHive Image Helpers (works across admin/student/sponsor)
    DB stores: uploads/...
    Project URL base: /graduation_project
-   ========================================================= */
+   */
 define('APP_BASE', '/graduation_project'); // مهم
 
 function clean_upload_rel(?string $rel): string {
@@ -68,13 +67,12 @@ function img_src_or_placeholder(?string $rel, string $fallbackLabel = 'UH'): str
     if ($p === '' || !upload_exists($p)) {
         return svg_placeholder_datauri($fallbackLabel);
     }
-    // لاحظ: هون برجع URL (مش encoded) لأننا بنستخدمه داخل HTML
     return upload_url($p);
 }
 
-/* =========================
+/* 
    Helper: initials for sponsor pill
-========================= */
+*/
 function makeInitials(string $name): string {
     $name = trim(preg_replace('/\s+/', ' ', $name));
     if ($name === '' || strtolower($name) === 'no sponsor yet') return 'SP';
@@ -90,7 +88,7 @@ function makeInitials(string $name): string {
     return $ini !== '' ? $ini : 'SP';
 }
 
-// ======= Get club id from URL =======
+//Get club id from url
 $clubId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 if ($clubId <= 0) {
     header('Location: discoverclubs.php');
@@ -159,17 +157,17 @@ $instagramUrl  = $club['instagram_url']   ?? '';
 $facebookUrl   = $club['facebook_url']    ?? '';
 $linkedinUrl   = $club['linkedin_url']    ?? '';
 
-// ✅ Sponsor for THIS CLUB from DB
+// Sponsor for THIS CLUB from DB
 $clubSponsorName = $club['club_sponsor_name'] ?? '';
 if (trim($clubSponsorName) === '') {
     $clubSponsorName = 'No sponsor yet';
 }
 $sponsorInitials = makeInitials($clubSponsorName);
 
-// ✅ placeholder initials للّوغو
+// placeholder  للّوغو
 $clubInitials = mb_strtoupper(mb_substr($name, 0, 2, 'UTF-8'));
 
-// ✅ HERO background src (URL or placeholder data uri)
+// HERO(header image) background src (URL or placeholder data uri)
 $heroBgSrc = img_src_or_placeholder($heroImage, $clubInitials);
 ?>
 <!doctype html>
@@ -217,7 +215,7 @@ body{
   background:none;
 }
 
-/* ✅ IMPORTANT: background from DB via CSS variable */
+/* background from DB via CSS variable */
 .hero-card::before{
   content:"";
   position:absolute; inset:0;
@@ -438,7 +436,7 @@ body{
 <section class="section hero">
   <div class="wrap">
 
-    <!-- ✅ هنا الربط: الHero background من DB -->
+    <!-- هنا الربط: الHero background من DB -->
     <div class="hero-card" style="--hero-bg: url('<?php echo htmlspecialchars($heroBgSrc, ENT_QUOTES, 'UTF-8'); ?>');">
       <div class="hero-top">
         <div class="tag">

@@ -2,7 +2,6 @@
 session_start();
 require_once __DIR__ . '/config.php';
 
-// لو أصلاً مسجّل دخول، ودّيه على البورتال الصح
 if (isset($_SESSION['role'])) {
 
     if ($_SESSION['role'] === 'admin' && isset($_SESSION['admin_id'])) {
@@ -35,7 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $loginError = 'Please enter both email and password.';
     } else {
 
-        // 1) جرّب Admin أولاً
+        // 1) try admin first 
         $stmt = $conn->prepare("
             SELECT admin_id, admin_name, email, password
             FROM uni_administrator
@@ -57,7 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
-        // 2) لو مش Admin → جرّب Sponsor
+        // 2) if not admin try sponsor
         $stmt = $conn->prepare("
             SELECT sponsor_id, company_name, email, password
             FROM sponsor
@@ -79,7 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
-        // 3) لو مش Admin ولا Sponsor → جرّب Student/President
+        // 3) if not admin and sponsor try student/president
         $stmt = $conn->prepare("
             SELECT student_id, student_name, email, password, role, club_id
             FROM student
@@ -106,7 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
-        // 4) لو ولا واحد زبط
+        // 4) if nothing works showw error
         $loginError = 'Invalid email or password.';
     }
 }
@@ -477,7 +476,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       font-weight:600;
     }
 
-    /* رسالة الخطأ */
     .error-banner{
       background:#fee2e2;
       border-radius:999px;
@@ -560,7 +558,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <!-- Right side: login form -->
     <section class="auth-card">
       <div class="auth-card-inner">
-        <!-- Mobile logo -->
+        <!--  logo -->
         <div class="mobile-logo-wrap">
           <img src="tools/pics/mainlogo.png" alt="UniHive Logo">
         </div>

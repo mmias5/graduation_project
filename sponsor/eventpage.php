@@ -12,11 +12,8 @@ if (!isset($_SESSION['sponsor_id']) || ($_SESSION['role'] ?? '') !== 'sponsor') 
 
 require_once __DIR__ . '/../config.php';
 
-/* =========================
-   PROJECT PATH CONFIG
-   =========================
-   هذا هو مسار مشروعك على localhost (URL)
-   حسب كلامك: /project/graduation_project/...
+/* 
+   PROJECT PATH CONFIG.
 */
 define('PROJECT_BASE_URL', '/graduation_project'); // لا تحطي / آخرها
 
@@ -168,7 +165,7 @@ function formatWhenFull($startStr, $endStr): string {
 
 $title = $event ? ($event['event_name'] ?? 'Event Details') : 'Event not found';
 
-// ✅ Banner URL (حل نهائي)
+// Banner URL
 $bannerUrl = $event
     ? img_url_from_db($event['banner_image'] ?? '', 'uploads/events/default_event.jpg')
     : esc_attr(upload_public_url('uploads/events/default_event.jpg'));
