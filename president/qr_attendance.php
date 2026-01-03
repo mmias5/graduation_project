@@ -1,5 +1,4 @@
 <?php
-// president/qr_attendance.php
 if (session_status() === PHP_SESSION_NONE) session_start();
 
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'club_president') {
@@ -9,7 +8,7 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'club_president') {
 
 require_once __DIR__ . '/../config.php';
 
-// President id (some of your code uses president_id OR student_id)
+// President id 
 $presidentId = $_SESSION['president_id'] ?? $_SESSION['student_id'] ?? null;
 if (!$presidentId) {
   header('Location: index.php');

@@ -8,7 +8,7 @@ if (!isset($_SESSION['student_id']) || ($_SESSION['role'] !== 'student' && $_SES
 
 require_once '../config.php';
 
-// ===== Fetch ALL events with club + sponsor (from event.sponsor_id) =====
+// ===== Fetch ALL events with club + sponsor =====
 $sql = "
     SELECT
         e.event_id,

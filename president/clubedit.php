@@ -19,9 +19,6 @@ function esc($v): string {
 
 /**
  * Make a usable URL for stored paths (NO file_exists, NO changing DB value)
- * - If http(s) -> keep
- * - If starts with "/" -> keep
- * - Otherwise (uploads/..., tools/..., etc) -> prefix "../" because file is inside /president/
  */
 function media_url(?string $path): string {
     $p = trim((string)$path);
@@ -65,8 +62,7 @@ $instagram      = $club['instagram_url'] ?? '';
 $facebook       = $club['facebook_url'] ?? '';
 $linkedin       = $club['linkedin_url'] ?? '';
 
-// ✅ COVER: keep DB value as-is if exists (حتى لو الملف مش موجود)
-// حطي هون اسم عمود الغلاف إذا عندك واحد، أنا عامل أكثر من احتمال بدون ما أغير DB
+// keep DB value as-is if exists 
 $cover_db = trim((string)(
     $club['cover_image']   ??   // لو عندك cover_image
     $club['cover']         ??   // أو cover
@@ -74,23 +70,21 @@ $cover_db = trim((string)(
     $club['banner']        ??   // أو banner
     ''                     // إذا ما في عمود
 ));
-
-// لو DB فاضي فقط بنستخدم placeholder
+// placeholder if db is empty
 $cover_url = ($cover_db !== '')
     ? media_url($cover_db)
     : media_url('tools/pics/social_life.png');
 
-// ✅ LOGO: نفس الفكرة (لو DB فاضي بس)
+// placeholder if db is empty
 $logo_url = (trim((string)$logo_db) !== '')
     ? media_url($logo_db)
     : media_url('tools/pics/social_life.png');
 
-// sponsor (زي ما عندك)
 $sponsor_name = '—';
 $sponsor_logo = 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Amazon_logo.svg/1200px-Amazon_logo.svg.png';
 
 /* =========================
-   Pending request check (اختياري)
+   Pending request check
 ========================= */
 $pendingMsg = '';
 try {
@@ -205,7 +199,7 @@ body{
   <section class="section hero">
     <div class="wrap">
 
-      <!-- ✅ cover stays DB value as-is (no checking), fallback only if DB empty -->
+      <!-- cover stays DB value as-is , fallback only if DB empty -->
       <div class="hero-card" style="--hero-bg: url('<?php echo esc($cover_url); ?>');">
         <div class="hero-top">
           <h1>EDIT CLUB</h1>
@@ -304,7 +298,7 @@ body{
           <div class="field">
             <span class="label">Cover</span>
             <div class="uploader">
-              <!-- ✅ preview shows DB value (even if file missing) -->
+              <!-- preview shows DB value (even if file missing) -->
               <div class="thumb wide">
                 <img id="coverPreview" src="<?php echo esc($cover_url); ?>" alt="Cover preview">
               </div>

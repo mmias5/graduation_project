@@ -203,7 +203,7 @@ if ($action === 'kick') {
         $stmt->execute();
         $stmt->close();
 
-        // mark latest approved request as Left (optional but useful for history)
+        // mark latest approved request as Left 
         $stmt = $conn->prepare("
             SELECT request_id
             FROM club_membership_request

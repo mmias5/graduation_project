@@ -1,11 +1,9 @@
 <?php
-//president file
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-/* ✅ President-only access (header for president panel) */
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'club_president') {
     header('Location: ../login.php');
     exit;
@@ -15,7 +13,7 @@ require_once '../config.php';
 
 $currentPage = basename($_SERVER['PHP_SELF']);
 
-/* ✅ Get president info from DB (your presidents are stored in `student` table with role=club_president) */
+/* Get president info from DB  */
 $presidentId = $_SESSION['president_id'] ?? $_SESSION['student_id'] ?? null;
 
 $displayName = "President";
@@ -42,7 +40,7 @@ if ($presidentId) {
     $stmt->close();
 }
 
-/* ✅ Get club status (Active/Inactive) for this president club */
+/*  Get club status (Active/Inactive) for this president club */
 if (!empty($clubId)) {
     $stmt = $conn->prepare("SELECT status FROM club WHERE club_id = ? LIMIT 1");
     $stmt->bind_param("i", $clubId);
@@ -225,8 +223,6 @@ body.menu-open .backdrop{ opacity:1; pointer-events:auto }
   width:18px;
   height:18px;
 }
-/* popup massage */
-/* ===== Nice Modal (same idea like screenshot) ===== */
 .cch-modal-wrap{
   position:fixed; inset:0;
   display:none;
@@ -432,7 +428,7 @@ body.menu-open .backdrop{ opacity:1; pointer-events:auto }
             All Events
           </a>
 
-          <!-- ✅ Create Event (blocked when club inactive) -->
+          <!--  Create Event (blocked when club inactive) -->
           <a href="createevent.php"
              role="menuitem"
              id="createEventLink"
@@ -588,7 +584,7 @@ document.getElementById('cchModalClose')?.addEventListener('click', closeCchModa
 document.getElementById('cchModalBackdrop')?.addEventListener('click', closeCchModal);
 document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') closeCchModal(); });
 
-// ✅ Block Create Event if club inactive (use modal like screenshot)
+//  Block Create Event if club inactive 
 (function(){
   const link = document.getElementById('createEventLink');
   if(!link) return;

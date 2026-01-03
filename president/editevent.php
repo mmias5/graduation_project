@@ -12,7 +12,7 @@ $president_id = (int)$_SESSION['student_id'];
 $event_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 if ($event_id <= 0) { header('Location: index.php'); exit; }
 
-/* ✅ ONLY CHANGE: fix image paths without changing DB values */
+/* fix image paths without changing DB values */
 function cch_img($path){
     if (!$path) return '';
     if (preg_match('/^https?:\/\//i', $path)) return $path; // full URL
@@ -74,7 +74,7 @@ if (!$eventRow) { header('Location: index.php'); exit; }
 /* split old data to form fields */
 $rawDesc = $eventRow['description'] ?? '';
 
-/* ✅ ONLY CHANGE: cover comes from DB banner_image (with correct path). Fallback only if empty */
+/* cover comes from DB banner_image (with correct path). Fallback only if empty */
 $coverRaw = $eventRow['banner_image'] ?? '';
 $coverFinal = $coverRaw ? cch_img($coverRaw) : "https://images.unsplash.com/photo-1551836022-d5d88e9218df?q=80&w=1600&auto=format&fit=crop";
 

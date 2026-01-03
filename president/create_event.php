@@ -37,7 +37,7 @@ $old = [
   'description' => $desc,
 ];
 
-/* ✅ Ensure this president belongs to this club_id */
+/* Ensure this president belongs to this club_id */
 $stmt = $conn->prepare("SELECT club_id FROM student WHERE student_id = ? LIMIT 1");
 $stmt->bind_param("i", $presidentId);
 $stmt->execute();
@@ -50,12 +50,12 @@ if (empty($realClubId) || (int)$realClubId !== (int)$club_id) {
     back_with_error("Unauthorized club.", $old);
 }
 
-/* ✅ Validate required */
+/* Validate required */
 if ($title === '' || $location === '' || $date === '' || $start_time === '' || $end_time === '' || $desc === '') {
     back_with_error("Please fill all required fields.", $old);
 }
 
-/* ✅ Build DATETIME values for DB (starting_date / ending_date) */
+/* Build DATETIME values for DB (starting_date / ending_date) */
 $startDT = $date . ' ' . $start_time . ':00';
 $endDT   = $date . ' ' . $end_time . ':00';
 
@@ -66,7 +66,7 @@ if (strtotime($endDT) <= strtotime($startDT)) {
     back_with_error("End time must be after start time.", $old);
 }
 
-/* ✅ Handle cover upload (optional) -> saved in banner_image */
+/* Handle cover upload (optional) -> saved in banner_image */
 $bannerPath = null;
 
 if (isset($_FILES['cover']) && $_FILES['cover']['error'] !== UPLOAD_ERR_NO_FILE) {
@@ -99,7 +99,7 @@ if (isset($_FILES['cover']) && $_FILES['cover']['error'] !== UPLOAD_ERR_NO_FILE)
     $bannerPath = "uploads/events/" . $newName;
 }
 
-/* ✅ sponsor_id in DB (lookup by company_name from input). If not found -> NULL */
+/*  sponsor_id in DB (lookup by company_name from input). If not found -> NULL */
 $sponsorId = null;
 if ($sponsor !== '') {
     $st = $conn->prepare("SELECT sponsor_id FROM sponsor WHERE company_name = ? LIMIT 1");
@@ -112,13 +112,13 @@ if ($sponsor !== '') {
     $st->close();
 
     // if user typed a name that doesn't exist in sponsor table, keep sponsorId NULL
-    // and optionally append the typed name in description so you don’t lose it:
+    //  append the typed name in description so don’t lose it:
     if ($sponsorId === null) {
         $desc .= "\n\nSponsor (typed): " . $sponsor;
     }
 }
 
-/* ✅ Insert into event_creation_request exactly as DB columns */
+/*  Insert into event_creation_request exactly as DB columns */
 $max_attendees = null;
 $submitted_at  = date('Y-m-d H:i:s');
 
@@ -152,6 +152,6 @@ if (!$stmt->execute()) {
 }
 $stmt->close();
 
-/* ✅ success */
+/* success */
 header("Location: createevent.php?created=1");
 exit;

@@ -1,5 +1,4 @@
 <?php
-// president/scan_submit.php
 header('Content-Type: application/json; charset=utf-8');
 
 if (session_status() === PHP_SESSION_NONE) session_start();
@@ -56,15 +55,12 @@ if ((int)$event['club_id'] !== $clubId) {
   exit;
 }
 
-// (Optional) time check: allow scanning only during event window
-// You can comment this out if you want scanning anytime.
+// allow scanning only during event window
 $now = new DateTime("now");
 if (!empty($event['starting_date']) && !empty($event['ending_date'])) {
   $start = new DateTime($event['starting_date']);
   $end   = new DateTime($event['ending_date']);
   if ($now < $start || $now > $end) {
-    // not fatal; if you want strict, return error
-    // echo json_encode(['status'=>'error','message'=>'Event is not currently active']); exit;
   }
 }
 
@@ -107,7 +103,7 @@ if ($dup) {
 }
 
 // 5) Insert attendance + points in one transaction
-$pointsToAdd = 10; // you can change this later
+$pointsToAdd = 10;
 $source = 'event_attendance_qr';
 
 $conn->begin_transaction();
@@ -128,7 +124,7 @@ try {
   $stmt->execute();
   $stmt->close();
 
-  // update student total_points (you already have total_points column)
+  // update student total_points 
   $stmt = $conn->prepare("UPDATE student SET total_points = COALESCE(total_points,0) + ? WHERE student_id=?");
   $stmt->bind_param("ii", $pointsToAdd, $studentId);
   $stmt->execute();

@@ -15,7 +15,7 @@ if ($event_id <= 0) {
     exit;
 }
 
-/* ✅ ONLY CHANGE: fix image paths without changing DB values */
+/*  fix image paths without changing DB values */
 function img_path($path){
     if (!$path) return '';
     if (preg_match('/^https?:\/\//i', $path)) return $path; // full URL
@@ -54,7 +54,6 @@ if ($club_id <= 1) {
 }
 
 /* load event: must belong to president club
-   IMPORTANT: sponsor is from event.sponsor_id (NOT sponsor_club_support)
 */
 $stmt = $conn->prepare("
     SELECT
@@ -101,7 +100,7 @@ if ($sponsor_name === '') {
 /* notes from tag */
 $notes = cch_get_tag($rawDesc, 'CCH_NOTES');
 
-/* ✅ cover image FROM DB ONLY (event.banner_image) */
+/* cover image FROM DB ONLY */
 $coverRaw = $event['banner_image'] ?? '';
 $cover = img_path($coverRaw); // if empty => ''
 

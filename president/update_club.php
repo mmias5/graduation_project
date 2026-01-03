@@ -10,7 +10,7 @@ require_once __DIR__ . '/../config.php';
 
 $presidentId = (int)$_SESSION['student_id'];
 
-// 1) جيب club_id الحقيقي للرئيس (تجاهل أي club_id جاي من الفورم)
+// 1) get president's club_id
 $stmt = $conn->prepare("SELECT club_id FROM student WHERE student_id=? LIMIT 1");
 $stmt->bind_param("i", $presidentId);
 $stmt->execute();
@@ -22,7 +22,7 @@ if ($clubId <= 1) {
     exit;
 }
 
-// 2) استقبل البيانات
+// 2) fetch values from post
 $club_name     = trim($_POST['club_name'] ?? '');
 $category      = trim($_POST['category'] ?? '');
 $contact_email = trim($_POST['contact_email'] ?? '');
@@ -32,15 +32,14 @@ $instagram = trim($_POST['instagram'] ?? '');
 $facebook  = trim($_POST['facebook'] ?? '');
 $linkedin  = trim($_POST['linkedin'] ?? '');
 
-// social_media_link في جدول club (عندك حقل واحد كمان)
-$new_social_media_link = trim($_POST['social_media_link'] ?? ''); // مش موجود بالفورم، بس خليها احتياط
+$new_social_media_link = trim($_POST['social_media_link'] ?? ''); 
 
 if ($club_name === '' || $category === '' || $contact_email === '' || $description === '') {
     echo "<script>alert('Please fill all required fields.'); history.back();</script>";
     exit;
 }
 
-// 3) رفع اللوجو (اختياري)
+// 3) logo upload hanndling (if any)
 $newLogoPath = null;
 
 if (isset($_FILES['logo']) && $_FILES['logo']['error'] === UPLOAD_ERR_OK) {
@@ -54,7 +53,7 @@ if (isset($_FILES['logo']) && $_FILES['logo']['error'] === UPLOAD_ERR_OK) {
         exit;
     }
 
-    // مكان الحفظ: /uploads/club_edit_requests/
+    // place it in /uploads/club_edit_requests/
     $uploadDir = __DIR__ . '/../uploads/club_edit_requests/';
     if (!is_dir($uploadDir)) {
         @mkdir($uploadDir, 0777, true);
@@ -68,12 +67,10 @@ if (isset($_FILES['logo']) && $_FILES['logo']['error'] === UPLOAD_ERR_OK) {
         exit;
     }
 
-    // نخزن مسار نسبي مناسب للعرض
     $newLogoPath = 'uploads/club_edit_requests/' . $safeFile;
 }
 
-// 4) (اختياري) منع تقديم طلب جديد إذا في Pending
-// إذا لسا ما أضفت status column، راح نكمّل بدون منع
+// 4) dont allow a new request if there's a pending one 
 try {
     $stmt = $conn->prepare("SELECT request_id FROM club_edit_request WHERE club_id=? AND reviewed_at IS NULL LIMIT 1");
     $stmt->bind_param("i", $clubId);
@@ -90,7 +87,6 @@ try {
 }
 
 // 5) INSERT into club_edit_request
-// ملاحظة: هذا يعتمد على إضافة عمود status (الـ ALTER اللي فوق)
 $sql = "INSERT INTO club_edit_request
         (club_id, requested_by_student_id,
          new_club_name, new_description, new_category,

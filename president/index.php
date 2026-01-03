@@ -5,7 +5,6 @@ error_reporting(E_ALL);
 
 session_start();
 
-// بس الـ club president يدخل هون
 if (!isset($_SESSION['student_id']) || ($_SESSION['role'] ?? '') !== 'club_president') {
     if (isset($_SESSION['role']) && $_SESSION['role'] === 'student') {
         header('Location: ../president/index.php');
@@ -20,7 +19,7 @@ require_once __DIR__ . '/../config.php';
 /* =========================
    PROJECT PATH CONFIG (LOCALHOST)
    ========================= */
-define('PROJECT_BASE_URL', '/graduation_project'); // لا تحط / بالنهاية
+define('PROJECT_BASE_URL', '/graduation_project'); 
 
 function project_root_fs(): string {
     $docRoot = rtrim((string)($_SERVER['DOCUMENT_ROOT'] ?? ''), '/\\');
@@ -35,12 +34,11 @@ function normalize_upload_rel(?string $dbPath): string {
     $p = trim((string)$dbPath);
     if ($p === '') return '';
 
-    // external/full url (إذا موجود عندك قديم) — بنمرره كما هو
+    // external/full url 
     if (preg_match('~^https?://~i', $p)) return $p;
 
     $p = str_replace('\\', '/', $p);
 
-    // إذا بالغلط مخزن /project/graduation_project/uploads/... بنقصه
     $pos = stripos($p, PROJECT_BASE_URL . '/');
     if ($pos !== false) {
         $p = substr($p, $pos + strlen(PROJECT_BASE_URL) + 1);
@@ -525,7 +523,6 @@ body{
           $accent = ($i === 1) ? ' accent' : '';
           $trophy = ($i === 1) ? '🏆' : (($i === 2) ? '🥈' : (($i === 3) ? '🥉' : '🎖️'));
 
-          // ✅ club logo محلي
           $clubLogo = img_url_from_db($club['logo'] ?? '', 'uploads/clubs/default_club.png');
       ?>
         <div class="rank-item<?php echo $accent; ?>">
@@ -550,7 +547,7 @@ body{
 
   <div class="sponsor-panel">
     <?php
-      // ✅ sponsor logos محلي
+      // sponsor logos محلي
       $sp0 = img_url_from_db($sponsors[0]['logo'] ?? '', 'uploads/sponsors/default_sponsor.png');
       $sp1 = img_url_from_db($sponsors[1]['logo'] ?? '', 'uploads/sponsors/default_sponsor.png');
       $sp2 = img_url_from_db($sponsors[2]['logo'] ?? '', 'uploads/sponsors/default_sponsor.png');

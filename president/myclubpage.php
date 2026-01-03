@@ -1,7 +1,6 @@
 <?php
 session_start();
 
-// president file
 if (!isset($_SESSION['student_id']) || ($_SESSION['role'] ?? '') !== 'club_president') {
     header('Location: ../login.php');
     exit;
@@ -23,7 +22,6 @@ function esc($v): string {
  * - If http(s) -> keep
  * - If starts with "/" -> keep
  * - If starts with "uploads/" or "tools/" or any relative -> prefix "../"
- * NOTE: we DO NOT check if file exists (important for cover behavior).
  */
 function media_url(?string $path): string {
     $p = trim((string)$path);
@@ -91,11 +89,10 @@ $logo_url = $logo_db !== '' ? media_url($logo_db) : media_url('tools/pics/social
 // ---- COVER / HERO (big background) ----
 // IMPORTANT: take DB value as-is (NO file_exists), only fallback if DB empty.
 $cover_db = trim((string)(
-    $club['cover_image']   ??   // إذا عندك عمود cover_image
-    $club['cover']         ??   // أو cover
-    $club['hero_image']    ??   // أو hero_image
-    $club['banner_image']  ??   // أو banner_image
-    $club['banner']        ??   // أو banner
+    $club['cover_image']   ??    
+    $club['cover']         ??   
+    $club['hero_image']    ??       $club['banner_image']  ??   
+    $club['banner']        ??   
     ''
 ));
 
@@ -316,7 +313,7 @@ body{
   <section class="section hero">
     <div class="wrap">
 
-      <!-- ✅ COVER/HERO uses DB value as-is (no file_exists), only fallback if DB empty -->
+      <!-- COVER/HERO uses DB value as-is (no file_exists), only fallback if DB empty -->
       <div class="hero-card" style="--hero-bg: url('<?php echo esc($hero_bg); ?>');">
         <div class="hero-top">
           <h1>CLUB PAGE</h1>
@@ -332,7 +329,7 @@ body{
 
         <div class="hero-pillrow">
           <div class="pill">
-            <!-- ✅ LOGO uses DB, fallback only if DB empty -->
+            <!-- LOGO uses DB, fallback only if DB empty -->
             <img
               src="<?php echo esc($logo_url); ?>"
               alt="Club Logo"

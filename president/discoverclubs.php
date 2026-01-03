@@ -13,7 +13,7 @@ require_once '../config.php';
 
 $student_id = $_SESSION['student_id'];
 
-/* ✅ ONLY CHANGE: fix images paths without changing DB values */
+/* fix images paths without changing DB values */
 function img_path($path){
     if (!$path) return '';
     if (preg_match('/^https?:\/\//i', $path)) return $path; // full URL
@@ -22,7 +22,7 @@ function img_path($path){
 }
 
 // ============================
-// 1) نحضر club_id الخاص بالطالب
+// 1)fetch club_id of this student
 // ============================
 $student_club_id = 1; // default = No Club / Not Assigned
 $stmt = $conn->prepare("SELECT club_id FROM student WHERE student_id = ? LIMIT 1");
@@ -37,7 +37,7 @@ if ($stmt) {
 }
 
 // ============================
-// 2) نحضر كل الأندية (active) من جدول club
+// 2)fetch all active clubs 
 // ============================
 $clubs = [];
 $categories_map = [];
@@ -240,8 +240,8 @@ sort($categories);
   display:flex; 
   align-items:center; 
   gap:10px; 
-  min-width:0;          /* مهم */
-  flex:1;               /* عشان ياخذ المساحة */
+  min-width:0;          
+  flex:1;              
 }  
 
 .club-logo{
@@ -252,7 +252,7 @@ sort($categories);
   }
 
 .club-title{
-  min-width:0;          /* مهم */
+  min-width:0;          
 }
 
  .club-title h3{
@@ -328,7 +328,7 @@ sort($categories);
         <?php foreach ($clubs as $club): 
           $cat = $club['category'] ?: 'Other';
 
-          /* ✅ ONLY CHANGE: logo path output */
+          /*  logo path output */
           $logo = !empty($club['logo']) ? $club['logo'] : 'assets/images/clubs/default.png';
           $logo = img_path($logo);
         ?>

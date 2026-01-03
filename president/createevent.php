@@ -10,7 +10,7 @@ require_once '../config.php';
 
 $presidentId = (int)$_SESSION['student_id'];
 
-/* ✅ Get president club_id from DB (no hardcoded 1) */
+/* Get president club_id from DB */
 $club_id = null;
 $stmt = $conn->prepare("SELECT club_id FROM student WHERE student_id = ? LIMIT 1");
 $stmt->bind_param("i", $presidentId);

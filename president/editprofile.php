@@ -17,32 +17,27 @@ $errorMessage   = '';
    Helpers (paths)
 ========================= */
 
-// مسارات URL (للـ <img> بالمتصفح) — بما إن الملف داخل /student/
-$DEFAULT_AVATAR_URL = '../tools/pics/default-avatar.png';   // ✅ صح (بدل tools/..)
-$UPLOADS_URL_DIR    = '../uploads/students/';               // ✅ للعرض
+$DEFAULT_AVATAR_URL = '../tools/pics/default-avatar.png';   
+$UPLOADS_URL_DIR    = '../uploads/students/';               
 
-// مسارات السيرفر (للحفظ/الحذف)
-$UPLOADS_FS_DIR = __DIR__ . '/../uploads/students/';        // ✅ على الدسك
+$UPLOADS_FS_DIR = __DIR__ . '/../uploads/students/';        
 
-// يبني URL للصورة سواء مخزّن اسم ملف أو مسار
 function buildPhotoUrl(?string $dbValue, string $uploadsUrlDir, string $defaultUrl): string {
     $v = trim((string)$dbValue);
     if ($v === '') return $defaultUrl;
 
-    // إذا القيمة فيها slash معناها غالباً مسار كامل/نسبي — نخليها كما هي لكن نضمن ../ بالبداية لو كانت داخل uploads/
     if (strpos($v, '/') !== false || strpos($v, '\\') !== false) {
         $v = str_replace('\\', '/', $v);
-        // لو كانت "uploads/students/..." حولها لـ "../uploads/students/..."
+
         if (strpos($v, 'uploads/') === 0) return '../' . $v;
         if (strpos($v, './uploads/') === 0) return '../' . ltrim($v, './');
-        return $v; // مسار جاهز
+        return $v; 
     }
 
-    // اسم ملف فقط
     return $uploadsUrlDir . $v;
 }
 
-// يرجع اسم الملف فقط (حتى لو DB فيها path)
+// return normalized file name 
 function normalizePhotoFilename(?string $dbValue): ?string {
     $v = trim((string)$dbValue);
     if ($v === '') return null;
@@ -77,7 +72,7 @@ if (!$student) {
     ];
 }
 
-// ✅ مسار العرض (SHOW)
+// (SHOW)
 $avatarUrl = buildPhotoUrl($student['profile_photo'] ?? null, $UPLOADS_URL_DIR, $DEFAULT_AVATAR_URL);
 
 /* =========================
@@ -85,7 +80,7 @@ $avatarUrl = buildPhotoUrl($student['profile_photo'] ?? null, $UPLOADS_URL_DIR, 
 ========================= */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_profile'])) {
 
-    // لازم نجيب آخر قيمة من DB قبل التحديث (مشان ما نعتمد على $student القديم)
+    // before update fetch current photo
     $stmt = $conn->prepare("SELECT profile_photo FROM student WHERE student_id = ? LIMIT 1");
     $stmt->bind_param("i", $studentId);
     $stmt->execute();
@@ -98,7 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_profile'])) {
     $removePhoto = isset($_POST['remove_photo']) && $_POST['remove_photo'] === '1';
     $hasFile     = isset($_FILES['profile_photo']) && $_FILES['profile_photo']['error'] !== UPLOAD_ERR_NO_FILE;
 
-    // تأكد مجلد الرفع موجود
+    // make sure uploads exists 
     if (!is_dir($UPLOADS_FS_DIR)) {
         @mkdir($UPLOADS_FS_DIR, 0775, true);
     }
@@ -118,7 +113,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_profile'])) {
         $stmt->close();
 
         $student['profile_photo'] = null;
-        $avatarUrl = $DEFAULT_AVATAR_URL; // ✅ show path بعد الحذف
+        $avatarUrl = $DEFAULT_AVATAR_URL; // show path after removal
         $successMessage = 'Profile photo removed successfully.';
     }
 
@@ -127,7 +122,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_profile'])) {
         $file    = $_FILES['profile_photo'];
         $maxSize = 2 * 1024 * 1024; // 2MB
 
-        // فحص الميم تايب الحقيقي (مش بس $_FILES['type'])
+        // check mime type
         $finfo = finfo_open(FILEINFO_MIME_TYPE);
         $mime  = $finfo ? finfo_file($finfo, $file['tmp_name']) : ($file['type'] ?? '');
         if ($finfo) finfo_close($finfo);
@@ -151,7 +146,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_profile'])) {
 
             if (move_uploaded_file($file['tmp_name'], $dest)) {
 
-                // احذف القديمة
+                // delete old file
                 if ($currentPhoto) {
                     $oldPath = $UPLOADS_FS_DIR . $currentPhoto;
                     if (is_file($oldPath)) {
@@ -159,14 +154,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_profile'])) {
                     }
                 }
 
-                // خزّن بالـ DB اسم الملف فقط (أفضل)
+                // save new name to db 
                 $stmt = $conn->prepare("UPDATE student SET profile_photo = ? WHERE student_id = ?");
                 $stmt->bind_param("si", $newName, $studentId);
                 $stmt->execute();
                 $stmt->close();
 
                 $student['profile_photo'] = $newName;
-                $avatarUrl = $UPLOADS_URL_DIR . $newName; // ✅ show path بعد التحديث
+                $avatarUrl = $UPLOADS_URL_DIR . $newName; // show path after upload
                 $successMessage = 'Profile photo updated successfully.';
             } else {
                 $errorMessage = 'Could not save uploaded file.';
@@ -361,13 +356,13 @@ const removeBtn     = document.getElementById('removePhotoBtn');
 const fileInput     = document.getElementById('photoInput');
 const removeFlag    = document.getElementById('removePhotoFlag');
 
-// ✅ default avatar URL مضبوط بالنسبة لمجلد student/
+// default avatar URL for student/
 const defaultAvatar = "<?php echo addslashes($DEFAULT_AVATAR_URL); ?>";
 
-// افتح اختيار ملف
+//open file dilaog
 changeBtn.addEventListener('click', () => fileInput.click());
 
-// معاينة الصورة الجديدة
+// check file input change
 fileInput.addEventListener('change', () => {
   const file = fileInput.files[0];
   if (!file) return;
@@ -380,7 +375,7 @@ fileInput.addEventListener('change', () => {
   reader.readAsDataURL(file);
 });
 
-// إزالة الصورة (يرجع للصورة الافتراضية)
+// remove photo
 removeBtn.addEventListener('click', () => {
   fileInput.value = "";
   avatarEl.src = defaultAvatar;

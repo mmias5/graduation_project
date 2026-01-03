@@ -13,7 +13,7 @@ $currentPage = basename($_SERVER['PHP_SELF']);
   --gold: #f4df6d;
   --sun: #f4df6d;
   --coral: #f4df6d;
-  --ink: #ffffff;  /* now ONLY the footer and its children see ink=white */
+  --ink: #ffffff;  
 }
 
 
@@ -196,6 +196,6 @@ $currentPage = basename($_SERVER['PHP_SELF']);
 </footer>
 
 <script>
-  // year helper (optional)
+  // year helper
   document.getElementById('cchYear').textContent = new Date().getFullYear();
 </script>

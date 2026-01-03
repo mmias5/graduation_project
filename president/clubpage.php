@@ -1,6 +1,5 @@
 <?php
 session_start();
-// user file
 if (!isset($_SESSION['student_id']) || ($_SESSION['role'] ?? '') !== 'club_president') {
     if (isset($_SESSION['role']) && $_SESSION['role'] === 'student') {
         header('Location: ../president/index.php');
@@ -14,7 +13,7 @@ require_once '../config.php';
 
 $studentId = (int)$_SESSION['student_id'];
 
-/* ✅ ONLY CHANGE: fix image paths without changing DB values */
+/*  fix image paths without changing DB values */
 function img_path($path){
     if (!$path) return '';
     if (preg_match('/^https?:\/\//i', $path)) return $path; // full URL
@@ -91,10 +90,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'join'
         exit;
     }
 
-    // ✅ always trust the club_id from URL
+    // always trust the club_id from URL
     $postedClubId = $clubId;
 
-    // ✅ FIX: reason was missing
+    //  reason 
     $reason = trim((string)($_POST['reason'] ?? ''));
 
     if ($reason === '') {
@@ -107,7 +106,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'join'
         exit;
     }
 
-    // ✅ check if there is already a pending request for this club
+    // check if there is already a pending request for this club
     $stmtCheck = $conn->prepare("
         SELECT request_id
         FROM club_membership_request
@@ -130,7 +129,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'join'
         exit;
     }
 
-    // ✅ insert request with reason
+    // insert request with reason
     $stmtIns = $conn->prepare("
         INSERT INTO club_membership_request (club_id, student_id, reason, status, submitted_at)
         VALUES (?, ?, ?, 'pending', NOW())
@@ -174,7 +173,7 @@ if (!empty($clubLogoRaw)) {
     $clubLogo = "tools/pics/social_life.png"; // keep your default
 }
 
-/* ✅ COVER from DB (banner_image) — ONLY IMAGE CHANGE */
+/* COVER from DB (banner_image) — ONLY IMAGE CHANGE */
 $clubCoverRaw = $club['cover'] ?? '';
 $clubCover = !empty($clubCoverRaw) ? img_path($clubCoverRaw) : '';  // no fallback
 
@@ -285,7 +284,7 @@ body{
 }
 .hero-card::before{
   content:""; position:absolute; inset:0;
-  /* ✅ ONLY CHANGE: no fallback image; take from DB only */
+  /*  no fallback image; take from DB only */
   background-image: var(--hero-bg);
   background-size:cover; background-position:center; opacity:.95;
 }
@@ -367,7 +366,7 @@ body{
 
 <section class="section hero">
   <div class="wrap">
-    <!-- ✅ ONLY CHANGE: cover from DB banner_image -->
+    <!-- cover from DB banner_image -->
     <div class="hero-card" style="--hero-bg: <?php echo $clubCover ? "url('".htmlspecialchars($clubCover)."')" : "none"; ?>;">
       <div class="hero-top">
         <div class="tag"><?php echo htmlspecialchars($club['category'] ?? 'Club'); ?></div>

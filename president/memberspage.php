@@ -74,7 +74,7 @@ if ($club_id > 1) {
             // fallback avatar (deterministic)
             $avatar = "https://i.pravatar.cc/150?u=" . urlencode("student_" . $id);
         } else {
-            // IMPORTANT: fix relative path for president folder
+            // fix relative path for president folder
             $avatar = media_url($avatar);
         }
 
@@ -115,7 +115,7 @@ $csrf = $_SESSION['csrf_token'];
   --shadow:0 14px 34px rgba(10,23,60,.12); --radius:20px; --maxw:1100px;
 }
 
-/* ==== layout reset + sticky footer (without touching footer.php) ==== */
+/* ==== layout reset + sticky footer ==== */
 *{box-sizing:border-box}
 html,body{margin:0; height:100%}
 body{

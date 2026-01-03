@@ -2,7 +2,6 @@
 session_start();
 
 if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
-    // لو بدك تخلي الـ president يدخل على صفحة مختلفة
     if (isset($_SESSION['role']) && $_SESSION['role'] === 'student') {
         header('Location: ../president/index.php');
         exit;
@@ -11,9 +10,9 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'club_president') {
     exit;
 }
 
-require_once '../config.php'; // عدلي المسار إذا ملف config بمكان ثاني
+require_once '../config.php'; 
 
-/* ✅ ONLY CHANGE: fix images paths without changing DB values */
+/*  fix images paths without changing DB values */
 function img_path($path){
     if (!$path) return '';
     if (preg_match('/^https?:\/\//i', $path)) return $path; // full URL
@@ -89,7 +88,7 @@ if ($currentPeriodEnd !== null) {
     }
     $stmt->close();
 } else {
-    // ما في بيانات بجدول ranking -> fallback: رتب حسب points من جدول club
+    // if no ranking period then build from scratch (all time)
     $sql = "
         SELECT
             c.club_id,
@@ -148,7 +147,7 @@ $top3 = $rankingClubs[2] ?? null;
 <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;600;700;800&display=swap" rel="stylesheet">
 
 <?php include 'header.php'; ?>
-<!-- ===== CCH • Clubs Ranking (final, with gradient background & sponsor logos) ===== -->
+<!-- ===== CCH • Clubs Ranking  ===== -->
 <style>
   /* ---------- Status Badge (Active / Inactive) ---------- */
 .cch-ranking .status-badge{
@@ -161,7 +160,7 @@ $top3 = $rankingClubs[2] ?? null;
   font-weight:800;
   font-size:12px;
   border:1px solid rgba(0,0,0,.06);
-  background:#F3F6FF;  /* قريب من pill */
+  background:#F3F6FF;  
   color:#3556D4;        /* royal vibe */
   margin-top:6px;
   width:fit-content;
@@ -201,7 +200,7 @@ $top3 = $rankingClubs[2] ?? null;
   --radius:16px;
   font-family:"Raleway",system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
 
-  /* 🎨 Background like your Discover page */
+
   background:
     radial-gradient(1200px 420px at 50% 0%, rgba(255,255,255,.55) 0%, rgba(255,255,255,0) 60%),
     linear-gradient(180deg, #e9ecef 100%);

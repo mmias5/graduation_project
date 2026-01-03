@@ -11,7 +11,7 @@ if (
 
 require_once '../config.php';
 
-/* ✅ helper: fix image path for student folder */
+/* fix image path for student folder */
 function img_path_student(string $path): string {
     $path = trim($path);
     if ($path === '') return '';
@@ -22,7 +22,6 @@ function img_path_student(string $path): string {
 
 /**
  * Load a single news row.
- * We use SELECT * so it works with your actual columns.
  */
 function loadNews(mysqli $conn, ?int $newsId): ?array {
     // If a specific ID is given
@@ -65,7 +64,7 @@ $hasNews   = (bool)$news;
 $title     = $hasNews ? ($news['title'] ?? 'News article') : 'News article not found';
 $category  = $hasNews ? ($news['category'] ?? 'News')       : 'News';
 
-/* Try to guess which column holds the long text. */
+/*  which column holds the long text. */
 $content = '';
 if ($hasNews) {
     if (isset($news['content'])) {
@@ -79,7 +78,7 @@ if ($hasNews) {
     }
 }
 
-/* ✅ hero image from DB with correct path */
+/* hero image from DB with correct path */
 $fallbackHero = 'https://images.unsplash.com/photo-1521737604893-d14cc237f11d?q=80&w=1600&auto=format&fit=crop';
 
 $heroImageRaw = '';
