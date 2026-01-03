@@ -1,6 +1,5 @@
 <?php
 session_start();
-//user file
 if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
     if (isset($_SESSION['role']) && $_SESSION['role'] === 'club_president') {
         header('Location: ../president/index.php');
@@ -13,7 +12,7 @@ require_once '../config.php';
 
 $student_id = $_SESSION['student_id'];
 
-/* ✅ ONLY CHANGE: fix images paths without changing DB values */
+/* fix images paths without changing DB values */
 function img_path($path){
     if (!$path) return '';
     if (preg_match('/^https?:\/\//i', $path)) return $path; // full URL
@@ -21,9 +20,7 @@ function img_path($path){
     return '../' . ltrim($path, '/');                       // make uploads/... work from /president/
 }
 
-// ============================
-// 1) نحضر club_id الخاص بالطالب
-// ============================
+// 1) fetch student's club_id
 $student_club_id = 1; // default = No Club / Not Assigned
 $stmt = $conn->prepare("SELECT club_id FROM student WHERE student_id = ? LIMIT 1");
 if ($stmt) {
@@ -37,7 +34,7 @@ if ($stmt) {
 }
 
 // ============================
-// 2) نحضر كل الأندية (active) من جدول club
+// 2) fetch active clubs
 // ============================
 $clubs = [];
 $categories_map = [];
@@ -328,7 +325,7 @@ sort($categories);
         <?php foreach ($clubs as $club): 
           $cat = $club['category'] ?: 'Other';
 
-          /* ✅ ONLY CHANGE: logo path output */
+          /* logo path output */
           $logo = !empty($club['logo']) ? $club['logo'] : 'assets/images/clubs/default.png';
           $logo = img_path($logo);
         ?>

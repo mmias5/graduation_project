@@ -2,7 +2,6 @@
 session_start();
 
 if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
-    // لو بدك تخلي الـ president يدخل على صفحة مختلفة
     if (isset($_SESSION['role']) && $_SESSION['role'] === 'club_president') {
         header('Location: ../president/index.php');
         exit;

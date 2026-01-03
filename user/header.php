@@ -1,16 +1,12 @@
 <?php
-// ----- Session + Login Guard -----
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-//user file
-// لازم يكون داخل كـ student أو club_president
 if (
     !isset($_SESSION['student_id']) ||
     !isset($_SESSION['role']) ||
     !in_array($_SESSION['role'], ['student', 'club_president'])
 ) {
-    // header موجود داخل فولدر user/
     header('Location: ../login.php');
     exit;
 }
@@ -25,8 +21,6 @@ $studentId    = (int) $_SESSION['student_id'];
 $studentName  = $_SESSION['student_name']  ?? 'Student';
 $totalPoints  = $_SESSION['total_points']  ?? 0;
 
-// نحاول نجيب آخر قيمة من جدول student
-// نحاول نجيب آخر قيمة من جدول student
 $clubId = null;
 
 if (isset($conn) && $conn instanceof mysqli) {
@@ -49,7 +43,6 @@ if (isset($conn) && $conn instanceof mysqli) {
     }
 }
 
-// اعتبره "مش منضم" إذا club_id فاضي أو 1 (default)
 $notInClub = (empty($clubId) || (int)$clubId === 1);
 
 ?>
@@ -192,7 +185,6 @@ $notInClub = (empty($clubId) || (int)$clubId === 1);
   .menu a svg {
     width:18px;
     height:18px;
-    /* stroke comes from svg's stroke="currentColor" */
   }
 </style>
 </head>
@@ -407,11 +399,10 @@ $notInClub = (empty($clubId) || (int)$clubId === 1);
       if (res.isConfirmed) {
         window.location.href = 'discoverclubs.php';
       }
-      // إذا كبس Close: ما بنعمل شيء (بيضل بنفس الصفحة)
     });
   }
 
-  // للروابط داخل الدروب داون (a)
+  // for links in dropdown menus
   document.querySelectorAll('a.needs-club').forEach(a => {
     a.addEventListener('click', function(e){
       if (NOT_IN_CLUB) {
@@ -421,7 +412,7 @@ $notInClub = (empty($clubId) || (int)$clubId === 1);
     });
   });
 
-  // للزر (button) داخل السايدبار
+  // inside sidebar button
   document.querySelectorAll('.needs-club-btn').forEach(btn => {
     btn.addEventListener('click', function(e){
       if (NOT_IN_CLUB) {

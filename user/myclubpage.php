@@ -15,7 +15,7 @@ require_once '../config.php';
 
 $studentId = (int)$_SESSION['student_id'];
 
-/* ✅ ONLY CHANGE: helper to make DB image paths work from /student/ */
+/* helper to make DB image paths work from /student/ */
 function img_path_student($path){
     $path = trim((string)$path);
     if ($path === '') return '';
@@ -324,11 +324,11 @@ if (!$club) {
 $clubName        = $club['club_name'] ?? 'Club';
 $clubDescription = $club['description'] ?? '';
 
-// ✅ logo from DB (fixed path)
+// logo from DB (fixed path)
 $clubLogoRaw = !empty($club['logo']) ? $club['logo'] : "tools/pics/social_life.png";
 $clubLogo    = img_path_student($clubLogoRaw);
 
-// ✅ ✅ ONLY CHANGE FOR COVER: take cover from DB (try cover_image then banner_image), else keep fallback
+// take cover from DB (try cover_image then banner_image), else keep fallback
 $clubCoverRaw = '';
 if (!empty($club['cover'])) {
     $clubCoverRaw = $club['cover'];
@@ -386,7 +386,7 @@ $eventsDone = count($events);
 <!-- ========== HERO ========== -->
 <section class="section hero">
   <div class="wrap">
-    <!-- ✅ ONLY CHANGE: cover comes from DB now -->
+    <!-- cover comes from DB now -->
     <div class="hero-card" style="--hero-bg: url('<?php echo htmlspecialchars($clubCover); ?>');">
 
       <div class="hero-top">

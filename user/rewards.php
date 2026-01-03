@@ -1,7 +1,6 @@
 <?php
 session_start();
 
-/* ✅ Student-only access (Rewards page for student) */
 if (!isset($_SESSION['student_id']) || ($_SESSION['role'] ?? '') !== 'student') {
     if (isset($_SESSION['role']) && $_SESSION['role'] === 'club_president') {
         header('Location: ../president/index.php');
@@ -22,7 +21,7 @@ function escapeH(?string $s): string {
     return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 }
 
-/* ✅ ONLY CHANGE: fix image paths without changing DB values */
+/*  fix image paths without changing DB values */
 function img_path($path){
     $path = trim((string)$path);
     if ($path === '') return '';
@@ -41,7 +40,6 @@ function getStudentPointsFromStudent(mysqli $conn, int $studentId): int {
     return (int)($row['total_points'] ?? 0);
 }
 
-/* خصم النقاط (داخل Transaction) */
 function updateStudentPoints(mysqli $conn, int $studentId, int $cost): bool {
     $sql = "UPDATE student
             SET total_points = total_points - ?
@@ -54,7 +52,6 @@ function updateStudentPoints(mysqli $conn, int $studentId, int $cost): bool {
     return $ok;
 }
 
-/* ✅ إضافة صف بجدول redemption */
 function addRedemptionRow(mysqli $conn, int $studentId, int $itemId, int $pointsSpent): bool {
     $sql = "INSERT INTO redemption (student_id, item_id, redeemed_at, points_spent)
             VALUES (?, ?, NOW(), ?)";
@@ -77,7 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['redeem_submit'])) {
         if ($itemId <= 0 || $code === '') {
             $redeemError = 'Please choose a reward and enter its code.';
         } else {
-            // ✅ جلب الـ reward من DB (ACTIVE ONLY)
+            //  fetch reward from db (ACTIVE ONLY)
             $sql = "SELECT item_id, item_name, value, code, picture
                     FROM items_to_redeem
                     WHERE item_id = ? AND is_active = 1
@@ -101,7 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['redeem_submit'])) {
                 } elseif ($currentPoints < $costPoints) {
                     $redeemError = 'You do not have enough points to redeem this reward.';
                 } else {
-                    // ✅ Transaction: خصم + تسجيل redemption
+                    // ✅ Transaction , redemption
                     try {
                         $conn->begin_transaction();
 
@@ -137,7 +134,7 @@ $progressRatio  = $progressTarget > 0 ? min(1, $currentPoints / $progressTarget)
 
 $rewards = [];
 if (isset($conn) && $conn instanceof mysqli) {
-    // ✅ ACTIVE ONLY
+    // ACTIVE ONLY
     $sql = "SELECT item_id, item_name, value, code, picture
             FROM items_to_redeem
             WHERE is_active = 1
@@ -245,7 +242,7 @@ if (isset($conn) && $conn instanceof mysqli) {
     border:1px solid #bbf7d0;
   }
 
-  /* ✅ Search bar */
+  /*  Search bar */
   .search-wrap{
     width:min(520px, 92%);
     margin: 0 auto 22px;
@@ -387,7 +384,7 @@ if (isset($conn) && $conn instanceof mysqli) {
       <div class="fill"></div>
     </div>
 
-    <!-- ✅ Search bar -->
+    <!-- Search bar -->
     <div class="search-wrap">
       <input id="rewardSearch" class="search-input" type="text" placeholder="Search reward by name..." autocomplete="off">
       <button id="clearSearch" class="search-clear" type="button">Clear</button>

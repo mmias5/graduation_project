@@ -14,15 +14,13 @@ require_once '../config.php';
 
 $studentId = (int)$_SESSION['student_id'];
 
-/* =========================
-   FLASH (Swal after redirect)
-========================= */
+/* FLASH (Swal after redirect)*/
 $flash = $_SESSION['flash'] ?? null;
 unset($_SESSION['flash']);
 
-/* =========================
+/* 
    1) Fetch student club_id
-========================= */
+ */
 $stmtStu = $conn->prepare("SELECT club_id FROM student WHERE student_id = ? LIMIT 1");
 $stmtStu->bind_param("i", $studentId);
 $stmtStu->execute();
@@ -33,9 +31,9 @@ $stmtStu->close();
 $studentClubId = (int)($studentClubIdDb ?? 1);
 $studentHasClub = ($studentClubId !== 1);
 
-/* =========================
+/*
    2) clubpage MUST have club_id (coming from discover)
-========================= */
+ */
 if (!isset($_GET['club_id']) || (int)$_GET['club_id'] < 1) {
     header("Location: discoverclubs.php");
     exit;
@@ -46,9 +44,9 @@ if ($clubId === 1) {
     exit;
 }
 
-/* =========================
+/* 
    Helper: Sponsor initials
-========================= */
+ */
 function makeInitials(string $name): string {
     $name = trim(preg_replace('/\s+/', ' ', $name));
     if ($name === '' || strtolower($name) === 'no sponsor yet') return 'SP';
@@ -64,12 +62,11 @@ function makeInitials(string $name): string {
     return $ini !== '' ? $ini : 'SP';
 }
 
-/* =========================
+/* 
    3) Handle JOIN (POST)
    - Save reason
    - Prevent duplicate pending for same club
-   - Block if student already has club
-========================= */
+   - Block if student already has club */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'join') {
 
     // student already in a club -> block
@@ -83,10 +80,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'join'
         exit;
     }
 
-    // ✅ always trust the club_id from URL
+    // always trust the club_id from URL
     $postedClubId = $clubId;
 
-    // ✅ FIX: reason was missing
+    // reason
     $reason = trim((string)($_POST['reason'] ?? ''));
 
     if ($reason === '') {
@@ -99,7 +96,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'join'
         exit;
     }
 
-    // ✅ check if there is already a pending request for this club
+    // check if there is already a pending request for this club
     $stmtCheck = $conn->prepare("
         SELECT request_id
         FROM club_membership_request
@@ -122,7 +119,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'join'
         exit;
     }
 
-    // ✅ insert request with reason
+    //  insert request with reason
     $stmtIns = $conn->prepare("
         INSERT INTO club_membership_request (club_id, student_id, reason, status, submitted_at)
         VALUES (?, ?, ?, 'pending', NOW())
@@ -140,9 +137,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'join'
     exit;
 }
 
-/* =========================
-   4) Fetch club
-========================= */
+/* 4) Fetch club */
 $stmtClub = $conn->prepare("SELECT * FROM club WHERE club_id = ? LIMIT 1");
 $stmtClub->bind_param("i", $clubId);
 $stmtClub->execute();
@@ -165,10 +160,8 @@ $linkedinUrl     = !empty($club['linkedin_url']) ? $club['linkedin_url'] : "#";
 $memberCount     = (int)($club['member_count'] ?? 0);
 $clubPoints      = (int)($club['points'] ?? 0);
 
-/* =========================
-   4.5) Fetch CLUB Sponsor (from club.sponsor_id)
-   - each club has ONE sponsor
-========================= */
+/* 4.5) Fetch CLUB Sponsor (from club.sponsor_id)
+   - each club has ONE sponsor */
 $sponsorName = 'No sponsor yet';
 $sponsorInitials = 'SP';
 
@@ -186,9 +179,7 @@ if ($clubSponsorId > 0) {
 }
 $sponsorInitials = makeInitials((string)$sponsorName);
 
-/* =========================
-   5) Last request status for this club (for button label)
-========================= */
+/* 5) Last request status for this club (for button label) */
 $stmtLastReq = $conn->prepare("
     SELECT status
     FROM club_membership_request

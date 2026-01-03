@@ -1,7 +1,6 @@
 <?php
 session_start();
 
-// فقط الطالب العادي (مش الرئيس) يدخل هون
 if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
     if (isset($_SESSION['role']) && $_SESSION['role'] === 'club_president') {
         header('Location: ../president/index.php');
@@ -23,13 +22,12 @@ $errorMessage   = '';
 ========================= */
 
 // مسارات URL (للـ <img> بالمتصفح) — بما إن الملف داخل /student/
-$DEFAULT_AVATAR_URL = '../tools/pics/default-avatar.png';   // ✅ صح (بدل tools/..)
-$UPLOADS_URL_DIR    = '../uploads/students/';               // ✅ للعرض
+$DEFAULT_AVATAR_URL = '../tools/pics/default-avatar.png';   
+$UPLOADS_URL_DIR    = '../uploads/students/';               
 
 // مسارات السيرفر (للحفظ/الحذف)
-$UPLOADS_FS_DIR = __DIR__ . '/../uploads/students/';        // ✅ على الدسك
+$UPLOADS_FS_DIR = __DIR__ . '/../uploads/students/';       
 
-// يبني URL للصورة سواء مخزّن اسم ملف أو مسار
 function buildPhotoUrl(?string $dbValue, string $uploadsUrlDir, string $defaultUrl): string {
     $v = trim((string)$dbValue);
     if ($v === '') return $defaultUrl;
@@ -82,7 +80,7 @@ if (!$student) {
     ];
 }
 
-// ✅ مسار العرض (SHOW)
+// مسار العرض (SHOW)
 $avatarUrl = buildPhotoUrl($student['profile_photo'] ?? null, $UPLOADS_URL_DIR, $DEFAULT_AVATAR_URL);
 
 /* =========================
@@ -366,7 +364,7 @@ const removeBtn     = document.getElementById('removePhotoBtn');
 const fileInput     = document.getElementById('photoInput');
 const removeFlag    = document.getElementById('removePhotoFlag');
 
-// ✅ default avatar URL مضبوط بالنسبة لمجلد student/
+// default avatar URL مضبوط بالنسبة لمجلد student/
 const defaultAvatar = "<?php echo addslashes($DEFAULT_AVATAR_URL); ?>";
 
 // افتح اختيار ملف

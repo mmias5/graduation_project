@@ -1,7 +1,6 @@
 <?php
 session_start();
 
-// بس الطالب العادي يدخل هون
 if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
     if (isset($_SESSION['role']) && $_SESSION['role'] === 'club_president') {
         header('Location: ../president/index.php');
@@ -30,7 +29,7 @@ function normalize_upload_rel(?string $dbPath): string {
     $p = trim((string)$dbPath);
     if ($p === '') return '';
 
-    // external/full url (إذا موجود عندك قديم) — بنمرره كما هو
+    // external/full url 
     if (preg_match('~^https?://~i', $p)) return $p;
 
     $p = str_replace('\\', '/', $p);
@@ -490,7 +489,7 @@ body{
           $href     = $item['news_id'] ? 'news.php?id='.(int)$item['news_id'] : '#';
           $pillText = $item['category'] ? $item['category'] : 'News';
 
-          // ✅ صورة خبر محلية
+          
           $newsImg = img_url_from_db($item['image'] ?? '', 'uploads/news/default_news.jpg');
         ?>
         <a class="card" href="<?php echo $href; ?>">
@@ -520,7 +519,7 @@ body{
           $accent = ($i === 1) ? ' accent' : '';
           $trophy = ($i === 1) ? '🏆' : (($i === 2) ? '🥈' : (($i === 3) ? '🥉' : '🎖️'));
 
-          // ✅ club logo محلي
+          
           $clubLogo = img_url_from_db($club['logo'] ?? '', 'uploads/clubs/default_club.png');
       ?>
         <div class="rank-item<?php echo $accent; ?>">
@@ -545,7 +544,6 @@ body{
 
   <div class="sponsor-panel">
     <?php
-      // ✅ sponsor logos محلي
       $sp0 = img_url_from_db($sponsors[0]['logo'] ?? '', 'uploads/sponsors/default_sponsor.png');
       $sp1 = img_url_from_db($sponsors[1]['logo'] ?? '', 'uploads/sponsors/default_sponsor.png');
       $sp2 = img_url_from_db($sponsors[2]['logo'] ?? '', 'uploads/sponsors/default_sponsor.png');

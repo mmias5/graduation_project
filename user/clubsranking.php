@@ -2,7 +2,6 @@
 session_start();
 
 if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
-    // لو بدك تخلي الـ president يدخل على صفحة مختلفة
     if (isset($_SESSION['role']) && $_SESSION['role'] === 'club_president') {
         header('Location: ../president/index.php');
         exit;
@@ -11,9 +10,9 @@ if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
     exit;
 }
 
-require_once '../config.php'; // عدلي المسار إذا ملف config بمكان ثاني
+require_once '../config.php'; 
 
-/* ✅ ONLY CHANGE: fix images paths without changing DB values */
+/* fix images paths without changing DB values */
 function img_path($path){
     if (!$path) return '';
     if (preg_match('/^https?:\/\//i', $path)) return $path; // full URL
@@ -41,7 +40,6 @@ if ($periodRes && $periodRes->num_rows > 0) {
 
 // ---------- 2) Get clubs ranking with sponsor + events + members ----------
 if ($currentPeriodEnd !== null) {
-    // نستعمل جدول ranking
     $stmt = $conn->prepare("
         SELECT
             r.club_id,
@@ -89,7 +87,6 @@ if ($currentPeriodEnd !== null) {
     }
     $stmt->close();
 } else {
-    // ما في بيانات بجدول ranking -> fallback: رتب حسب points من جدول club
     $sql = "
         SELECT
             c.club_id,
@@ -132,7 +129,7 @@ if ($currentPeriodEnd !== null) {
     }
 }
 
-// جهزي عناصر التوب 3
+// top 3 clubs
 $top1 = $rankingClubs[0] ?? null;
 $top2 = $rankingClubs[1] ?? null;
 $top3 = $rankingClubs[2] ?? null;
@@ -148,7 +145,6 @@ $top3 = $rankingClubs[2] ?? null;
 <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;600;700;800&display=swap" rel="stylesheet">
 
 <?php include 'header.php'; ?>
-<!-- ===== CCH • Clubs Ranking (final, with gradient background & sponsor logos) ===== -->
 <style>
   /* ---------- Status Badge (Active / Inactive) ---------- */
 .cch-ranking .status-badge{
@@ -161,8 +157,8 @@ $top3 = $rankingClubs[2] ?? null;
   font-weight:800;
   font-size:12px;
   border:1px solid rgba(0,0,0,.06);
-  background:#F3F6FF;  /* قريب من pill */
-  color:#3556D4;        /* royal vibe */
+  background:#F3F6FF;  
+  color:#3556D4;       
   margin-top:6px;
   width:fit-content;
 }
@@ -189,7 +185,6 @@ $top3 = $rankingClubs[2] ?? null;
 
 .cch-ranking .status-badge.inactive::before{ background:#ff5e5e; }
 
-/* ---------- Scoped theme ---------- */
 .cch-ranking{
   --navy: #212153;
   --royal: #4871DB;
@@ -200,8 +195,6 @@ $top3 = $rankingClubs[2] ?? null;
   --shadow:0 10px 24px rgba(0,0,0,.12);
   --radius:16px;
   font-family:"Raleway",system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
-
-  /* 🎨 Background like your Discover page */
   background:
     radial-gradient(1200px 420px at 50% 0%, rgba(255,255,255,.55) 0%, rgba(255,255,255,0) 60%),
     linear-gradient(180deg, #e9ecef 100%);

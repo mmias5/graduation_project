@@ -1,5 +1,4 @@
 <?php
-// user/show_qr.php
 if (session_status() === PHP_SESSION_NONE) session_start();
 
 if (
@@ -34,7 +33,7 @@ if ($qrValue === '') {
   die("QR code not found for this student.");
 }
 
-// Generate QR image (simple + works on localhost)
+// Generate QR image 
 $qrImg = "https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=" . urlencode($qrValue);
 ?>
 <!doctype html>

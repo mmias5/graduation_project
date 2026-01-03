@@ -2,7 +2,6 @@
 session_start();
 
 if (!isset($_SESSION['student_id']) || $_SESSION['role'] !== 'student') {
-    // لو بدك تخلي الـ president يدخل على صفحة مختلفة
     if (isset($_SESSION['role']) && $_SESSION['role'] === 'club_president') {
         header('Location: ../president/index.php');
         exit;
@@ -15,7 +14,7 @@ require_once '../config.php';
 
 $studentId = (int)($_SESSION['student_id'] ?? 0);
 
-/* ✅ helper: make DB image paths work from /student/ */
+/* make DB image paths work from /student/ */
 function img_path_student($path){
     $path = trim((string)$path);
     if ($path === '') return '';
@@ -39,7 +38,7 @@ $inClub = !empty($clubId) && (int)$clubId !== 1;
 $members = [];
 
 if ($inClub) {
-    // ✅ Added profile_photo from DB
+    // Added profile_photo from DB
     $stmt = $conn->prepare("
         SELECT student_id, student_name, email, major, role, profile_photo
         FROM student
@@ -65,7 +64,7 @@ if ($inClub) {
             'role'      => ($row['role'] === 'club_president' ? 'President' : 'Member'),
             // ما عنا عمود join date حالياً، فبنحط شرطة بس
             'joined'    => '—',
-            // ✅ avatar from DB if exists, else pravatar fallback
+            // avatar from DB if exists, else pravatar fallback
             'avatar'    => ($photoDb !== '' ? $photoDb : 'https://i.pravatar.cc/150?u=student_' . $id),
         ];
     }
@@ -88,7 +87,7 @@ if ($inClub) {
   --shadow:0 14px 34px rgba(10,23,60,.12); --radius:20px; --maxw:1100px;
 }
 
-/* ==== layout reset + sticky footer (without touching footer.php) ==== */
+/* ==== layout reset + sticky footer ==== */
 *{box-sizing:border-box}
 html,body{margin:0; height:100%}
 body{

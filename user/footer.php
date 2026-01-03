@@ -6,7 +6,7 @@ $currentPage = basename($_SERVER['PHP_SELF']);
 ?>
 
 <style>
-  /* ==== Brand Tokens (match your header) ==== */
+  /* ==== Brand Tokens ==== */
 .cch-footer{
   --navy: #242751;
   --royal: #4871db;
@@ -14,7 +14,7 @@ $currentPage = basename($_SERVER['PHP_SELF']);
   --gold: #f4df6d;
   --sun: #f4df6d;
   --coral: #f4df6d;
-  --ink: #ffffff;  /* now ONLY the footer and its children see ink=white */
+  --ink: #ffffff; 
 }
 
 

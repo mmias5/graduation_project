@@ -15,7 +15,7 @@ require_once '../config.php';
 $currentStudentId = (int)$_SESSION['student_id'];
 $profileId = isset($_GET['id']) ? (int)$_GET['id'] : $currentStudentId;
 
-/* ✅ helper: fix image path from DB for student folder */
+/* fix image path from DB for student folder */
 function img_path_student(string $path): string {
     $path = trim($path);
     if ($path === '') return '';
@@ -24,7 +24,7 @@ function img_path_student(string $path): string {
     return '../' . ltrim($path, '/');
 }
 
-/* Fetch member info (✅ added profile_photo) */
+/* Fetch member info */
 $stmt = $conn->prepare("
     SELECT s.student_id,
            s.student_name,
@@ -51,7 +51,7 @@ if (!$member) {
     exit;
 }
 
-/* ✅ avatar logic: DB first, fallback pravatar */
+/* DB first, fallback pravatar */
 $avatarUrl = '';
 if (!empty($member['profile_photo'])) {
     $avatarUrl = img_path_student($member['profile_photo']);

@@ -11,7 +11,7 @@ require_once '../config.php';
 $eventId = isset($_GET['event_id']) ? (int)$_GET['event_id'] : 0;
 $event = null;
 
-/* ✅ helper: fix image path for student folder */
+/* fix image path for student folder */
 function img_path_student(string $path): string {
     $path = trim($path);
     if ($path === '') return '';
@@ -50,7 +50,7 @@ if (!$event) {
     $title = $event['event_name'];
 }
 
-/* ✅ banner from DB with correct path */
+/* banner from DB with correct path */
 $bannerSrc = '';
 if (!empty($event['banner_image'])) {
     $bannerSrc = img_path_student($event['banner_image']);
