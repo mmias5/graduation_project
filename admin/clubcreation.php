@@ -5,9 +5,9 @@ if (!isset($_SESSION['admin_id'])) {
     exit;
 }
 
-require_once '../config.php'; // اتصال DB
+require_once '../config.php'; 
 
-// اجلب كل الطلبات اللي لسا ما انعمل إلها review
+// fetch pending club creation reqeusts
 $sql = "
     SELECT request_id, club_name, applicant_name, logo, description
     FROM club_creation_request
@@ -145,7 +145,6 @@ body{
   background:#d2d5db;
 }
 
-/* Bigger, more solid button */
 .view-btn{
   background:var(--navy);
   color:#fff;
@@ -204,7 +203,7 @@ if ($logo === '') {
 } elseif (strpos($logo, 'uploads/') === 0) {
   $logoSrc = '/project/graduation_project/' . ltrim($logo, '/');
 } else {
-  $logoSrc = $logo; // لو كان assets/... أو رابط كامل
+  $logoSrc = $logo; 
 }
 ?>
 <img src="<?= htmlspecialchars($logoSrc) ?>" alt="Club logo" class="club-logo">

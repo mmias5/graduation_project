@@ -1,5 +1,4 @@
 <?php
-// admin/editnews.php
 require_once '../config.php';
 require_once 'admin_auth.php';
 
@@ -11,7 +10,7 @@ if ($newsId <= 0) {
     exit;
 }
 
-// أولاً نجيب الخبر من الداتا
+// first get existing news data
 $sql = "SELECT * FROM news WHERE news_id = ? LIMIT 1";
 $stmt = $conn->prepare($sql);
 $stmt->bind_param("i", $newsId);
@@ -25,7 +24,7 @@ if (!$news) {
     exit;
 }
 
-// لو POST → تحديث
+// update logic
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $title    = trim($_POST['title'] ?? '');
     $category = trim($_POST['category'] ?? 'News');
@@ -38,19 +37,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    // created_at من الفورم (تاريخ العرض للطلبة)
+    // determine created_at
     if ($date) {
         $createdAt = $date . ' 00:00:00';
     } else {
-        $createdAt = $news['created_at']; // لو فاضي خلي القديم
+        $createdAt = $news['created_at']; // if empty use existing
     }
 
     $updatedAt = date('Y-m-d H:i:s');
 
-    // الصورة الحالية
+    // current image path
     $imagePath = $news['image'];
 
-    // لو في صورة جديدة
+    // if new image uploaded
     if (!empty($_FILES['image']['name'])) {
         $uploadDir = '../assets/news/';
         if (!is_dir($uploadDir)) {
@@ -65,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $target   = $uploadDir . $newName;
 
         if (move_uploaded_file($fileTmp, $target)) {
-            // حذف القديمة (اختياري)
+            // delete old image file
             if (!empty($imagePath) && file_exists('../' . $imagePath)) {
                 @unlink('../' . $imagePath);
             }
@@ -90,7 +89,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// نحتاج التاريخ بصيغة YYYY-MM-DD للـ input
 $createdDateValue = $news['created_at'] ? substr($news['created_at'], 0, 10) : '';
 ?>
 <!doctype html>

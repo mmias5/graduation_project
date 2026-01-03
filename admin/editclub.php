@@ -58,7 +58,6 @@ $cover_url      = !empty($clubRow['cover']) ? $clubRow['cover'] : 'tools/pics/so
 $sponsor_name   = trim($clubRow['sponsor_name'] ?? '');
 if ($sponsor_name === '') $sponsor_name = 'No sponsor yet';
 
-// sponsor_logo: ما دام مش متأكدين من عمود بالشponsor table، خليناه placeholder ثابت بدون ما يكسر SQL
 $sponsor_logo   = 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Amazon_logo.svg/1200px-Amazon_logo.svg.png';
 
 // social links

@@ -1,5 +1,4 @@
 <?php
-// admin/editsponsor.php
 require_once '../config.php';
 require_once 'admin_auth.php';
 
@@ -19,7 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $formType = $_POST['form_type'] ?? '';
 
     if ($formType === 'info') {
-        // تحديث بيانات الراعي
+        // update sponsor info
         $name     = trim($_POST['company_name'] ?? '');
         $email    = trim($_POST['email'] ?? '');
         $phone    = trim($_POST['phone'] ?? '');
@@ -30,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $messageType = 'error';
         } else {
             if ($password === '') {
-                // بدون تغيير الباسوورد
+                // without password change
                 $stmt = $conn->prepare("
                   UPDATE sponsor
                   SET company_name = ?, email = ?, phone = ?

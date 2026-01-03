@@ -1,5 +1,4 @@
 <?php
-// admin/rewards.php
 require_once '../config.php';
 require_once 'admin_auth.php';
 
@@ -31,7 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
-        // Upload image (optional)
+        // Upload image 
         $imagePath = null;
         if (!empty($_FILES['reward_image']['name'])) {
             $uploadDir = '../assets/rewards/';
@@ -91,7 +90,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
-        // ✅ Archive instead of hard delete (keep redemption history)
+        // Archive instead of hard delete (keep redemption history)
         $upd = $conn->prepare("UPDATE items_to_redeem SET is_active = 0 WHERE item_id = ? LIMIT 1");
         if (!$upd) {
             $_SESSION['flash_error'] = 'DB error: ' . $conn->error;
@@ -552,7 +551,7 @@ if ($res && $res->num_rows > 0) {
           </p>
         </div>
 
-        <!-- ✅ Search bar -->
+        <!--  Search bar -->
         <div class="search-wrap">
           <input id="rewardSearch" class="search-input" type="text" placeholder="Search reward by name..." autocomplete="off">
           <button id="clearSearch" type="button" class="btn btn-ghost">Clear</button>

@@ -1,5 +1,4 @@
 <?php
-// admin/students.php
 require_once '../config.php';
 require_once 'admin_auth.php';
 
@@ -298,7 +297,7 @@ if ($result && $result->num_rows > 0) {
       $displayRole = 'Club president';
       break;
     default:
-      // fallback: just nice formatting
+      // fallback
       $displayRole = ucfirst(str_replace('_', ' ', $rawRole));
       break;
   }

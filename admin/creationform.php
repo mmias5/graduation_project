@@ -7,7 +7,7 @@ if (!isset($_SESSION['admin_id'])) {
 
 require_once '../config.php';
 
-/* ✅ خلي mysqli يرمي Exceptions عشان try/catch يشتغل صح */
+/* let mysqli throw exceptions*/
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
 $adminId   = (int)$_SESSION['admin_id'];
@@ -93,7 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$alreadyReviewed) {
             );
             $stmt1->execute();
 
-            // ✅ club_id الجديد
+            //  new club_id 
             $newClubId = (int)$conn->insert_id;
             $stmt1->close();
 

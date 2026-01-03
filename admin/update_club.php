@@ -113,7 +113,7 @@ if (isset($_FILES['cover']) && $_FILES['cover']['error'] !== UPLOAD_ERR_NO_FILE)
 $finalLogo  = $newLogoPath  !== null ? $newLogoPath  : $currentLogo;
 $finalCover = $newCoverPath !== null ? $newCoverPath : $currentCover;
 
-// ✅ UPDATE club table
+//  UPDATE club table
 $stmt = $conn->prepare("
     UPDATE club
     SET

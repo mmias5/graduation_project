@@ -1,5 +1,4 @@
 <?php
-// admin/index.php
 require_once '../config.php';
 require_once 'admin_auth.php';
 
@@ -19,7 +18,7 @@ function getSingleInt(mysqli $conn, string $sql): int {
 // Total students
 $totalStudents = getSingleInt($conn, "SELECT COUNT(*) AS cnt FROM student");
 
-// ✅ Total clubs (exclude default club)
+// Total clubs (exclude default club)
 $totalClubs = getSingleInt($conn, "SELECT COUNT(*) AS cnt FROM club WHERE club_id <> 1");
 
 // Total events (all events)
@@ -53,23 +52,23 @@ $sqlRank = "
         c.status,
         COALESCE(c.member_count,0) AS members_count,
 
-        /* ✅ Only DONE events (past) */
+        /*  Only DONE events (past) */
         COALESCE(COUNT(DISTINCT e.event_id),0) AS events_count,
 
-        /* ✅ Sponsored by from club.sponsor_id */
+        /*  Sponsored by from club.sponsor_id */
         COALESCE(sp.company_name, '') AS sponsors
 
     FROM ranking r
     INNER JOIN club c
         ON c.club_id = r.club_id
 
-    /* ✅ Only count events that ended */
+    /*  Only count events that ended */
     LEFT JOIN event e
         ON e.club_id = c.club_id
        AND e.ending_date IS NOT NULL
        AND e.ending_date < NOW()
 
-    /* ✅ Sponsor from club table */
+    /*  Sponsor from club table */
     LEFT JOIN sponsor sp
         ON sp.sponsor_id = c.sponsor_id
 
@@ -237,7 +236,7 @@ function assetUrl(string $path): string {
       margin-bottom:18px;
     }
 
-    /* ✅ NEW: Sponsor-like card container */
+    /*  Sponsor-like card container */
     .bi-wrap{
       width:100%;
       background:var(--biCard);

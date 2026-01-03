@@ -1,11 +1,10 @@
 <?php
-// admin/news.php
 require_once '../config.php';
 require_once 'admin_auth.php';
 
 $currentPage = basename($_SERVER['PHP_SELF']);
 
-// جلب الأخبار
+// fetch all news 
 $sql = "SELECT news_id, title, body, category, image, created_at, updated_at, admin_id
         FROM news
         ORDER BY created_at DESC";

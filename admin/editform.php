@@ -16,7 +16,7 @@ if ($requestId <= 0) {
     exit;
 }
 
-/* ✅ helper for image src (project root) */
+/* helper for image src (project root) */
 function uiImgSrc(string $path): string {
     $path = trim($path);
 

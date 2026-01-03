@@ -1,5 +1,4 @@
 <?php
-// admin/deletenews.php
 require_once '../config.php';
 require_once 'admin_auth.php';
 
@@ -16,7 +15,7 @@ if ($newsId <= 0) {
     exit;
 }
 
-// أولاً نجيب الصورة عشان نحذفها من الملفات
+// first get image path to delete the file 
 $sql = "SELECT image FROM news WHERE news_id = ? LIMIT 1";
 $stmt = $conn->prepare($sql);
 $stmt->bind_param("i", $newsId);
@@ -31,7 +30,7 @@ if ($row) {
     }
 }
 
-// حذف السطر
+// delete news from db 
 $deleteSql = "DELETE FROM news WHERE news_id = ?";
 $deleteStmt = $conn->prepare($deleteSql);
 $deleteStmt->bind_param("i", $newsId);

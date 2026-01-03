@@ -1,5 +1,4 @@
 <?php
-// admin/deletesponsor.php
 require_once '../config.php';
 require_once 'admin_auth.php';
 
@@ -13,7 +12,7 @@ $sponsorId = (int)$_POST['sponsor_id'];
 $message = '';
 $type = 'success';
 
-// احذف العلاقات أولاً
+// delete related entries first 
 $stmt1 = $conn->prepare("DELETE FROM sponsor_club_support WHERE sponsor_id = ?");
 if ($stmt1) {
     $stmt1->bind_param("i", $sponsorId);
@@ -21,7 +20,7 @@ if ($stmt1) {
     $stmt1->close();
 }
 
-// بعدها احذف الراعي نفسه
+// then delete sposnor 
 $stmt2 = $conn->prepare("DELETE FROM sponsor WHERE sponsor_id = ?");
 if ($stmt2) {
     $stmt2->bind_param("i", $sponsorId);

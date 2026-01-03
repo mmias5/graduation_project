@@ -1,5 +1,4 @@
 <?php
-// admin/registrationrequests.php
 require_once '../config.php';
 require_once 'admin_auth.php';
 
@@ -8,7 +7,7 @@ $currentPage = basename($_SERVER['PHP_SELF']);
 $message = '';
 $messageType = ''; // success / error
 
-// ===== Handle POST: mark as processed (فقط تعديل حالة الطلب) =====
+// ===== mark as processed =====
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['request_id'])) {
     $requestId = (int)$_POST['request_id'];
     $adminId   = (int)$_SESSION['admin_id'];
@@ -45,7 +44,7 @@ if (isset($_GET['msg'])) {
     $messageType = $_GET['type'] ?? 'success';
 }
 
-// ===== Fetch pending requests فقط =====
+// ===== Fetch pending requests  =====
 $sql = "
   SELECT request_id, company_name, email, phone, description, website, submitted_at
   FROM sponsor_request

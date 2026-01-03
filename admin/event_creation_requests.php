@@ -179,15 +179,15 @@ if ($result && $result->num_rows > 0) {
 function assetUrl(string $path): string {
   $path = trim($path);
   if ($path === '') return '';
-  if (preg_match('~^https?://~i', $path)) return $path;     // رابط كامل
-  if ($path[0] === '/') return $path;                       // مسار يبدأ بـ /
+  if (preg_match('~^https?://~i', $path)) return $path;     
+  if ($path[0] === '/') return $path;                      
 
-  // uploads/... -> لازم يمر عبر project root
+  // uploads/... -> should go to /graduation_project/uploads/... 
   if (strpos($path, 'uploads/') === 0) {
     return '/graduation_project/' . $path;
   }
 
-  // غير هيك خليّه كما هو (مثلاً assets/.. داخل نفس البورتال)
+  // if none of the above return as is 
   return $path;
 }
 ?>

@@ -7,9 +7,7 @@ if (!isset($_SESSION['admin_id'])) {
 
 require_once '../config.php';
 
-/* =========================
-   Optional flash message
-========================= */
+/* flash message  */
 $flash = $_SESSION['flash'] ?? null;
 unset($_SESSION['flash']);
 

@@ -1,5 +1,4 @@
 <?php
-// admin/sponsors.php
 require_once '../config.php';
 require_once 'admin_auth.php';
 
@@ -8,7 +7,7 @@ $currentPage = basename($_SERVER['PHP_SELF']);
 $message = $_GET['msg'] ?? '';
 $messageType = $_GET['type'] ?? 'success';
 
-// نحسب الـ active sponsorships فقط: start_date <= اليوم <= end_date
+// calculate total sponsors and fetch sposnor data 
 $sql = "
   SELECT
     s.sponsor_id,

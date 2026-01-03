@@ -7,11 +7,11 @@ if (!isset($_SESSION['admin_id'])) {
 
 require_once '../config.php';
 
-// ✅ helper for image src (project root)
+// helper for image src (project root)
 function uiImgSrc(string $path): string {
     $path = trim($path);
 
-    // placeholder داخل admin
+    // placeholder inside admin
     if ($path === '') return 'assets/club_placeholder.png';
 
     // uploads from DB => absolute with project prefix
@@ -43,7 +43,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'], $_POST['clu
         exit;
     }
 
-    // ✅ Delete club (connected)
+    // Delete club (connected)
     if ($action === 'delete_club') {
         // prevent deleting default club
         if ($postClubId === 1) {

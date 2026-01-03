@@ -88,9 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {//bas y3mal form submit befoot el co
         ");
 
         if ($stmt) {
-            // ملاحظة: إذا نظام تسجيل الدخول عندك يعتمد على password_hash، بدّل السطر التالي:
-            // $passwordToStore = password_hash($password, PASSWORD_DEFAULT);
-            // وإذا عندك تسجيل الدخول يقارن نص بنص خليه زي ما هو:
+            //password is stored in plain text 
             $passwordToStore = $password;
 
             $stmt->bind_param("sssss", $name, $email, $phone, $logoPath, $passwordToStore);
