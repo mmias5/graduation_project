@@ -202,7 +202,7 @@ include 'header.php';
         </div>
         <div class="col">
           <label>Email</label>
-          <input type="email" name="email" value="<?= htmlspecialchars($sponsor['email'] ?? '') ?>" disabled required>
+          <input type="email" name="email" value="<?= htmlspecialchars($sponsor['email'] ?? '') ?>" readonly required>
         </div>
         <div class="col">
           <label>Phone</label>
